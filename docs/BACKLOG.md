@@ -85,23 +85,6 @@ since block boundaries are now explicit.
 
 ---
 
-## BETTER-SOFT404-1 — don't pay to extract a page that says nothing
-
-"No events scheduled at this time" is a perfectly valid 200 that costs a full
-model call to learn nothing. So are parked domains, soft-404s, and "page under
-construction".
-
-**Spec.** A free heuristic — very low content length after main-region
-scoping, boilerplate empty-state phrases, a title that matches a known 404
-shape — surfaced as `CrawlPage.likelyEmptyState: boolean`. Advisory only:
-never refuse to return the page, just let a caller skip paying for it.
-
-**Watch out:** a real venue page in the off-season genuinely IS "no events
-scheduled", and that is a true fact a consumer may want to record rather than
-discard. This must inform the caller, never filter for them.
-
----
-
 ## PARITY-MAP-1 — fast whole-domain URL discovery
 
 Firecrawl's `/map` returns hundreds of a domain's URLs in about one request.
@@ -176,24 +159,6 @@ its own — a caller can then decide whether an image is worth paying to read.
 
 ---
 
-## CRAWL-CONTENTKIND-1 — extraction version stamping
-
-Fallow has `lib/ingestion/extraction-version.ts`. oliver-crawl can *replay* a
-stored recipe (`applyRecipe`) but stamps nothing on its output, so a consumer
-holding a stored page has no way to answer "was this extracted by an older,
-worse version — should I re-run it?"
-
-Without this, improving the extractor has no mechanism to reprocess everything
-it would now do better. The improvement only ever applies to pages crawled
-after it shipped.
-
-**Spec.** Add `CrawlPage.extractorVersion: string`, bumped on any change to
-text/link/JSON-LD extraction, and document the re-crawl contract: a consumer
-compares stored version against `EXTRACTOR_VERSION` and re-processes what is
-behind. Cheap to add, and impossible to add retroactively with any value.
-
----
-
 ## CRAWL-CONCURRENCY-1 — cross-host parallelism
 
 `crawlSite` is strictly sequential. Correct for politeness *within* one host,
@@ -261,43 +226,12 @@ exactly this procedure for consumers; the package has not run it on itself.
 
 ---
 
-## CRAWL-UA-1 — no contact URL in the user agent goes unflagged
-
-`userAgent` is required but unvalidated. A UA with no contact URL is a
-significant cause of being blocked — a site operator seeing unexplained traffic
-has no way to reach you, so they block. Fallow derives its UA from
-`FALLOW_APP_ORIGIN` for exactly this reason (`lib/ingestion/user-agent.ts`,
-WHITE-LABEL-1).
-
-**Spec.** Warn once (never throw) when `userAgent` contains no `http(s)://` or
-`+`-prefixed contact. Document the convention in ADOPTION.md. Deliberately not
-an error: a caller may have a legitimate reason, and breaking their crawl over
-a style rule would be worse than the problem.
-
----
-
-## CRAWL-DEGRADE-1 — no notion of a source degrading over time
-
-The package reports per-crawl outcomes. It has no concept of "this source has
-failed six runs in a row and needs attention." Fallow builds that on top
-(`source-autofix.ts`, `source-recover.ts`, `refresh-failure.ts`).
-
-Most of that is rightly the consumer's — it needs a database. But the package
-currently gives a consumer no *shape* to build against, so every consumer
-re-invents failure classification from raw `reason` strings.
-
-**Spec.** Classify failures as `transient` (timeout, 5xx, DNS blip) vs
-`structural` (404, robots disallow, dead host) on the result. That single bit
-is what a consumer needs to decide "retry" vs "tell a human", and only the
-package has the context to judge it correctly.
-
----
-
 ## Live tracker
 
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | consumer signals | SHIPPED 4 specs, all removed: CRAWL-DEGRADE-1 (failureClass transient/structural, classified at one chokepoint in crawl()), BETTER-SOFT404-1 (likelyEmptyState, advisory only), CRAWL-CONTENTKIND-1 (extractorVersion stamp), CRAWL-UA-1 (warn once per UA with no contact, never throw). 22 new tests. |
 | 2026-07-27 | CRAWL-RESUME-1 | SHIPPED, spec removed. onProgress emits CrawlProgress{queue,visited,depths,collected}; resumeFrom restores it. No storage in the package. Ablation note: removing `visited` restore ALONE stays green because `depths` also blocks re-enqueue — the two overlap for dedup. Removing both turns 3 tests red. |
 | 2026-07-27 | README | Fixed a wrong claim (said `text` had nav stripped — that is `markdown`), added markdown/structuredData/contentKind/lastmod, corrected 317 -> 432 tests. Counts taken from a real run. |
 | 2026-07-27 | BETTER-LASTMOD-1 | SHIPPED, spec removed. SitemapEntry{url,lastmod}; crawlSite priorLastmod skips unfetched; returns lastmod + skippedByLastmod. Skip-only by design (lastmod lies). Ablation-verified. Live gap: rfc-editor publishes no lastmod, so real-sitemap extraction is fixture-covered, shape-only live. |

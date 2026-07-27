@@ -29,6 +29,7 @@ import { crawlWithOwnLane } from './lanes/own/index.js';
 import { crawlWithVendorLane } from './lanes/vendor/index.js';
 import type { SitemapEntry } from './fetch/sitemap-discovery.js';
 import { approveCrawlPolicy } from './lanes/own/index.js';
+import { classifyFailure } from './core/failure-class.js';
 import { search, availableSearchProviders } from './search/index.js';
 import { readPageCache, writePageCache } from './core/page-cache.js';
 import { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
@@ -83,6 +84,14 @@ export function createCrawler(config: CrawlConfig): Crawler {
     search: (query, options) => search(query, resolved, options),
 
     async crawl(target, url, options = {}) {
+      // CRAWL-DEGRADE-1: every failure leaving crawl() is classified here,
+      // in ONE place. Stamping it at each individual return site would drift
+      // the moment a new failure path is added.
+      const withClass = (result: CrawlResult): CrawlResult =>
+        result.ok || result.failureClass
+          ? result
+          : { ...result, failureClass: classifyFailure(result.reason, result.detail) };
+
       // Default: own lane only. A caller must opt IN to spending money.
       const lanes: LaneName[] = options.lanes?.length ? options.lanes : ['own'];
       const ttl = resolved.cacheTtlMs ?? 0;
@@ -104,7 +113,7 @@ export function createCrawler(config: CrawlConfig): Crawler {
         await approveCrawlPolicy(target, url, resolved);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        return { ok: false, reason: 'blocked', detail };
+        return withClass({ ok: false, reason: 'blocked', detail });
       }
 
       // A repeat of the same URL in the cache window costs nothing. Only
@@ -136,13 +145,13 @@ export function createCrawler(config: CrawlConfig): Crawler {
           // 'blocked' and 'quarantined' are POLICY decisions, not transport
           // failures — escalating to a vendor would be paying to route around
           // our own guard, and retrying cannot change the answer.
-          if (result.reason === 'blocked' || result.reason === 'quarantined') return result;
+          if (result.reason === 'blocked' || result.reason === 'quarantined') return withClass(result);
 
           last = result;
         }
       }
 
-      return last;
+      return withClass(last);
     },
   };
 }
@@ -190,6 +199,10 @@ export { summarizeStructuredData } from './extract/structured-summary.js';
 export type { StructuredSummary } from './extract/structured-summary.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
 export { classifyContentType, refineKindByUrl } from './core/content-kind.js';
+export { classifyFailure } from './core/failure-class.js';
+export type { FailureClass } from './core/failure-class.js';
+export { looksLikeEmptyState } from './core/soft-404.js';
+export { EXTRACTOR_VERSION } from './core/extractor-version.js';
 export { urlDedupKey, sameUrlResource } from './core/url-dedup-key.js';
 export { evaluateRobotsForUrl, parseRobots, userAgentToken, MAX_HONORED_CRAWL_DELAY_MS } from './fetch/robots-check.js';
 export { publishedCrawlDelayMs } from './lanes/own/index.js';

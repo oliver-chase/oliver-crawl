@@ -50,10 +50,38 @@ export const DEFAULT_VENDOR_RUNG_ORDER = ['firecrawl', 'apify'];
  *  claims the same identity, and robots.txt rules key off this string. */
 export const DEFAULT_USER_AGENT = 'OliverCrawl/0.1 (+https://github.com/oliver-chase/oliver-crawl)';
 
+/**
+ * CRAWL-UA-1: a User-Agent with no way to reach you is a significant cause of
+ * being blocked — a site operator seeing unexplained traffic has no contact
+ * to try, so they block instead of asking.
+ *
+ * Warned, never thrown: a caller may have a legitimate reason, and breaking
+ * their crawl over a style rule would be worse than the problem. Once per
+ * process, so a 500-page run does not print 500 warnings.
+ */
+const WARNED_USER_AGENTS = new Set<string>();
+
+export function __clearUserAgentWarningsForTests(): void {
+  WARNED_USER_AGENTS.clear();
+}
+
+function warnIfNoContact(userAgent: string): void {
+  if (/https?:\/\/|\+[\w.-]+@|\(\+/.test(userAgent)) return;
+  if (WARNED_USER_AGENTS.has(userAgent)) return;
+  WARNED_USER_AGENTS.add(userAgent);
+  console.warn(
+    `[oliver-crawl] userAgent "${userAgent}" has no contact URL. Site operators ` +
+      'block unexplained traffic they cannot ask about. Prefer e.g. ' +
+      '"MyBot/1.0 (+https://mysite.com/bot)".',
+  );
+}
+
 export function resolveConfig(config: CrawlConfig): ResolvedConfig {
+  const userAgent = config.userAgent || DEFAULT_USER_AGENT;
+  warnIfNoContact(userAgent);
   return {
     ...config,
-    userAgent: config.userAgent || DEFAULT_USER_AGENT,
+    userAgent,
     vendorRungOrder: config.vendorRungOrder ?? DEFAULT_VENDOR_RUNG_ORDER,
     defaults: {
       maxTextChars: config.defaults?.maxTextChars ?? DEFAULT_MAX_TEXT_CHARS,

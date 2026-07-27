@@ -39,6 +39,8 @@ import * as cheerio from 'cheerio';
 import { htmlToMarkdown } from '../../extract/html-to-markdown.js';
 import { summarizeStructuredData } from '../../extract/structured-summary.js';
 import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js';
+import { looksLikeEmptyState } from '../../core/soft-404.js';
+import { EXTRACTOR_VERSION } from '../../core/extractor-version.js';
 import {
   assertRedirectUrlAllowedForHost,
   assertRequestUrlAllowed,
@@ -367,6 +369,8 @@ export async function crawlWithOwnLane(
           // contentRegionSha256 on the text-only rungs (CRAWL-HASH-1).
           markdown: '',
           contentKind,
+          likelyEmptyState: looksLikeEmptyState(sanitizedData.text),
+          extractorVersion: EXTRACTOR_VERSION,
           structuredData: summarizeStructuredData([]),
           title: null,
           contentType,
@@ -590,6 +594,8 @@ async function jinaFallback(
           // pretending, same rule as contentRegionSha256 (CRAWL-HASH-1).
           markdown: '',
           contentKind: 'text',
+          likelyEmptyState: looksLikeEmptyState(sanitized.text),
+          extractorVersion: EXTRACTOR_VERSION,
           // Jina returns prose, not the page's script tags — no JSON-LD to
           // summarise. Reported honestly as "none found", which correctly
           // tells a caller a model is their only option on this rung.
@@ -788,6 +794,11 @@ async function buildPage(input: {
     text: sanitized.text,
     markdown: sanitizedMarkdown.text,
     contentKind: 'html',
+    // Judged on the MAIN content, not the whole page: a site whose nav and
+    // footer are large would otherwise never look empty, which is exactly
+    // the page this is meant to catch.
+    likelyEmptyState: looksLikeEmptyState(sanitizedMarkdown.text || sanitized.text),
+    extractorVersion: EXTRACTOR_VERSION,
     structuredData: summarizeStructuredData(jsonLd),
     title,
     ...(input.includeHtml ? { html: input.html } : {}),

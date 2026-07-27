@@ -1,3 +1,4 @@
+import type { FailureClass } from './failure-class.js';
 import type { StructuredSummary } from '../extract/structured-summary.js';
 // ─── Core contract ──────────────────────────────────────────────────────────
 //
@@ -125,6 +126,27 @@ export type CrawlPage = {
    * `contentRegionSha256`: there is no HTML to derive them from.
    */
   contentKind: ContentKind;
+  /**
+   * BETTER-SOFT404-1: the page loaded fine but appears to say nothing —
+   * "No events scheduled at this time", a parked domain, an under-
+   * construction placeholder.
+   *
+   * Advisory ONLY. The page is still returned in full; this just lets you
+   * skip paying a model to read it. Note that an off-season venue really IS
+   * "no events scheduled", and that is a true fact you may want to record
+   * rather than discard — so this informs a decision, it never makes one.
+   */
+  likelyEmptyState: boolean;
+  /**
+   * CRAWL-CONTENTKIND-1: which version of this package's extraction produced
+   * the page. Bumped whenever text/markdown/link/JSON-LD extraction changes.
+   *
+   * Store it beside the page. When the stored value is behind
+   * `EXTRACTOR_VERSION`, re-process — otherwise an extractor improvement only
+   * ever applies to pages crawled after it shipped, and there is no way to
+   * add this retroactively with any value.
+   */
+  extractorVersion: string;
   title: string | null;
   /** Raw HTML, only when the caller asked for it (`includeHtml`). Callers
    *  that feed an LLM should use `text` — it has been through the guard. */
@@ -188,6 +210,8 @@ export type PageLink = { url: string; text: string };
  */
 export type ContentKind = 'html' | 'calendar' | 'csv' | 'json' | 'feed' | 'text';
 
+export type { FailureClass } from './failure-class.js';
+
 export type { StructuredSummary } from '../extract/structured-summary.js';
 
 /** The result of a crawl. Ordinary failure is a value, not an exception. */
@@ -202,6 +226,18 @@ export type CrawlResult =
       /** Present when the origin answered 429/503 WITH a Retry-After header.
        *  A retry loop that ignores this is the one that gets banned. */
       retryAfterMs?: number;
+      /**
+       * CRAWL-DEGRADE-1: is retrying worth it?
+       *
+       * `transient` — the world might differ next time (DNS blip, timeout,
+       * 5xx, bot wall). Retry on your own schedule.
+       * `structural` — retrying changes nothing until something is fixed
+       * (404, robots disallow, inactive target, unsupported type).
+       *
+       * Count consecutive `structural` failures per source to retire a dead
+       * one automatically. Counting `transient` ones tells you nothing.
+       */
+      failureClass?: FailureClass;
     };
 
 export type CrawlFailureReason =
