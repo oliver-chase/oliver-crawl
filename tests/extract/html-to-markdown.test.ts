@@ -1,0 +1,112 @@
+import { describe, expect, test } from 'vitest';
+import * as cheerio from 'cheerio';
+import { htmlToMarkdown } from '@/extract/html-to-markdown';
+
+// VENDOR-PARITY-1: markdown is an accuracy lever, not a format preference.
+// Each case below is structure an extractor needs that plain text destroys.
+
+const md = (html: string) => htmlToMarkdown(cheerio.load(html));
+
+describe('structure the page author encoded survives', () => {
+  test('headings keep their level', () => {
+    expect(md('<main><h1>Venue</h1><h2>Summer Series</h2><h3>July</h3></main>')).toBe(
+      '# Venue\n\n## Summer Series\n\n### July',
+    );
+  });
+
+  test('a schedule table keeps its columns', () => {
+    // The case that motivated this: flattened, "7:00 PM" loses the column
+    // that says whether it is a door time or a start time.
+    const out = md(`<main><table>
+      <tr><th>Date</th><th>Artist</th><th>Time</th></tr>
+      <tr><td>July 11</td><td>The Hold Steady</td><td>7:00 PM</td></tr>
+      <tr><td>July 18</td><td>Waxahatchee</td><td>7:30 PM</td></tr>
+    </table></main>`);
+
+    expect(out).toContain('| Date | Artist | Time |');
+    expect(out).toContain('| --- | --- | --- |');
+    expect(out).toContain('| July 11 | The Hold Steady | 7:00 PM |');
+    expect(out).toContain('| July 18 | Waxahatchee | 7:30 PM |');
+  });
+
+  test('lists keep items separate', () => {
+    expect(md('<main><ul><li>Free parking</li><li>No coolers</li></ul></main>')).toBe('- Free parking\n- No coolers');
+  });
+
+  test('ordered lists are numbered', () => {
+    expect(md('<main><ol><li>Arrive</li><li>Check in</li></ol></main>')).toBe('1. Arrive\n2. Check in');
+  });
+
+  test('links keep text attached to href', () => {
+    expect(md('<main><p>See the <a href="/calendar">full calendar</a> online.</p></main>')).toBe(
+      'See the [full calendar](/calendar) online.',
+    );
+  });
+
+  test('image alt text is kept', () => {
+    // Often the ONLY description of a flyer.
+    expect(md('<main><img src="/flyer.jpg" alt="Concert July 11 at 7pm"></main>')).toBe(
+      '![Concert July 11 at 7pm](/flyer.jpg)',
+    );
+  });
+
+  test('emphasis is preserved', () => {
+    expect(md('<main><p>Doors at <strong>6pm</strong>, show at <em>7pm</em>.</p></main>')).toBe(
+      'Doors at **6pm**, show at *7pm*.',
+    );
+  });
+});
+
+describe('page chrome never reaches the model', () => {
+  test('nav, header, footer and aside are dropped', () => {
+    const out = md(`<body>
+      <header>SITE HEADER</header>
+      <nav><a href="/x">NAV LINK</a></nav>
+      <main><p>The real event content.</p></main>
+      <aside>SIDEBAR PROMO</aside>
+      <footer>COPYRIGHT 2026</footer>
+    </body>`);
+
+    expect(out).toBe('The real event content.');
+  });
+
+  test('scripts and styles are dropped', () => {
+    expect(md('<main><script>var x=1</script><style>p{}</style><p>Content.</p></main>')).toBe('Content.');
+  });
+
+  test('falls back to body when there is no main or article', () => {
+    const out = md('<body><nav>NAV</nav><p>Only content.</p></body>');
+    expect(out).toBe('Only content.');
+    expect(out).not.toContain('NAV');
+  });
+});
+
+describe('does not corrupt the surrounding crawl', () => {
+  test('the source tree is not mutated — links survive for the link pass', () => {
+    // The bug this guards: stripping chrome in place would delete every nav
+    // link, and a site's calendar link is usually IN the nav.
+    const $ = cheerio.load('<body><nav><a href="/calendar">Calendar</a></nav><main><p>Hi there friend.</p></main></body>');
+    htmlToMarkdown($);
+    expect($('a[href="/calendar"]').length).toBe(1);
+  });
+
+  test('markdown syntax in page text is escaped, not executed', () => {
+    expect(md('<main><p>Rated 5*stars* and [bracketed]</p></main>')).toContain('\\*');
+  });
+
+  test('a pipe inside a table cell does not break the row', () => {
+    const out = md('<main><table><tr><th>A</th></tr><tr><td>x | y</td></tr></table></main>');
+    expect(out).toContain('x \\| y');
+  });
+
+  test('respects maxChars', () => {
+    const long = `<main><p>${'Concerts every Friday at the riverside stage. '.repeat(200)}</p></main>`;
+    const out = htmlToMarkdown(cheerio.load(long), { maxChars: 100 });
+    expect(out).toContain('[TRUNCATED]');
+    expect(out.length).toBeLessThan(200);
+  });
+
+  test('an empty page yields an empty string, not a throw', () => {
+    expect(md('<body></body>')).toBe('');
+  });
+});
