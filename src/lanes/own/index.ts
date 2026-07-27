@@ -39,6 +39,9 @@ import * as cheerio from 'cheerio';
 import { htmlToMarkdown } from '../../extract/html-to-markdown.js';
 import { summarizeStructuredData } from '../../extract/structured-summary.js';
 import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js';
+import { looksLikeEmptyState } from '../../core/soft-404.js';
+import { EXTRACTOR_VERSION } from '../../core/extractor-version.js';
+import { forgetWinningRung, shouldSkipDirectFetch } from '../../core/rung-memory.js';
 import {
   assertRedirectUrlAllowedForHost,
   assertRequestUrlAllowed,
@@ -277,6 +280,30 @@ export async function crawlWithOwnLane(
     config.adaptiveThrottleMultiplier ?? 0,
   );
 
+  // BETTER-RUNGMEMORY-1: if this host is known to reject the plain fetch and
+  // succeed on a later rung, skip straight there.
+  //
+  // Self-healing on the way back: if the remembered path now FAILS, the
+  // memory is stale — the host may have stopped blocking, in which case the
+  // fetch we skipped is exactly what would have worked. So the memory is
+  // dropped and the normal ladder runs from the top. Without this, a rung
+  // that goes down while a memory points at it costs the PAGE, not just an
+  // extra request, and that would make this optimisation a liability.
+  if (config.rungMemory !== false && shouldSkipDirectFetch(config.rungMemoryStore, requestUrl.hostname)) {
+    const viaMemory = await freeFallbackLadder(
+      url,
+      config,
+      options,
+      started,
+      'Direct fetch skipped: this host is known to serve it only via a later rung.',
+      hasCredentials(target),
+    );
+    if (viaMemory.ok) return viaMemory;
+    // A policy refusal is a decision, not a stale memory — do not re-probe.
+    if (viaMemory.reason === 'blocked' || viaMemory.reason === 'quarantined') return viaMemory;
+    forgetWinningRung(config.rungMemoryStore, requestUrl.hostname);
+  }
+
   // 2-4. Direct fetch, conditional when the caller has validators from a
   // previous crawl of this URL.
   let response: Response;
@@ -367,6 +394,8 @@ export async function crawlWithOwnLane(
           // contentRegionSha256 on the text-only rungs (CRAWL-HASH-1).
           markdown: '',
           contentKind,
+          likelyEmptyState: looksLikeEmptyState(sanitizedData.text),
+          extractorVersion: EXTRACTOR_VERSION,
           structuredData: summarizeStructuredData([]),
           title: null,
           contentType,
@@ -590,6 +619,8 @@ async function jinaFallback(
           // pretending, same rule as contentRegionSha256 (CRAWL-HASH-1).
           markdown: '',
           contentKind: 'text',
+          likelyEmptyState: looksLikeEmptyState(sanitized.text),
+          extractorVersion: EXTRACTOR_VERSION,
           // Jina returns prose, not the page's script tags — no JSON-LD to
           // summarise. Reported honestly as "none found", which correctly
           // tells a caller a model is their only option on this rung.
@@ -788,6 +819,11 @@ async function buildPage(input: {
     text: sanitized.text,
     markdown: sanitizedMarkdown.text,
     contentKind: 'html',
+    // Judged on the MAIN content, not the whole page: a site whose nav and
+    // footer are large would otherwise never look empty, which is exactly
+    // the page this is meant to catch.
+    likelyEmptyState: looksLikeEmptyState(sanitizedMarkdown.text || sanitized.text),
+    extractorVersion: EXTRACTOR_VERSION,
     structuredData: summarizeStructuredData(jsonLd),
     title,
     ...(input.includeHtml ? { html: input.html } : {}),
