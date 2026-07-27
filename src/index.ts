@@ -213,6 +213,12 @@ export { extractJsonLdEvent, extractAllJsonLdEvents } from './extract/jsonld-eve
 export { extractJsonLdAddress, formatJsonLdAddress } from './extract/jsonld-address.js';
 export { computeContentRegionHash } from './extract/content-region-hash.js';
 export { summarizeStructuredData } from './extract/structured-summary.js';
+export { findContentImages } from './extract/content-images.js';
+export type { ContentImage } from './extract/content-images.js';
+export { diffContent } from './extract/content-diff.js';
+export type { ContentDiff, ContentChange } from './extract/content-diff.js';
+export { pickDetailLinks } from './extract/detail-link-picker.js';
+export type { DetailLinkMatch, DetailKeywords } from './extract/detail-link-picker.js';
 export type { StructuredSummary } from './extract/structured-summary.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
 export { classifyContentType, refineKindByUrl } from './core/content-kind.js';

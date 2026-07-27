@@ -182,6 +182,7 @@ export async function crawlWithVendorLane(
             markdown: sanitized.text,
             contentKind: 'html',
             likelyEmptyState: looksLikeEmptyState(sanitized.text),
+            candidateContentImages: [],
             extractorVersion: EXTRACTOR_VERSION,
             // Vendors return rendered markdown, not the page's script tags.
             structuredData: summarizeStructuredData([]),
