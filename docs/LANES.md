@@ -72,7 +72,7 @@ Everything already seen is skipped, including URLs that redirect to a page alrea
 
 A `429`/`503` carrying `Retry-After` is obeyed as stated rather than retried on our own schedule: the origin telling you when to come back is an instruction, and ignoring it is how a crawler gets banned.
 
-The second matters more than it looks: many targets can share a host (a city's venues on one CMS, several sites behind one CDN). Per-run politeness does nothing there — fifty targets would hit that origin at once.
+The second matters more than it looks. Many targets can share one host — dozens of tenants on a single CMS, or several sites behind one CDN. Per-run politeness does nothing in that case: fifty targets would reach the same origin simultaneously, which is indistinguishable from an attack from the origin's side.
 
 ## Making re-crawls cheap
 

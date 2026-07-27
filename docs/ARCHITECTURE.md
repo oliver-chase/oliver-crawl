@@ -128,7 +128,7 @@ Breadth-first: pages a site links from its homepage are the ones it considers im
 |---|---|
 | **No database in the package** | Your app owns persistence. State leaves through `onUsage` / `checkBudget` / `onSignals` callbacks, so Fallow can write Postgres, another repo a spreadsheet, a fork nothing at all. |
 | **No env reads in core** | Config is passed explicitly (`configFromEnv()` is opt-in sugar), so two differently-configured crawlers can exist in one process. |
-| **Domain extraction is yours** | You get text, JSON-LD and links. Turning those into events or products is the logic that makes your app yours; a generic version would be wrong for everyone. |
+| **Domain extraction is yours** | You get text, markdown, JSON-LD and links. The mapping from a page to your own records is defined by your schema; any version shipped here would be wrong for every consumer that did not share it. |
 | **Lanes are separate** | Free and paid must be distinguishable at a glance, and the default must never spend money. |
 | **Policy refusals never escalate** | Paying a vendor to fetch what your own guard refused is buying a way around your own security. |
 
@@ -159,15 +159,22 @@ The structural hash (`contentRegionSha256`) ignores nav/header/footer, so a cook
 ```
 src/
   index.ts              createCrawler — lane selection, cache, retry
-  crawl-site.ts         multi-page: seeds, discovery, budgets, dedup
+  crawl-site.ts         multi-page: seeds, discovery, budgets, dedup, resume
+  map-site.ts           what URLs exist, without crawling them
   search-and-crawl.ts   search → crawl bridge, guards re-applied per result
   core/
     types.ts            the contract everything is built against
     config.ts           defaults, env sugar, limits
     net-address.ts      IP classification (shared by both guards)
     url-safety.ts       is an EXTRACTED url safe to keep?
+    url-dedup-key.ts    canonical identity — /a, /a/, /a?utm= are one page
+    content-kind.ts     html / calendar / csv / json / feed / text
     charset.ts          decode with the origin's encoding
     host-throttle.ts    per-host pacing, adaptive
+    rung-memory.ts      which rung works per host (per-crawler, never global)
+    failure-class.ts    transient vs structural — is a retry worth it?
+    soft-404.ts         did this page actually say anything?
+    extractor-version.ts stamp, so improvements can reach stored pages
     page-cache.ts       in-process stampede guard
     hash.ts             cross-runtime SHA-256
     usage.ts            report a call, never throw
@@ -181,6 +188,11 @@ src/
     feed-discovery.ts
     cheap-change-probe.ts
   extract/
+    html-to-markdown.ts  main-content Markdown — the field to feed an LLM
+    structured-summary.ts is any of this JSON-LD actually about the content?
+    content-images.ts    flyer/poster candidates (finding is free, reading is not)
+    content-diff.ts      what changed, not just that something did
+    detail-link-picker.ts which link answers a still-missing field
     jsonld-event.ts · jsonld-address.ts
     content-region-hash.ts · spa-content-extract.ts
     pagination-discovery.ts · extraction-recipe.ts (replay only)
