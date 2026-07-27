@@ -74,6 +74,7 @@ function pick(env: EnvBag, ...names: string[]): string | undefined {
  *   OLIVER_CRAWL_TAVILY_KEY     | TAVILY_API_KEY
  *   OLIVER_CRAWL_SERPER_KEY     | SERPER_API_KEY
  *   OLIVER_CRAWL_VENDOR_ORDER   (comma-separated)
+ *   OLIVER_CRAWL_SEARCH_ORDER   (comma-separated)
  *
  * Every one is optional. A missing vendor key disables that rung only — the
  * own lane never needs a key and keeps working regardless, which is the whole
@@ -88,11 +89,13 @@ export function configFromEnv(env: EnvBag = safeProcessEnv(), overrides: Partial
   };
 
   const order = env.OLIVER_CRAWL_VENDOR_ORDER?.split(',').map((s) => s.trim()).filter(Boolean);
+  const searchOrder = env.OLIVER_CRAWL_SEARCH_ORDER?.split(',').map((s) => s.trim()).filter(Boolean);
 
   return {
     userAgent: env.OLIVER_CRAWL_USER_AGENT || DEFAULT_USER_AGENT,
     vendor,
     ...(order && order.length > 0 ? { vendorRungOrder: order } : {}),
+    ...(searchOrder && searchOrder.length > 0 ? { searchProviderOrder: searchOrder } : {}),
     ...overrides,
   };
 }

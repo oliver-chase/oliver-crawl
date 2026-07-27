@@ -51,6 +51,11 @@ export type CrawlOptions = {
   timeoutMs?: number;
   /** Max pages to visit in one crawl (seeds + discovered links). */
   maxPages?: number;
+  /** Return the raw HTML alongside the sanitised text. Off by default: `text`
+   *  is what is safe to feed an LLM, and shipping full HTML on every page is
+   *  pure payload weight for callers that never read it. Needed by anything
+   *  that must inspect markup itself — pagination discovery, recipe replay. */
+  includeHtml?: boolean;
   /** Conditional-GET validators from a previous crawl of the same URL. When
    *  the origin answers 304, the crawl reports `notModified` and costs
    *  nothing further. */
@@ -145,6 +150,11 @@ export type CrawlConfig = {
   vendor?: VendorKeys;
   /** Order to try vendor rungs in when the vendor lane runs. */
   vendorRungOrder?: string[];
+  /** Order to try SEARCH providers in. Separate from vendorRungOrder because
+   *  search and scraping are different surfaces with different providers —
+   *  Serper searches but cannot scrape; Firecrawl scrapes but is not the
+   *  search rung here. */
+  searchProviderOrder?: string[];
   /** Emitted per external call. Never awaited for correctness — a slow or
    *  throwing sink must not break a crawl. */
   onUsage?: (event: UsageEvent) => void;
