@@ -188,3 +188,23 @@ describe('own lane — render rung integration', () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe('local render rung (free) — guards', () => {
+  test('not opted in -> null, rung skipped', async () => {
+    const { renderViaLocalChromium } = await import('@/fetch/local-render');
+    expect(await renderViaLocalChromium('https://venue.example.com/x', false)).toBeNull();
+  });
+
+  test('opted in but playwright absent -> null, degrades silently to the next rung', async () => {
+    // playwright is deliberately NOT a dependency of this package; in this
+    // test env the Function-constructor import fails and the rung must
+    // degrade to null, never throw.
+    const { renderViaLocalChromium } = await import('@/fetch/local-render');
+    expect(await renderViaLocalChromium('https://venue.example.com/x', true)).toBeNull();
+  });
+
+  test('empty URL -> null', async () => {
+    const { renderViaLocalChromium } = await import('@/fetch/local-render');
+    expect(await renderViaLocalChromium('', true)).toBeNull();
+  });
+});

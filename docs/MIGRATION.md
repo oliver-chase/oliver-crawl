@@ -22,11 +22,21 @@ Where each capability from the origin codebase (Fallow, `lib/ingestion/*`) stand
 | Pagination discovery | `extract/pagination-discovery.ts` | 13 | Unchanged |
 | Extraction recipes (REPLAY half) | `extract/extraction-recipe.ts` | 5 | `applyRecipe` + `parseStoredRecipe` only — see below |
 | Browser render rung | `fetch/browser-render.ts` | 12 | Placed in the OWN lane, not vendor: the endpoint is infrastructure the consumer runs. Env vars replaced by `config.browserRender`; `logUsage` replaced by the `onUsage` callback |
-| Cheap-change probe | `fetch/cheap-change-probe.ts` | (via lane) | ETag/Last-Modified/body-hash fingerprint so an unchanged page costs nothing. Its DB writeback (`mergeSourceCheapChangeSignals`) is replaced by the `onSignals` callback |
+| Cheap-change probe | `fetch/cheap-change-probe.ts` | (via lane) | ETag/Last-Modified/body-hash fingerprint. The re-crawl loop is now WIRED: `crawlSite` returns per-URL validators and calls `onSignals`, and conditional-GET headers are actually sent (see CRAWL-VALIDATE-1 below) |
 | **Multi-page orchestrator** | `crawl-site.ts` | 15 | Seeds, page budget, per-URL retry with terminal-failure awareness, dedup (incl. pagination loop-backs), optional pagination following. Sequential like the original (`maxConcurrency: 1`) — politeness is a feature |
 | **Search (Tavily + Serper)** | `search/index.ts` | 15 | Its own surface, not a crawl lane. Returns an OUTCOME, not a bare array, so "no key configured" / "budget refused" / "genuinely nothing" stay distinguishable. Provider results are run through `isSafeHttpUrl`, so a `javascript:` or metadata-host link cannot reach a caller |
+| Free local render rung | `fetch/local-render.ts` | 3 | Local headless Chromium, tried BEFORE the remote render service — makes JS rendering free on any machine with `npx playwright install chromium`. Untraceable import so it never breaks a bundler; degrades silently where absent |
+| Sitemap discovery | `fetch/sitemap-discovery.ts` | 7 | NEW capability (not in the origin): reads `/sitemap.xml`, follows index files one level, same-site-filters every URL. Free "what pages does this site have" |
 
-**219 tests, typecheck clean, builds to dist, verified against live sites** (example.com, iana.org, incl. a real multi-page run).
+## Hardening pass (2026-07-27 self-audit)
+
+Reviewing my own work found four real gaps, all fixed with red-capable tests:
+- **CRAWL-VALIDATE-1** — conditional-GET headers were never sent. The lane accepted `etag`/`lastModified`, documented the free-304 path, and had the 304 branch — but no `If-None-Match`/`If-Modified-Since` ever went on the wire, so the whole re-crawl-efficiency story was dead against a real origin. The 304 test only passed because its stub returned 304 unconditionally. Now sent; verified live (a real origin returned 304 on the second crawl).
+- **CRAWL-HARDEN-1** — response bodies were read unbounded. `response.text()` buffers everything, so a hostile/misconfigured origin streaming an endless body was a memory-exhaustion DoS on the crawler. Now capped at 2 MB, truncating rather than failing.
+- **CRAWL-PERF-1** — `buildPage` reloaded the whole document once per JSON-LD `<script>` tag (N+1 full cheerio parses). Now one parse.
+- **Dead API** — `config.onSignals` existed but nothing ever called it. Moved to `SiteCrawlOptions` where the orchestrator actually invokes it, and the return value carries the same validators.
+
+**235 tests, typecheck clean (strict), builds to dist, verified against live sites** (example.com, iana.org, rfc-editor.org; incl. a real multi-page run and a live conditional-GET 304 round-trip).
 
 ## Not yet migrated
 

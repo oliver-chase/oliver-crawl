@@ -32,8 +32,24 @@ export type SiteCrawlOptions = CrawlOptions & {
   maxRetries?: number;
   /** Follow "next page" links discovered on crawled pages, up to maxPages. */
   followPagination?: boolean;
-  /** Per-URL conditional-GET validators from a previous run, keyed by URL. */
+  /** Per-URL conditional-GET validators from a previous run, keyed by URL —
+   *  exactly the shape `result.validators` (and `config.onSignals`) hands
+   *  back, so the round-trip is: crawl → persist → pass here next run. */
   priorValidators?: Record<string, { etag?: string | null; lastModified?: string | null }>;
+  /** Pause between page fetches, ms. Sequential is already the default;
+   *  this adds breathing room for small origins. 0 = none. */
+  politenessDelayMs?: number;
+  /** Consumer id for this target, passed to onSignals so the consumer knows
+   *  which of its records the validators belong to. Defaults to baseUrl. */
+  targetId?: string;
+  /** Persistence hook for this run's fresh validators — same data as
+   *  `result.validators`, delivered as a callback for consumers that prefer
+   *  push over return-value plumbing. Fire-and-forget: a throwing sink never
+   *  breaks the crawl. */
+  onSignals?: (targetId: string, validators: SiteCrawlResult['validators']) => void | Promise<void>;
+  /** Base wait between retry attempts (multiplied by attempt number).
+   *  Exists mostly so tests can zero it. */
+  retryBackoffMs?: number;
 };
 
 export type SiteCrawlFailure = { url: string; reason: string; detail: string };
@@ -48,6 +64,11 @@ export type SiteCrawlResult = {
   /** True when the run stopped because it hit maxPages rather than running
    *  out of URLs — the caller may want to raise the budget or paginate again. */
   truncated: boolean;
+  /** Fresh conditional-GET validators per URL from THIS run. Persist these
+   *  and pass them back as `priorValidators` next run — that round-trip is
+   *  what turns a scheduled re-crawl of an unchanged page into a free 304.
+   *  Also delivered via config.onSignals when set. */
+  validators: Record<string, { etag: string | null; lastModified: string | null; bodySha256: string }>;
   startedAt: string;
   finishedAt: string;
 };
@@ -62,6 +83,10 @@ const DEFAULT_MAX_RETRIES = 1;
  */
 function isTerminal(reason: string): boolean {
   return reason === 'blocked' || reason === 'quarantined' || reason === 'no_lane_available';
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -83,15 +108,20 @@ export async function crawlSite(
   const pages: CrawlPage[] = [];
   const notModified: string[] = [];
   const failures: SiteCrawlFailure[] = [];
+  const validators: SiteCrawlResult['validators'] = {};
 
-  const done = (truncated: boolean): SiteCrawlResult => ({
-    pages,
-    notModified,
-    failures,
-    truncated,
-    startedAt,
-    finishedAt: new Date().toISOString(),
-  });
+  const done = (truncated: boolean): SiteCrawlResult => {
+    // Deliver fresh validators to the consumer's persistence hook, fire-and-
+    // forget: a slow or throwing sink must not break (or slow) the crawl.
+    if (Object.keys(validators).length > 0 && options.onSignals) {
+      try {
+        void options.onSignals(options.targetId ?? target.baseUrl, validators);
+      } catch {
+        // deliberately swallowed
+      }
+    }
+    return { pages, notModified, failures, truncated, validators, startedAt, finishedAt: new Date().toISOString() };
+  };
 
   // Eligibility is a property of the TARGET, not of any one URL — check it
   // once, and report it as a single failure rather than N identical ones.
@@ -130,11 +160,11 @@ export async function crawlSite(
     if (visited.has(url)) continue;
     visited.add(url);
 
-    const validators = options.priorValidators?.[url];
+    const prior = options.priorValidators?.[url];
     const perPageOptions: CrawlOptions = {
       ...options,
-      etag: validators?.etag ?? options.etag ?? null,
-      lastModified: validators?.lastModified ?? options.lastModified ?? null,
+      etag: prior?.etag ?? options.etag ?? null,
+      lastModified: prior?.lastModified ?? options.lastModified ?? null,
       // Pagination discovery reads markup, so the page must carry its HTML.
       // Requested here rather than left to the caller: otherwise
       // followPagination would silently do nothing.
@@ -151,9 +181,17 @@ export async function crawlSite(
         succeeded = true;
         if (result.notModified) {
           notModified.push(url);
+          // The stored validators are still current — carry them forward so
+          // the consumer's next run keeps getting free 304s.
+          if (prior?.etag || prior?.lastModified) {
+            validators[url] = { etag: prior.etag ?? null, lastModified: prior.lastModified ?? null, bodySha256: '' };
+          }
           break;
         }
         pages.push(...result.pages);
+        for (const p of result.pages) {
+          validators[p.url] = { etag: p.httpEtag, lastModified: p.httpLastModified, bodySha256: p.bodySha256 };
+        }
 
         // Pagination is discovered from the page we just read, so it can only
         // extend the queue — never re-order what was already scheduled.
@@ -174,9 +212,16 @@ export async function crawlSite(
       lastFailure = { url, reason: result.reason, detail: result.detail };
       // Retrying these produces the identical answer; spend the budget elsewhere.
       if (isTerminal(result.reason)) break;
+      // Back off before the retry — an origin that just failed usually needs
+      // a moment, and an immediate re-hit reads as hostile.
+      if (attempt < maxRetries) await sleep((options.retryBackoffMs ?? 500) * (attempt + 1));
     }
 
     if (!succeeded && lastFailure) failures.push(lastFailure);
+
+    if ((options.politenessDelayMs ?? 0) > 0 && queue.length > 0) {
+      await sleep(options.politenessDelayMs!);
+    }
   }
 
   return done(false);

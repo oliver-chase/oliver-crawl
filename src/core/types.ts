@@ -171,13 +171,14 @@ export type CrawlConfig = {
    */
   browserRender?: { url: string; token?: string };
   /**
-   * Persist cheap-change signals (ETag / Last-Modified / body hash) so the
-   * NEXT crawl can skip a page that has not changed. This package holds no
-   * database, so the consumer stores them however it likes and hands them
-   * back via CrawlOptions.priorSignals. Absent = signals are computed and
-   * discarded, which is correct-but-wasteful rather than wrong.
+   * FREE render rung: local headless Chromium via playwright, tried BEFORE
+   * the remote render service. Explicit opt-in because the same code often
+   * deploys to both a machine that can run a browser and a worker that
+   * cannot — where rendering happens should be a choice, not a crash.
+   * Requires `npx playwright install chromium` once on the machine; absent
+   * playwright degrades silently to the next rung.
    */
-  onSignals?: (targetId: string, signals: Record<string, unknown>) => void | Promise<void>;
+  localRender?: boolean;
   /** Default caps, overridable per request. */
   defaults?: Required<Pick<CrawlOptions, 'maxTextChars' | 'timeoutMs' | 'maxPages'>>;
 };

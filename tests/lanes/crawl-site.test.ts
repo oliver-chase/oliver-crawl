@@ -266,3 +266,59 @@ describe('crawlSite — pagination', () => {
     expect(result.failures).toHaveLength(0);
   });
 });
+
+describe('crawlSite — validator round-trip (re-crawl efficiency)', () => {
+  test('returns fresh validators for every crawled page and fires onSignals', async () => {
+    globalThis.fetch = (async () =>
+      new Response('<html><head><title>T</title></head><body><main>Fresh content.</main></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html', etag: 'W/"v2"', 'last-modified': 'Thu, 02 Jan 2025 00:00:00 GMT' },
+      })) as typeof fetch;
+
+    let signalled: { id: string; validators: Record<string, unknown> } | null = null;
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      targetId: 'source-42',
+      onSignals: (id, validators) => {
+        signalled = { id, validators };
+      },
+    });
+
+    const v = result.validators['https://venue.example.com/events'];
+    expect(v).toMatchObject({ etag: 'W/"v2"', lastModified: 'Thu, 02 Jan 2025 00:00:00 GMT' });
+    expect(v!.bodySha256).toMatch(/^[0-9a-f-]{16,}$/);
+    expect(signalled).not.toBeNull();
+    expect(signalled!.id).toBe('source-42');
+    expect(signalled!.validators['https://venue.example.com/events']).toBeTruthy();
+  });
+
+  test('a 304 carries the prior validators forward instead of dropping them', async () => {
+    globalThis.fetch = (async () => new Response(null, { status: 304 })) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      priorValidators: { 'https://venue.example.com/events': { etag: 'W/"v1"' } },
+    });
+
+    // Without this, one unchanged crawl would wipe the stored validator and
+    // the NEXT run would pay a full fetch again — the opposite of the point.
+    expect(result.validators['https://venue.example.com/events']).toMatchObject({ etag: 'W/"v1"' });
+    expect(result.notModified).toEqual(['https://venue.example.com/events']);
+  });
+
+  test('a throwing onSignals sink does not break the crawl', async () => {
+    globalThis.fetch = (async () =>
+      new Response('<html><body><main>Content.</main></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      })) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      onSignals: () => {
+        throw new Error('sink exploded');
+      },
+    });
+    expect(result.pages).toHaveLength(1);
+  });
+});

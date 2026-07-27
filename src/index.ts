@@ -129,6 +129,9 @@ export {
 } from './fetch/feed-discovery.js';
 export type { FeedDiscoveryResult } from './fetch/feed-discovery.js';
 export { findNextPageUrl, discoverPaginatedUrls } from './extract/pagination-discovery.js';
+export { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
+export type { SitemapDiscoveryResult } from './fetch/sitemap-discovery.js';
+export { renderViaLocalChromium } from './fetch/local-render.js';
 export { renderViaService, renderServiceFrom } from './fetch/browser-render.js';
 export type { RenderResult } from './fetch/browser-render.js';
 export { probeCheapChangeSignal, cheapSignalsMatch } from './fetch/cheap-change-probe.js';
