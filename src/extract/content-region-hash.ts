@@ -15,7 +15,7 @@
 // to either. Matches this codebase's existing lightweight-regex convention
 // (feed-discovery.ts, secure-browser-runner.ts's extractPageLinks).
 
-import { sha256Hex } from '@/core/hash';
+import { sha256Hex } from '../core/hash.js';
 
 const CHROME_TAGS = ['nav', 'header', 'footer', 'aside', 'script', 'style', 'noscript'];
 

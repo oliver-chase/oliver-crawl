@@ -11,8 +11,8 @@
 // see the scoping note on `applyJsonLdEventBackfill` below for why this
 // stays a gap-filler, not a full extraction bypass.
 
-import { readString } from '@/extract/jsonld-address';
-import { isSafeHttpUrl } from '@/core/url-safety';
+import { readString } from './jsonld-address.js';
+import { isSafeHttpUrl } from '../core/url-safety.js';
 
 /** One dateText-parser-compatible line for a single ISO date — the parser
  *  (lib/ingestion/date-text-parser.ts) matches "{month name} {day}" plus a
