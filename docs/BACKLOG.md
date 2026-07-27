@@ -55,21 +55,6 @@ crawl — so this is where the leverage is.
 
 ---
 
-## BETTER-DIFF-1 — report WHAT changed, not just THAT it changed
-
-`unchanged` is a boolean. A consumer whose page gained one event re-extracts
-the entire page — and pays for the whole thing to learn one row moved.
-
-We hold both the previous validators and the new content. Handing over the
-delta would cut re-extraction cost sharply, and re-extraction is the dominant
-line item.
-
-**Spec.** Optional `priorText`/`priorMarkdown` in, `changedRegions` out (added
-and removed blocks). Markdown makes this far more tractable than flat text did,
-since block boundaries are now explicit.
-
----
-
 ## PARITY-ACTIONS-1 — browser actions before capture
 
 Firecrawl scripts the page before scraping: click, scroll, wait, type. The
@@ -104,81 +89,6 @@ rather than returning a blank page — that case belongs to CRAWL-VISION-1.
 
 ---
 
-## CRAWL-VISION-1 — pages whose content is a single image
-
-Municipal and venue pages routinely publish the real detail — dates, lineup,
-time, address, parking — inside one poster/flyer image, with almost nothing in
-the page text. Fallow documents the canonical case (Perinton "Center Stage
-Concert Series") in `lib/ingestion/page-image-flyer.ts`.
-
-Today oliver-crawl parses such a page, finds no meaningful text, runs the whole
-free ladder, and returns `unreachable`. The content was there the entire time.
-
-**Spec.** Split it along the same line as every other lane boundary:
-
-- **ours (free, generic):** identify the likely content image(s) on a page —
-  largest in the content region, not in nav/header/footer, not a logo/sprite/
-  icon, plausible poster aspect ratio. Return them as
-  `CrawlPage.candidateContentImages: string[]`.
-- **caller's (paid):** running a vision model over those URLs. Fallow's
-  `vision-extraction.ts` does this with an ordered model list and per-model
-  usage logging; that is its business, not the package's.
-
-Shipping only the free half is the right first step and is genuinely useful on
-its own — a caller can then decide whether an image is worth paying to read.
-
----
-
-## CRAWL-CONCURRENCY-1 — cross-host parallelism
-
-`crawlSite` is strictly sequential. Correct for politeness *within* one host,
-but crawling 50 unrelated hosts serially is 50× slower than it needs to be for
-no benefit to anyone.
-
-`core/host-throttle.ts` already enforces per-host pacing process-wide and
-across concurrent callers (it reserves the slot before awaiting, specifically
-so concurrent callers serialise). So the per-host safety property that makes
-this risky is **already solved** — this is mostly wiring.
-
-**Spec.** `crawlSite(..., { concurrency: n })`, default 1 so nothing changes
-silently. Never parallelise within a host; the throttle would serialise it
-anyway, so the only effect would be to hold connections open. Cap by distinct
-host, not by URL.
-
----
-
-## CRAWL-SESSION-1 — no session continuity for credentialed crawls
-
-A caller can pass `headers` (including a Cookie), and those are correctly sent
-only to the target's own host. But there is no cookie jar: a login that sets a
-session cookie on the first response cannot carry it to page two.
-
-That makes multi-page members-area crawling impossible even though single-page
-credentialed crawling works — a sharp edge that is currently undocumented.
-
-**Spec.** Either implement a per-crawl (never global) cookie jar scoped to the
-target host, or document the limitation explicitly in EXISTING-PROJECTS.md.
-Documenting is the honest short-term answer and costs nothing.
-
-**Watch out:** a cookie jar is a credential store. It must never outlive one
-crawl, never be shared between targets, and never follow a redirect off-host.
-
----
-
-## CRAWL-DETAILLINK-1 — choosing which link to follow for a missing field
-
-Fallow's `lib/ingestion/detail-link-picker.ts` answers "which of this page's
-links plausibly carries a still-null field" from `{label, url}` pairs. The
-mechanism is generic; only its keyword table is domain-specific.
-
-`PageLink` here already carries `{ url, text }`, so the input exists.
-
-**Spec.** A generic scorer taking caller-supplied keyword groups and returning
-ranked candidates. Ships the mechanism, keeps the domain vocabulary with the
-caller — the same split used everywhere else in this package.
-
----
-
 ## CRAWL-PARITY-1 — extraction parity with Fallow's cheerio runner is unverified
 
 Fallow's `secure-crawlee-runner.ts` (515 lines) extracts with cheerio.
@@ -201,6 +111,7 @@ exactly this procedure for consumers; the package has not run it on itself.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | backlog batch | SHIPPED 5: CRAWL-VISION-1 (candidateContentImages, free half only — ranking not a verdict), CRAWL-DETAILLINK-1 (pickDetailLinks, caller supplies vocabulary), BETTER-DIFF-1 (diffContent, set-based so reordering is not a change), CRAWL-CONCURRENCY-1 (searchAndCrawl concurrency, safe because host-throttle already serialises per host; default 1). CRAWL-SESSION-1 CLOSED AS DOCUMENTED, not built — a cookie jar is a credential store and the spec itself called documenting the honest answer. |
 | 2026-07-27 | BETTER-RUNGMEMORY-1 | SHIPPED, spec removed. Per-host winning rung, 30min TTL, recorded at one chokepoint in crawl(). Store is PER CRAWLER — first cut was module-level and broke 10 tests, same defect class as HOST-CACHE-SCOPE-1. Self-heals: a failed remembered rung is forgotten and the full ladder re-runs, else a rung outage would cost the page. `rungMemory: false` opts out. |
 | 2026-07-27 | PARITY-MAP-1 | SHIPPED, spec removed. mapSite(crawler, target) = sitemap + homepage links + declared feeds, ONE page body fetched. Feeds surfaced separately. Live: 25 urls off rfc-editor. Live gap: maxUrls filled from sitemap alone there, so the homepage-links path is fixture-covered only. |
 | 2026-07-27 | consumer signals | SHIPPED 4 specs, all removed: CRAWL-DEGRADE-1 (failureClass transient/structural, classified at one chokepoint in crawl()), BETTER-SOFT404-1 (likelyEmptyState, advisory only), CRAWL-CONTENTKIND-1 (extractorVersion stamp), CRAWL-UA-1 (warn once per UA with no contact, never throw). 22 new tests. |

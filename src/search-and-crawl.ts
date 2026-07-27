@@ -29,6 +29,18 @@ export type SearchAndCrawlOptions = CrawlOptions & {
   /** Skip crawling and return search results only — useful when the snippet
    *  is enough and you want to decide what is worth fetching. */
   searchOnly?: boolean;
+  /**
+   * CRAWL-CONCURRENCY-1: how many results to read at once. Default 1.
+   *
+   * Safe to raise HERE specifically, because a search result set spans many
+   * unrelated hosts and `core/host-throttle.ts` already serialises requests to
+   * any single host process-wide. Two results that happen to share a host
+   * still queue behind each other; two on different hosts genuinely run in
+   * parallel.
+   *
+   * Default stays 1 so nothing changes for existing callers.
+   */
+  concurrency?: number;
 };
 
 export type SearchAndCrawlResult =
@@ -71,13 +83,13 @@ export async function searchAndCrawl(
   const pages: CrawlPage[] = [];
   const skipped: Array<{ url: string; reason: string; detail: string }> = [];
 
-  for (const result of found.results) {
+  const readOne = async (result: SearchResult) => {
     let origin: string;
     try {
       origin = new URL(result.url).origin;
     } catch {
       skipped.push({ url: result.url, reason: 'blocked', detail: 'Search returned an unparseable URL.' });
-      continue;
+      return;
     }
 
     // Each result is its own target scoped to its own origin. robotsPolicy is
@@ -88,6 +100,24 @@ export async function searchAndCrawl(
 
     if (crawled.ok && !crawled.notModified) pages.push(...crawled.pages);
     else if (!crawled.ok) skipped.push({ url: result.url, reason: crawled.reason, detail: crawled.detail });
+  };
+
+  const lanes = Math.max(1, Math.floor(options.concurrency ?? 1));
+  if (lanes === 1) {
+    for (const result of found.results) await readOne(result);
+  } else {
+    // Fixed pool of workers pulling from a shared cursor — bounded memory and
+    // bounded in-flight requests regardless of how many results came back.
+    const queue = [...found.results];
+    await Promise.all(
+      Array.from({ length: Math.min(lanes, queue.length) }, async () => {
+        for (;;) {
+          const next = queue.shift();
+          if (!next) return;
+          await readOne(next);
+        }
+      }),
+    );
   }
 
   return { ok: true, results: found.results, pages, skipped, provider: found.provider };

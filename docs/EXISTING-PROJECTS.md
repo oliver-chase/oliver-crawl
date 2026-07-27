@@ -114,7 +114,7 @@ Order matters. Go least-risky first:
 Once your suite passes against the package:
 
 - Remove your old scraper and its provider clients **in a separate commit** from the one that adopted the package.
-- Pin the version: `"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#v0.2.0"` — no `^`, so a package change can never silently alter your crawl behaviour.
+- Pin a tag: `"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#<tag>"` — no `^`, so a package change can never silently alter your crawl behaviour. Take the newest tag from `git tag -l`.
 - Keep your old tests. Point them at the new code. **They are the evidence the swap preserved behaviour** — that is more valuable than the implementation they were written against.
 
 ---
@@ -125,7 +125,7 @@ This package is a **pinned dependency, not a fork**. One codebase; every
 consumer pins a tag:
 
 ```json
-"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#v0.2.0"
+"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#<tag>"
 ```
 
 Editing oliver-crawl changes **nothing** in any consumer until that consumer
@@ -136,7 +136,7 @@ exactly the failure pinning exists to prevent.
 The flow, end to end:
 
 1. **In oliver-crawl:** land the change, `npm run check` green, tag —
-   `git tag v0.2.1 && git push origin v0.2.1`.
+   `git tag vX.Y.Z && git push origin vX.Y.Z`.
 2. **In each consumer, when ready:** bump the pin in package.json,
    `npm install`, run THAT repo's suite. The suite is what proves the update
    is safe for that repo — each consumer adopts on its own schedule.
@@ -176,7 +176,7 @@ const { createCrawler } = await import('@oliver/crawl-core');
 
 **Your bundler complains about `playwright`.** It shouldn't — the import is deliberately written so bundler tracers cannot see it. If something still tries to resolve it, mark `playwright` external. It is not a dependency of this package.
 
-**The package installs but imports fail.** Make sure you installed a tagged version (`#v0.2.0`). The build runs on install via `prepare`; if your CI uses `--ignore-scripts`, that step is skipped and there is no `dist/`.
+**The package installs but imports fail.** Make sure you installed a tagged version (`#<tag>`, not a bare branch). The build runs on install via `prepare`; if your CI uses `--ignore-scripts`, that step is skipped and there is no `dist/`.
 
 **Everything suddenly reports `blocked`.** Almost always fail-closed robots — see the warning in step 1.
 
@@ -204,15 +204,15 @@ for (const row of await db.sources.due()) {
 
 ### Turning pages into YOUR objects — yours
 
-You get `text`, `jsonLd`, `links`, `title`. Turning those into events, products or articles is your code, deliberately: that logic is what makes your app yours, and a generic version of it would be wrong for everyone.
+You get `text`, `markdown`, `jsonLd`, `links` and `title`. Converting those into your own records stays in your code, and that is deliberate: the mapping from a page to a product, an article or a listing is defined by your schema, and any version this library shipped would be wrong for every consumer that did not share it.
 
 Start with `jsonLd` before reaching for an LLM — many sites publish structured data describing themselves, and reading it is free and exact:
 
 ```ts
 for (const node of page.jsonLd) {
-  if (node['@type'] === 'Event') myEvents.push(fromJsonLd(node)); // free, no LLM
+  if (node['@type'] === 'Product') myRecords.push(fromJsonLd(node)); // free, no model
 }
-if (myEvents.length === 0) myEvents = await myLlmExtract(page.text); // paid fallback
+if (myRecords.length === 0) myRecords = await myModelExtract(page.markdown); // paid fallback
 ```
 
 ### Storing crawl state — yours, and the package hands you exactly what to store
@@ -237,8 +237,19 @@ crawler.crawl(
 
 Sent only to that target's own host — the same-site rule means a redirect cannot walk your token to another origin.
 
+**There is no cookie jar (CRAWL-SESSION-1).** Headers you supply are sent on
+every request for that target, but a `Set-Cookie` the server returns is not
+captured or replayed. So a login that establishes a session on request one
+cannot carry it to request two, and multi-page crawling behind a login does
+not work — even though single-page crawling with a token you already hold does.
+
+If you need it, acquire the session yourself and pass the cookie in `headers`.
+A cookie jar is a credential store, and one that outlived a single crawl or
+leaked between targets would be a worse problem than the one it solved, so it
+stays out until there is a consumer that genuinely needs it.
+
 Setting `headers` also **disables the Jina fallback rung for that target**. Jina is a public service that fetches the URL on your behalf, so a members-only URL would be disclosed to a third party, and the fetch would fail anyway without your token. Local and remote rendering still run, because those are your own infrastructure. If a credentialed page is JS-rendered, configure `localRender` or `browserRender` — the Jina rung is not available to catch it.
 
 ### Learning extraction recipes — yours
 
-The package can *replay* a stored selector recipe (`applyRecipe`). Deciding whether a recipe is any good requires your domain's validity rules ("did the dates parse", "is that a real venue name"), so learning stays with you.
+The package can *replay* a stored selector recipe (`applyRecipe`). Judging whether a recipe is any good requires your domain's validity rules — did that parse as a price, is that a plausible SKU — so learning stays with you.

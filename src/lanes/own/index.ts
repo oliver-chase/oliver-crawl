@@ -38,6 +38,7 @@
 import * as cheerio from 'cheerio';
 import { htmlToMarkdown } from '../../extract/html-to-markdown.js';
 import { summarizeStructuredData } from '../../extract/structured-summary.js';
+import { findContentImages } from '../../extract/content-images.js';
 import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js';
 import { looksLikeEmptyState } from '../../core/soft-404.js';
 import { EXTRACTOR_VERSION } from '../../core/extractor-version.js';
@@ -395,6 +396,7 @@ export async function crawlWithOwnLane(
           markdown: '',
           contentKind,
           likelyEmptyState: looksLikeEmptyState(sanitizedData.text),
+          candidateContentImages: [],
           extractorVersion: EXTRACTOR_VERSION,
           structuredData: summarizeStructuredData([]),
           title: null,
@@ -620,6 +622,8 @@ async function jinaFallback(
           markdown: '',
           contentKind: 'text',
           likelyEmptyState: looksLikeEmptyState(sanitized.text),
+          // Text-only rung — no markup to scan for images.
+          candidateContentImages: [],
           extractorVersion: EXTRACTOR_VERSION,
           // Jina returns prose, not the page's script tags — no JSON-LD to
           // summarise. Reported honestly as "none found", which correctly
@@ -823,6 +827,7 @@ async function buildPage(input: {
     // footer are large would otherwise never look empty, which is exactly
     // the page this is meant to catch.
     likelyEmptyState: looksLikeEmptyState(sanitizedMarkdown.text || sanitized.text),
+    candidateContentImages: findContentImages($, input.url),
     extractorVersion: EXTRACTOR_VERSION,
     structuredData: summarizeStructuredData(jsonLd),
     title,
