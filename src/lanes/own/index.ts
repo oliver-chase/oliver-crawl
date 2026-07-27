@@ -54,16 +54,12 @@ import { sha256Hex } from '../../core/hash.js';
 import type { ResolvedConfig } from '../../core/config.js';
 import type { CrawlOptions, CrawlPage, CrawlResult, CrawlTarget, PageLink } from '../../core/types.js';
 
-const MAX_OUTBOUND_HOSTS = 25;
-const MAX_LINKS = 200;
 
-// CRAWL-HARDEN-1: hard cap on bytes read from any origin. Without one, a
-// hostile or misconfigured origin streaming an endless (or multi-hundred-MB)
-// body ties up memory until the process dies — response.text() reads
-// EVERYTHING before returning. 2 MB is far above any real event/listing page
-// and far below anything that could hurt; the sanitiser's char cap protects
-// the LLM, this protects the crawler itself.
-const MAX_BODY_BYTES = 2_000_000;
+// CRAWL-HARDEN-1: bytes read from any origin are capped (config.limits
+// .maxBodyBytes, default 2 MB). Without a cap, a hostile or misconfigured
+// origin streaming an endless body ties up memory until the process dies —
+// response.text() reads EVERYTHING before returning. The sanitiser's char
+// cap protects the LLM; this protects the crawler itself.
 
 // CRAWL-ROBOTS-1: robots.txt was ported but nothing ever CALLED it — the lane
 // trusted whatever robotsPolicy the caller set, so a "governed crawler" was
@@ -193,7 +189,7 @@ export async function crawlWithOwnLane(
     return { ok: false, reason: 'empty', detail, lane: 'own' };
   }
 
-  const html = await readBodyCapped(response, MAX_BODY_BYTES);
+  const html = await readBodyCapped(response, config.limits.maxBodyBytes);
   const page = await buildPage({
     url: response.url || requestUrl.toString(),
     html,
@@ -204,6 +200,8 @@ export async function crawlWithOwnLane(
     maxTextChars,
     rung: 'fetch',
     includeHtml: options.includeHtml ?? false,
+    maxLinks: config.limits.maxLinksPerPage,
+    maxOutboundHosts: config.limits.maxOutboundHosts,
   });
 
   if (page === 'quarantined') {
@@ -251,6 +249,8 @@ async function renderFallback(
       maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
       rung: 'local-render',
       includeHtml: options.includeHtml ?? false,
+      maxLinks: config.limits.maxLinksPerPage,
+      maxOutboundHosts: config.limits.maxOutboundHosts,
     });
     if (localPage === 'quarantined') {
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
@@ -279,6 +279,8 @@ async function renderFallback(
       maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
       rung: 'browser-render',
       includeHtml: options.includeHtml ?? false,
+      maxLinks: config.limits.maxLinksPerPage,
+      maxOutboundHosts: config.limits.maxOutboundHosts,
     });
 
     if (page === 'quarantined') {
@@ -419,6 +421,8 @@ async function buildPage(input: {
   maxTextChars: number;
   rung: string;
   includeHtml: boolean;
+  maxLinks: number;
+  maxOutboundHosts: number;
 }): Promise<CrawlPage | 'quarantined'> {
   // ONE parse (CRAWL-PERF-1, found in self-audit): the first version loaded
   // the document once for text, then RELOADED it once per JSON-LD script tag
@@ -468,8 +472,8 @@ async function buildPage(input: {
 
     const sameSite = resolved.hostname.replace(/^www\./, '') === input.baseHost.replace(/^www\./, '');
     if (sameSite) {
-      if (links.length < MAX_LINKS) links.push({ url: resolved.toString(), text: $(el).text().trim().slice(0, 200) });
-    } else if (outbound.size < MAX_OUTBOUND_HOSTS) {
+      if (links.length < input.maxLinks) links.push({ url: resolved.toString(), text: $(el).text().trim().slice(0, 200) });
+    } else if (outbound.size < input.maxOutboundHosts) {
       outbound.add(resolved.hostname);
     }
   });

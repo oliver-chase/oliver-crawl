@@ -24,7 +24,9 @@ import type { CrawlTarget, DnsAddress, DnsLookupFn } from '../core/types.js';
 
 type ValidatedBaseUrl = { url: URL; host: string; port: string };
 
-const CLOUDFLARE_DNS_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
+/** Default DoH resolver. Overridable via config.dohEndpoint — see the note
+ *  there on why this is a real choice, not an implementation detail. */
+export const DEFAULT_DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
 
 /** Hosts proven to resolve publicly. Success-only, process-lifetime. */
 const DNS_SAFE_HOST_CACHE = new Map<string, Promise<void>>();
@@ -65,8 +67,8 @@ function parseDohResponse(payload: DohResponse): DnsAddress[] {
   });
 }
 
-async function queryDnsType(hostname: string, type: 'A' | 'AAAA'): Promise<DnsAddress[]> {
-  const resolver = new URL(CLOUDFLARE_DNS_ENDPOINT);
+async function queryDnsType(hostname: string, type: 'A' | 'AAAA', endpoint: string): Promise<DnsAddress[]> {
+  const resolver = new URL(endpoint);
   resolver.searchParams.set('name', hostname);
   resolver.searchParams.set('type', type);
   const response = await fetch(resolver, { headers: { accept: 'application/dns-json' }, cache: 'no-store' });
@@ -74,10 +76,15 @@ async function queryDnsType(hostname: string, type: 'A' | 'AAAA'): Promise<DnsAd
   return parseDohResponse((await response.json()) as DohResponse);
 }
 
-const defaultDnsLookup: DnsLookupFn = async (hostname) => {
-  const [a, aaaa] = await Promise.all([queryDnsType(hostname, 'A'), queryDnsType(hostname, 'AAAA')]);
-  return [...a, ...aaaa];
-};
+/** Build a DoH-backed resolver for a given endpoint. */
+export function createDohLookup(endpoint: string = DEFAULT_DOH_ENDPOINT): DnsLookupFn {
+  return async (hostname) => {
+    const [a, aaaa] = await Promise.all([queryDnsType(hostname, 'A', endpoint), queryDnsType(hostname, 'AAAA', endpoint)]);
+    return [...a, ...aaaa];
+  };
+}
+
+const defaultDnsLookup: DnsLookupFn = createDohLookup();
 
 /**
  * Refuse a hostname that resolves anywhere private. THE anti-SSRF check.

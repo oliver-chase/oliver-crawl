@@ -213,6 +213,29 @@ export type CrawlConfig = {
   autoRobots?: boolean;
   /** Default caps, overridable per request. */
   defaults?: Required<Pick<CrawlOptions, 'maxTextChars' | 'timeoutMs' | 'maxPages'>>;
+  /**
+   * Safety/scale limits. Every one has a sane default; they are exposed
+   * because the right value depends on YOUR pages, and a limit you cannot
+   * raise is a limit that silently loses data.
+   */
+  limits?: {
+    /** Max bytes read from any origin before truncating. Default 2 MB.
+     *  Raise for genuinely huge listing pages; lower to harden further. */
+    maxBodyBytes?: number;
+    /** Max same-site links captured per page. Default 200. A big listing
+     *  page can legitimately exceed this, and dropped links mean missed
+     *  pagination and detail pages. */
+    maxLinksPerPage?: number;
+    /** Max distinct off-site hosts recorded per page. Default 25. */
+    maxOutboundHosts?: number;
+  };
+  /**
+   * DNS-over-HTTPS resolver used when no `dnsLookup` is supplied. Defaults
+   * to Cloudflare. Exposed because which resolver sees your crawl traffic is
+   * a privacy and third-party-dependency decision, not a detail — and on a
+   * Node runtime you may prefer to inject `dnsLookup` and use none at all.
+   */
+  dohEndpoint?: string;
 };
 
 export type VendorKeys = {
