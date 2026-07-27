@@ -45,6 +45,7 @@ import {
 import { fetchViaJina } from '../../fetch/jina-fetch.js';
 import { renderServiceFrom, renderViaService } from '../../fetch/browser-render.js';
 import { renderViaLocalChromium } from '../../fetch/local-render.js';
+import { evaluateRobotsForUrl } from '../../fetch/robots-check.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
 import { computeContentRegionHash } from '../../extract/content-region-hash.js';
 import { extractInlineScriptContent, shouldRecoverFromScripts } from '../../extract/spa-content-extract.js';
@@ -62,6 +63,32 @@ const MAX_LINKS = 200;
 // and far below anything that could hurt; the sanitiser's char cap protects
 // the LLM, this protects the crawler itself.
 const MAX_BODY_BYTES = 2_000_000;
+
+// CRAWL-ROBOTS-1: robots.txt was ported but nothing ever CALLED it — the lane
+// trusted whatever robotsPolicy the caller set, so a "governed crawler" was
+// only as governed as the consumer's bookkeeping. With config.autoRobots on,
+// an 'unknown' posture is resolved for real. Cached per host for the process
+// lifetime: one robots.txt request per HOST, never per page.
+const ROBOTS_CACHE = new Map<string, Promise<'allow' | 'disallow' | 'conditional' | 'unknown'>>();
+
+/** Test seam — long-lived processes never need this. */
+export function __clearRobotsCacheForTests(): void {
+  ROBOTS_CACHE.clear();
+}
+
+async function resolveRobotsPolicy(url: string, config: ResolvedConfig) {
+  const host = new URL(url).hostname.toLowerCase();
+  let pending = ROBOTS_CACHE.get(host);
+  if (!pending) {
+    pending = evaluateRobotsForUrl(url, { userAgent: config.userAgent, dnsLookup: config.dnsLookup })
+      .then((r) => r.policy)
+      // A robots fetch that itself fails leaves the posture unknown, which
+      // still fails closed downstream — never upgrade a failure to 'allow'.
+      .catch(() => 'unknown' as const);
+    ROBOTS_CACHE.set(host, pending);
+  }
+  return pending;
+}
 
 /** Read a response body up to `maxBytes`, truncating (not failing) beyond it —
  *  the readable prefix of a huge page is still worth extracting from. */
@@ -112,11 +139,17 @@ export async function crawlWithOwnLane(
   const timeoutMs = options.timeoutMs ?? config.defaults.timeoutMs;
   const started = Date.now();
 
-  // 1. Policy — every refusal here happens before any network call.
+  // 1. Policy — every refusal here happens before any content fetch.
   let requestUrl: URL;
   try {
-    assertTargetEligible(target);
-    requestUrl = assertRequestUrlAllowed(target, url);
+    // CRAWL-ROBOTS-1: resolve an unknown posture for real, when asked to.
+    let effectiveTarget = target;
+    if (config.autoRobots && (target.robotsPolicy ?? 'unknown') === 'unknown') {
+      const policy = await resolveRobotsPolicy(target.baseUrl, config);
+      effectiveTarget = { ...target, robotsPolicy: policy };
+    }
+    assertTargetEligible(effectiveTarget);
+    requestUrl = assertRequestUrlAllowed(effectiveTarget, url);
     await assertHostResolvesToPublicAddress(requestUrl.hostname, config.dnsLookup);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

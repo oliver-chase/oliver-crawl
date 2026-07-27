@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createCrawler } from '@/index';
 import { __clearDnsCacheForTests } from '@/fetch/host-policy';
+import { __clearRobotsCacheForTests } from '@/lanes/own/index';
 import type { CrawlTarget, UsageEvent } from '@/core/types';
 
 // The own lane end-to-end, against a stubbed network. Everything here is
@@ -30,6 +31,7 @@ const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
   __clearDnsCacheForTests();
+  __clearRobotsCacheForTests();
   vi.restoreAllMocks();
 });
 
@@ -347,5 +349,87 @@ describe('body size cap (CRAWL-HARDEN-1)', () => {
     // consumer can SEE the page was cut), hence cap + marker, not cap exact.
     expect(result.pages[0]!.text.length).toBeLessThanOrEqual(12000 + '\n[TRUNCATED]'.length);
     expect(result.pages[0]!.text.endsWith('[TRUNCATED]')).toBe(true);
+  });
+});
+
+describe('autoRobots — the crawler governs itself (CRAWL-ROBOTS-1)', () => {
+  // robots.txt was ported but nothing called it: the lane trusted whatever
+  // posture the caller set, so "governed" was only as good as their
+  // bookkeeping. With autoRobots on, an unknown posture is resolved for real.
+  const unknownTarget: CrawlTarget = { name: 'V', baseUrl: 'https://venue.example.com', active: true };
+
+  test('unknown posture + autoRobots off = fails closed, no robots fetch', async () => {
+    let robotsFetched = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('robots.txt')) robotsFetched = true;
+      return htmlResponse('<html><body><p>x</p></body></html>');
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'TestBot/1.0', dnsLookup: publicDns });
+    const result = await crawler.crawl(unknownTarget, 'https://venue.example.com/events');
+
+    expect(result).toMatchObject({ ok: false, reason: 'blocked' });
+    expect(robotsFetched).toBe(false);
+  });
+
+  test('autoRobots resolves an allowing robots.txt and proceeds', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('robots.txt')) {
+        return new Response('User-agent: *\nDisallow: /admin', { status: 200, headers: { 'content-type': 'text/plain' } });
+      }
+      return htmlResponse('<html><body><main><p>Real page content.</p></main></body></html>');
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'TestBot/1.0', dnsLookup: publicDns, autoRobots: true });
+    const result = await crawler.crawl(unknownTarget, 'https://venue.example.com/events');
+
+    expect(result.ok).toBe(true);
+  });
+
+  test('autoRobots honours a site-wide disallow', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('robots.txt')) {
+        return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'content-type': 'text/plain' } });
+      }
+      return htmlResponse('<html><body><p>should not be reached</p></body></html>');
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'TestBot/1.0', dnsLookup: publicDns, autoRobots: true });
+    const result = await crawler.crawl(unknownTarget, 'https://venue.example.com/events');
+
+    expect(result).toMatchObject({ ok: false, reason: 'blocked' });
+  });
+
+  test('robots.txt is fetched once per HOST, not once per page', async () => {
+    let robotsFetches = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('robots.txt')) {
+        robotsFetches++;
+        return new Response('User-agent: *\nDisallow:', { status: 200, headers: { 'content-type': 'text/plain' } });
+      }
+      return htmlResponse('<html><body><main><p>Page content here.</p></main></body></html>');
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'TestBot/1.0', dnsLookup: publicDns, autoRobots: true });
+    await crawler.crawl(unknownTarget, 'https://venue.example.com/a');
+    await crawler.crawl(unknownTarget, 'https://venue.example.com/b');
+    await crawler.crawl(unknownTarget, 'https://venue.example.com/c');
+
+    expect(robotsFetches).toBe(1);
+  });
+
+  test('an explicit posture is never overridden by autoRobots', async () => {
+    let robotsFetched = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('robots.txt')) robotsFetched = true;
+      return htmlResponse('<html><body><main><p>Allowed by the caller.</p></main></body></html>');
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'TestBot/1.0', dnsLookup: publicDns, autoRobots: true });
+    // Caller already knows the posture — their bookkeeping stays the truth.
+    const result = await crawler.crawl({ ...unknownTarget, robotsPolicy: 'allow' }, 'https://venue.example.com/x');
+
+    expect(result.ok).toBe(true);
+    expect(robotsFetched).toBe(false);
   });
 });

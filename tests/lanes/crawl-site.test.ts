@@ -322,3 +322,101 @@ describe('crawlSite — validator round-trip (re-crawl efficiency)', () => {
     expect(result.pages).toHaveLength(1);
   });
 });
+
+describe('crawlSite — unchanged-content detection (CRAWL-UNCHANGED-1)', () => {
+  // Most small sites send NO ETag. The content-region hash is what makes
+  // their re-crawls cheap: the fetch is unavoidable, the expensive
+  // downstream work (extraction, LLM) is not.
+  test('flags a page whose content-region hash matches last run', async () => {
+    const body = '<html><head><title>T</title></head><body><main>Stable event copy.</main></body></html>';
+    globalThis.fetch = (async () =>
+      new Response(body, { status: 200, headers: { 'content-type': 'text/html' } })) as typeof fetch;
+
+    const first = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/events'] });
+    const firstHash = first.validators['https://venue.example.com/events']!.contentRegionSha256;
+    expect(firstHash).toBeTruthy();
+    expect(first.unchanged).toEqual([]);
+
+    const second = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      priorValidators: { 'https://venue.example.com/events': { contentRegionSha256: firstHash } },
+    });
+
+    expect(second.unchanged).toEqual(['https://venue.example.com/events']);
+    expect(second.pages).toHaveLength(1); // still fetched — only the origin can prevent that
+  });
+
+  test('a real content change is NOT flagged unchanged', async () => {
+    let call = 0;
+    globalThis.fetch = (async () => {
+      call++;
+      const main = call === 1 ? 'Original copy.' : 'Completely different copy now.';
+      return new Response(`<html><head><title>T</title></head><body><main>${main}</main></body></html>`, {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    }) as typeof fetch;
+
+    const first = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/events'] });
+    const second = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      priorValidators: {
+        'https://venue.example.com/events': {
+          contentRegionSha256: first.validators['https://venue.example.com/events']!.contentRegionSha256,
+        },
+      },
+    });
+
+    expect(second.unchanged).toEqual([]);
+  });
+});
+
+describe('crawlSite — sitemap-derived seeds', () => {
+  test('uses the site sitemap when no seeds are given', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/sitemap.xml')) {
+        return new Response(
+          `<urlset>
+            <url><loc>https://venue.example.com/events/a</loc></url>
+            <url><loc>https://venue.example.com/events/b</loc></url>
+          </urlset>`,
+          { status: 200, headers: { 'content-type': 'application/xml' } },
+        );
+      }
+      return page('Discovered page.');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, { useSitemap: true, maxPages: 5 });
+
+    expect(result.pages.map((p) => p.url).sort()).toEqual([
+      'https://venue.example.com/events/a',
+      'https://venue.example.com/events/b',
+    ]);
+  });
+
+  test('falls back to baseUrl when the site has no sitemap', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/sitemap.xml')) return new Response('nope', { status: 404 });
+      return page('Base page.');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, { useSitemap: true });
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0]!.url).toContain('venue.example.com');
+  });
+
+  test('explicit seeds win over sitemap discovery', async () => {
+    let sitemapFetched = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/sitemap.xml')) {
+        sitemapFetched = true;
+        return new Response('<urlset></urlset>', { status: 200, headers: { 'content-type': 'application/xml' } });
+      }
+      return page('Explicit seed page.');
+    }) as typeof fetch;
+
+    await crawlSite(crawler(), target, { useSitemap: true, seeds: ['https://venue.example.com/chosen'] });
+    expect(sitemapFetched).toBe(false);
+  });
+});

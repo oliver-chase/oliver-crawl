@@ -10,7 +10,7 @@ Its rung ladder, in order — each rung only runs when the ones above it couldn'
 
 | # | Rung | Cost | What it does |
 |---|------|------|--------------|
-| 1 | Policy | free | Eligibility, robots posture, same-site, SSRF/DNS-rebinding. Refusals happen **before any network call** |
+| 1 | Policy | free | Eligibility, robots posture, same-site, SSRF/DNS-rebinding. Refusals happen **before any content fetch**. With `autoRobots: true` an unknown posture is resolved by really fetching robots.txt — cached per host, so one request per host, never per page |
 | 2 | Conditional GET | free | Sends `If-None-Match` / `If-Modified-Since` from stored validators; a 304 ends the crawl with nothing fetched |
 | 3 | Fetch | free | Plain HTTPS fetch, real UA, redirects re-validated per hop, body capped at 2 MB |
 | 4 | Parse | free | Visible text, title, JSON-LD, same-site links, outbound hosts; SPA payload recovery |
@@ -31,6 +31,17 @@ Firecrawl and Apify behind one interface. **Off by default** — a caller opts i
 ## The rule that connects them
 
 **A policy refusal never escalates.** If the own lane refuses a URL as `blocked` or `quarantined`, the crawl ends — it does not fall through to a vendor. Paying a third party to fetch what your own guard refused is buying a way around your own security.
+
+## Making re-crawls cheap
+
+Two independent mechanisms, because origins differ:
+
+| Origin sends | Mechanism | Result |
+|---|---|---|
+| ETag / Last-Modified | Conditional GET | **304 — nothing fetched at all.** Free |
+| Nothing (most small sites) | Content-region hash | Page is fetched, but `unchanged` tells you the meaningful content is identical, so extraction/LLM can be skipped |
+
+The content-region hash ignores nav, header, footer and script noise — a cookie-banner tweak does not read as a content change. Both need the same loop: store `result.validators`, pass them back as `priorValidators`.
 
 ## Search is not a lane
 
