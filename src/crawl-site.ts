@@ -18,6 +18,7 @@
 // site with parallel requests is exactly the behaviour that gets a crawler
 // blocked. Politeness is a feature.
 
+import { urlDedupKey } from './core/url-dedup-key.js';
 import { assertRequestUrlAllowed, assertTargetEligible } from './fetch/host-policy.js';
 import { findNextPageUrl } from './extract/pagination-discovery.js';
 import type { Crawler } from './index.js';
@@ -231,12 +232,15 @@ export async function crawlSite(
   // Dedup across seeds AND everything discovered — a site whose page 2 links
   // back to page 1, or whose nav links every page to every other page, must
   // not loop.
+  // Keyed on the canonical resource identity, not the raw string — see
+  // core/url-dedup-key.ts. /events, /events/, /events#lineup and
+  // /events?utm_source=x are one page, and must cost one slot of maxPages.
   const visited = new Set<string>();
   const maxDepth = Math.max(0, options.maxDepth ?? 2);
   // Depth rides alongside the URL so breadth-first ordering is preserved and
   // a deep branch cannot consume the whole page budget.
   const depthOf = new Map<string, number>();
-  for (const seed of queue) depthOf.set(seed, 0);
+  for (const seed of queue) depthOf.set(urlDedupKey(seed), 0);
 
   const shouldSkip = (candidate: string) => {
     if ((options.excludePatterns ?? []).some((pattern) => pattern.test(candidate))) return true;
@@ -251,8 +255,11 @@ export async function crawlSite(
     if (shouldSkip(rawUrl)) return;
     try {
       const safe = assertRequestUrlAllowed(target, rawUrl).toString();
-      if (visited.has(safe) || depthOf.has(safe)) return;
-      depthOf.set(safe, depth);
+      const key = urlDedupKey(safe);
+      if (visited.has(key) || depthOf.has(key)) return;
+      depthOf.set(key, depth);
+      // The QUEUE keeps the real URL — we request exactly what the site
+      // published. Only identity is normalised.
       queue.push(safe);
     } catch {
       // Off-site or unsafe — not an error, just not ours to follow.
@@ -268,9 +275,10 @@ export async function crawlSite(
     if (Date.now() >= deadline) return done(true);
 
     const url = queue.shift()!;
-    if (visited.has(url)) continue;
-    visited.add(url);
-    const depth = depthOf.get(url) ?? 0;
+    const urlKey = urlDedupKey(url);
+    if (visited.has(urlKey)) continue;
+    visited.add(urlKey);
+    const depth = depthOf.get(urlKey) ?? 0;
 
     const prior = options.priorValidators?.[url];
     const perPageOptions: CrawlOptions = {
@@ -315,8 +323,9 @@ export async function crawlSite(
         // /home, /index and / commonly converge. Mark the RESOLVED url
         // visited too, and drop a page already collected under it.
         const fresh = result.pages.filter((p) => {
-          if (visited.has(p.url) && p.url !== url) return false;
-          visited.add(p.url);
+          const key = urlDedupKey(p.url);
+          if (visited.has(key) && key !== urlKey) return false;
+          visited.add(key);
           return true;
         });
         pages.push(...fresh);

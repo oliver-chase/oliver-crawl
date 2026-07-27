@@ -66,27 +66,69 @@ import type { CrawlOptions, CrawlPage, CrawlResult, CrawlTarget, PageLink } from
 // CRAWL-ROBOTS-1: robots.txt was ported but nothing ever CALLED it — the lane
 // trusted whatever robotsPolicy the caller set, so a "governed crawler" was
 // only as governed as the consumer's bookkeeping. With config.autoRobots on,
-// an 'unknown' posture is resolved for real. Cached per host for the process
-// lifetime: one robots.txt request per HOST, never per page.
-const ROBOTS_CACHE = new Map<string, Promise<'allow' | 'disallow' | 'conditional' | 'unknown'>>();
+// an 'unknown' posture is resolved for real, and cached per HOST so it costs
+// one robots.txt request per host rather than one per page.
+//
+// ROBOTS-TTL-1 (2026-07-27, found in audit): that cache had no expiry at all,
+// and the comment here claimed "long-lived processes never need this." Exactly
+// backwards — a long-lived process is the only place it matters, and it broke
+// in both directions:
+//
+//   1. A site that ADDS a Disallow after we cached 'allow' kept being crawled
+//      for the life of the process. Crawling against an explicit refusal is
+//      the one thing robots compliance exists to prevent.
+//   2. Worse, a transient failure cached 'unknown' PERMANENTLY. Since unknown
+//      fails closed, a single network blip meant that host never crawled
+//      again — silently, with no error to notice. Fallow hit precisely this
+//      shape: 125 sources sat fail-closed for four days before a human
+//      spotted it (see its robots-recheck-sweep.ts).
+//
+// The two TTLs are deliberately asymmetric. A successful answer is stable and
+// cheap to trust for hours. A failure must be retried soon, because the cost
+// of holding it is a host that silently stops working.
+export const ROBOTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — resolved posture
+export const ROBOTS_FAILURE_TTL_MS = 5 * 60 * 1000; //     5m — unresolved, retry soon
 
-/** Test seam — long-lived processes never need this. */
+type RobotsPolicyValue = 'allow' | 'disallow' | 'conditional' | 'unknown';
+type RobotsCacheEntry = { pending: Promise<RobotsPolicyValue>; expiresAt: number };
+
+const ROBOTS_CACHE = new Map<string, RobotsCacheEntry>();
+
+/** Test seam. */
 export function __clearRobotsCacheForTests(): void {
   ROBOTS_CACHE.clear();
 }
 
-async function resolveRobotsPolicy(url: string, config: ResolvedConfig) {
+async function resolveRobotsPolicy(url: string, config: ResolvedConfig): Promise<RobotsPolicyValue> {
   const host = new URL(url).hostname.toLowerCase();
-  let pending = ROBOTS_CACHE.get(host);
-  if (!pending) {
-    pending = evaluateRobotsForUrl(url, { userAgent: config.userAgent, dnsLookup: config.dnsLookup })
-      .then((r) => r.policy)
-      // A robots fetch that itself fails leaves the posture unknown, which
-      // still fails closed downstream — never upgrade a failure to 'allow'.
-      .catch(() => 'unknown' as const);
-    ROBOTS_CACHE.set(host, pending);
-  }
-  return pending;
+  const now = Date.now();
+
+  const hit = ROBOTS_CACHE.get(host);
+  if (hit && now < hit.expiresAt) return hit.pending;
+
+  // Held in a mutable entry so the TTL can be set from the OUTCOME once it is
+  // known, while concurrent callers still share the one in-flight request.
+  const entry: RobotsCacheEntry = {
+    expiresAt: now + ROBOTS_FAILURE_TTL_MS,
+    pending: Promise.resolve('unknown'),
+  };
+
+  entry.pending = evaluateRobotsForUrl(url, { userAgent: config.userAgent, dnsLookup: config.dnsLookup })
+    .then((r) => {
+      // 'unknown' from a real answer is still unresolved — retry it soon.
+      entry.expiresAt = Date.now() + (r.policy === 'unknown' ? ROBOTS_FAILURE_TTL_MS : ROBOTS_CACHE_TTL_MS);
+      return r.policy;
+    })
+    // A robots fetch that itself fails leaves the posture unknown, which still
+    // fails closed downstream — never upgrade a failure to 'allow'. But it
+    // expires quickly, so the failure cannot become permanent.
+    .catch(() => {
+      entry.expiresAt = Date.now() + ROBOTS_FAILURE_TTL_MS;
+      return 'unknown' as const;
+    });
+
+  ROBOTS_CACHE.set(host, entry);
+  return entry.pending;
 }
 
 /**

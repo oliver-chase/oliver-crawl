@@ -151,6 +151,7 @@ export { extractJsonLdEvent, extractAllJsonLdEvents } from './extract/jsonld-eve
 export { extractJsonLdAddress, formatJsonLdAddress } from './extract/jsonld-address.js';
 export { computeContentRegionHash } from './extract/content-region-hash.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
+export { urlDedupKey, sameUrlResource } from './core/url-dedup-key.js';
 export { evaluateRobotsForUrl, parseRobots, userAgentToken } from './fetch/robots-check.js';
 export type { RobotsPolicy, RobotsCheckResult } from './fetch/robots-check.js';
 export {
