@@ -52,6 +52,28 @@ export type SiteCrawlOptions = CrawlOptions & {
    *  Useful for the parts of a site that are never worth crawling (login,
    *  cart, calendar permalinks that expand forever). */
   excludePatterns?: RegExp[];
+  /**
+   * If set, ONLY follow discovered URLs matching one of these — an allowlist
+   * rather than a blocklist. `[/\/events\//]` crawls a site's events
+   * section and nothing else.
+   *
+   * Seeds are always crawled regardless: you asked for those explicitly.
+   * Exclude wins over include when both match.
+   *
+   * (Scrapy's LinkExtractor makes the same allow/deny distinction, for the
+   * same reason: on a large site, naming what you WANT is far shorter than
+   * enumerating everything you don't.)
+   */
+  includePatterns?: RegExp[];
+  /**
+   * Wall-clock ceiling for the whole run, ms. When it expires the run stops
+   * cleanly and reports `truncated`, keeping everything gathered so far.
+   *
+   * A page budget alone does not bound time: 20 pages on a site that takes
+   * 30s each is a ten-minute run. Anything on a schedule needs a time bound
+   * as well, or one slow origin delays every target behind it.
+   */
+  maxDurationMs?: number;
   /** Per-URL conditional-GET validators from a previous run, keyed by URL —
    *  exactly the shape `result.validators` (and `config.onSignals`) hands
    *  back, so the round-trip is: crawl → persist → pass here next run. */
@@ -216,8 +238,12 @@ export async function crawlSite(
   const depthOf = new Map<string, number>();
   for (const seed of queue) depthOf.set(seed, 0);
 
-  const shouldSkip = (candidate: string) =>
-    (options.excludePatterns ?? []).some((pattern) => pattern.test(candidate));
+  const shouldSkip = (candidate: string) => {
+    if ((options.excludePatterns ?? []).some((pattern) => pattern.test(candidate))) return true;
+    const include = options.includePatterns;
+    // Allowlist, when given: anything not named is not followed.
+    return Boolean(include?.length) && !include!.some((pattern) => pattern.test(candidate));
+  };
 
   /** Queue a discovered URL if it is same-site, unseen, and within depth. */
   const enqueue = (rawUrl: string, depth: number) => {
@@ -233,8 +259,13 @@ export async function crawlSite(
     }
   };
 
+  const deadline = options.maxDurationMs ? Date.now() + options.maxDurationMs : Infinity;
+
   while (queue.length > 0) {
     if (pages.length + notModified.length >= maxPages) return done(true);
+    // Stop cleanly on the time budget, keeping everything gathered so far —
+    // a partial result is far more useful than an aborted run.
+    if (Date.now() >= deadline) return done(true);
 
     const url = queue.shift()!;
     if (visited.has(url)) continue;

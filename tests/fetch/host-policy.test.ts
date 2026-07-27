@@ -253,3 +253,36 @@ describe('assertRedirectUrlAllowed / ForHost — redirect following', () => {
     expect(() => assertRedirectUrlAllowedForHost('venue.example.com', '', 'https://169.254.169.254/latest/meta-data/')).toThrow();
   });
 });
+
+// HOST-CACHE-SCOPE-1 (found by live validation): the safe-host cache was a
+// single module-level Map, so a host validated by ONE crawler was trusted by
+// every other crawler in the process — including one deliberately configured
+// with a different resolver. A resolver is part of a crawler's security
+// configuration; its verdicts must not leak across differently-configured
+// instances.
+describe('DNS safe-cache is scoped per resolver', () => {
+  test('a host cleared by one resolver is NOT trusted by another', async () => {
+    const permissive = async () => [{ address: '93.184.216.34', family: 4 }];
+    const restrictive = async () => [{ address: '127.0.0.1', family: 4 }];
+
+    // First resolver says the host is public — cached under ITS namespace.
+    await expect(assertHostResolvesToPublicAddress('shared-host.example.com', permissive)).resolves.toBeUndefined();
+
+    // A different resolver must still get its own verdict, not the cached one.
+    await expect(assertHostResolvesToPublicAddress('shared-host.example.com', restrictive)).rejects.toThrow(
+      /private IPv4/i,
+    );
+  });
+
+  test('the same resolver still caches (one lookup, not two)', async () => {
+    let lookups = 0;
+    const counting = async () => {
+      lookups++;
+      return [{ address: '93.184.216.34', family: 4 }];
+    };
+
+    await assertHostResolvesToPublicAddress('cached-host.example.com', counting);
+    await assertHostResolvesToPublicAddress('cached-host.example.com', counting);
+    expect(lookups).toBe(1);
+  });
+});

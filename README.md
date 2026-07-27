@@ -132,10 +132,13 @@ One request at a time, on purpose. Hammering a small site in parallel is how cra
 
 ```ts
 createCrawler({
-  minHostIntervalMs: 500,  // never hit one host more than twice a second
-  cacheTtlMs: 60_000,      // same URL twice in a minute = one request
+  minHostIntervalMs: 500,           // never hit one host more than twice a second
+  adaptiveThrottleMultiplier: 2,    // a slow site gets more room, automatically
+  cacheTtlMs: 60_000,               // same URL twice in a minute = one request
 });
 ```
+
+It also obeys `Retry-After` when an origin says to back off, and `maxDurationMs` bounds a whole run by wall-clock — a page budget alone doesn't, since 20 pages at 30s each is a ten-minute run.
 
 ---
 
@@ -202,13 +205,14 @@ createCrawler({
 |---|---|
 | **[ADOPTION.md](docs/ADOPTION.md)** | Put this in a new project |
 | **[EXISTING-PROJECTS.md](docs/EXISTING-PROJECTS.md)** | Add it to a project you've already built |
+| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Diagrams: how a request flows, and why |
 | **[LANES.md](docs/LANES.md)** | How the free lane works, rung by rung |
 | **[REFERENCE.md](docs/REFERENCE.md)** | Every option and return field |
 | **[MIGRATION.md](docs/MIGRATION.md)** | Where the code came from, what moved |
 
 ## Status
 
-276 tests, strict TypeScript, builds to `dist/`. Verified against live sites and as a real installed dependency. Node 20+; works on edge/serverless with local rendering skipped.
+288 tests, strict TypeScript, builds to `dist/`. Verified by a live-network suite against real sites (`npm run live`) and as a real installed dependency. Node 20+; works on edge/serverless with local rendering skipped.
 
 ## License
 

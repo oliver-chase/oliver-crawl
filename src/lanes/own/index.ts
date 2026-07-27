@@ -47,7 +47,7 @@ import { renderServiceFrom, renderViaService } from '../../fetch/browser-render.
 import { renderViaLocalChromium } from '../../fetch/local-render.js';
 import { evaluateRobotsForUrl } from '../../fetch/robots-check.js';
 import { emitUsage } from '../../core/usage.js';
-import { throttleHost } from '../../core/host-throttle.js';
+import { throttleHost, recordHostLatency } from '../../core/host-throttle.js';
 import { decodeBody } from '../../core/charset.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
 import { computeContentRegionHash } from '../../extract/content-region-hash.js';
@@ -176,11 +176,12 @@ export async function crawlWithOwnLane(
 
   // Politeness: hold the per-host gap BEFORE the request, after policy has
   // already approved it — no point rate-limiting a fetch we will refuse.
-  await throttleHost(requestUrl.hostname, config.minHostIntervalMs ?? 0);
+  await throttleHost(requestUrl.hostname, config.minHostIntervalMs ?? 0, config.adaptiveThrottleMultiplier ?? 0);
 
   // 2-4. Direct fetch, conditional when the caller has validators from a
   // previous crawl of this URL.
   let response: Response;
+  const fetchStartedAt = Date.now();
   try {
     response = await fetchFollowingSafeRedirects(
       requestUrl,
@@ -195,6 +196,9 @@ export async function crawlWithOwnLane(
     // Direct fetch failed — try the free keyless fallback before giving up.
     return jinaFallback(url, config, options, started, detail);
   }
+
+  // How long the origin took is the input to adaptive pacing.
+  recordHostLatency(requestUrl.hostname, Date.now() - fetchStartedAt);
 
   // A 304 is the whole point of sending validators: nothing changed, nothing
   // to parse, nothing charged. Reported distinctly from "empty".

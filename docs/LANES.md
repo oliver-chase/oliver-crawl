@@ -52,7 +52,11 @@ Everything already seen is skipped, including URLs that redirect to a page alrea
 |---|---|
 | `politenessDelayMs` (per run) | Gap between pages within one `crawlSite` call |
 | `minHostIntervalMs` (config) | Gap between requests to one HOST, process-wide and across concurrent callers |
+| `adaptiveThrottleMultiplier` (config) | Wait `avgLatency x N` instead of a fixed gap — a slow origin gets more room, floored at `minHostIntervalMs` so it can only ever be MORE polite |
 | `cacheTtlMs` (config) | Same URL twice inside the window costs one request |
+| `maxDurationMs` (per run) | Wall-clock ceiling. A page budget alone does not bound time — 20 pages at 30s each is a ten-minute run |
+
+A `429`/`503` carrying `Retry-After` is obeyed as stated rather than retried on our own schedule: the origin telling you when to come back is an instruction, and ignoring it is how a crawler gets banned.
 
 The second matters more than it looks: many targets can share a host (a city's venues on one CMS, several sites behind one CDN). Per-run politeness does nothing there — fifty targets would hit that origin at once.
 

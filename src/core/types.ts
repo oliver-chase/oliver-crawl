@@ -262,6 +262,18 @@ export type CrawlConfig = {
    */
   minHostIntervalMs?: number;
   /**
+   * Adaptive pacing: wait `avgResponseLatency x this` between requests to a
+   * host, floored at minHostIntervalMs. 2 is a reasonable starting point —
+   * a site answering in 100ms is polled briskly, one grinding at 3s is given
+   * room. 0 (default) = fixed pacing only.
+   *
+   * Idea borrowed from Scrapy's AutoThrottle, implemented independently and
+   * far more simply: latency is the origin telling you how much load it is
+   * under, and a fixed delay cannot hear that. Can only ever make the
+   * crawler MORE polite, never less.
+   */
+  adaptiveThrottleMultiplier?: number;
+  /**
    * Cache successful crawls in memory for this many ms, so the same URL
    * fetched twice in quick succession costs one request. Default 0 (off) —
    * a cache that turns itself on is a cache that serves someone a stale page
