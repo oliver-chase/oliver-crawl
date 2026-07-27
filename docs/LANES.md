@@ -28,7 +28,7 @@ The recovery rungs run on **any** failure of the direct fetch, not just one kind
 - an **HTTP status** the fetch can't use — a 403 bot wall, a 429, a 5xx
 - **HTML that parsed but had no readable text** — a JavaScript shell
 
-All three take the same path, in the same order, and rung 7 is tried before rung 9. That ordering is the point: a 403 is precisely where a real browser — real TLS fingerprint, real headers, real JS — succeeds where a bare `fetch` cannot. Trying Jina first would skip a free rung we control in favour of a third party, and a skipped free rung is what pushes a crawl into the paid lane sooner than it needed to go.
+All three take the same path in the same order, and rung 7 runs before rung 9. A 403 is usually a bot wall, and a real browser — with a real TLS fingerprint, real headers and JavaScript execution — clears those where a bare `fetch` does not. Reaching for Jina first would skip infrastructure we control in favour of a third party, and every free rung skipped moves a crawl closer to the paid path.
 
 The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lanes/own/index.ts`) so the order can't drift between the failure paths as rungs are added. `tests/lanes/lane-exhaustion.test.ts` asserts it, including that a vendor is never called while a free rung could still have worked.
 
@@ -44,9 +44,9 @@ Firecrawl and Apify behind one interface, disabled unless a call passes `lanes: 
 
 ## The rule connecting them
 
-**A policy refusal never escalates.** When the free path refuses a URL as `blocked` or `quarantined`, the crawl ends there. It does not fall through to a vendor.
+**A policy refusal never escalates.** When the free path refuses a URL as `blocked` or `quarantined`, the crawl ends there rather than falling through to a vendor.
 
-The reason is worth stating plainly: paying a third party to retrieve what your own security guard just refused is purchasing a way around your own controls. A transport failure is a reason to try harder. A policy decision is not.
+Paying a third party to retrieve what your own guard refused would buy a way around your own controls. A transport failure is a reason to try harder; a policy decision is not.
 
 ## Deciding what to crawl
 
@@ -74,7 +74,7 @@ Everything already seen is skipped, including URLs that redirect to a page alrea
 
 A `429`/`503` carrying `Retry-After` is obeyed as stated rather than retried on our own schedule: the origin telling you when to come back is an instruction, and ignoring it is how a crawler gets banned.
 
-The second matters more than it looks. Many targets can share one host — dozens of tenants on a single CMS, or several sites behind one CDN. Per-run politeness does nothing in that case: fifty targets would reach the same origin simultaneously, which is indistinguishable from an attack from the origin's side.
+`minHostIntervalMs` covers a case `politenessDelayMs` cannot. Many targets can share one host — dozens of tenants on a single CMS, or several sites behind one CDN. Per-run pacing does nothing there: fifty targets would reach that origin simultaneously, and from the origin's side that is indistinguishable from an attack.
 
 ## Making re-crawls cheap
 
@@ -90,7 +90,7 @@ Two hashes are stored per page, and the comparison picks the right one:
 - **`contentRegionSha256`** — structural, ignores nav/header/footer/script, so a cookie-banner tweak is not a content change. The better signal, but **only computable from HTML**, so it is empty on text-only rungs (Jina, vendor markdown).
 - **`textSha256`** — hash of the delivered text. Always present, so always comparable, at the cost of moving when nav text changes.
 
-`unchanged` uses the structural hash only when **both** runs have it, and falls back to the text hash otherwise. Comparing a structural hash against a text hash across a rung change would report a false content change — which is exactly the bug this design replaced.
+`unchanged` uses the structural hash only when **both** runs have it, and falls back to the text hash otherwise. Comparing a structural hash against a text hash across a rung change reports a content change that did not happen; that was the defect this design replaced.
 
 Both need the same loop: store `result.validators`, pass them back as `priorValidators`.
 
@@ -99,3 +99,7 @@ Both need the same loop: store `result.validators`, pass them back as `priorVali
 `crawler.search()` is a separate surface: a query goes in, URLs come out. Its providers are Serper and Tavily, both paid, tried in that order because Serper costs roughly a fifth as much per call.
 
 It shares configuration, budgeting and usage reporting with the fetch paths and nothing else. Notably, results are then crawled through the free path by default — searching does not commit you to paying twice.
+
+---
+
+**See also:** [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) — request flow and module map · [REFERENCE](REFERENCE.md) — every option and return field · [BACKLOG](BACKLOG.md) — known gaps

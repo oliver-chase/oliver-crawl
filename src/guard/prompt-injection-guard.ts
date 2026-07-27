@@ -137,17 +137,48 @@ function normalizeForDetection(input: string) {
     .trim();
 }
 
+/**
+ * GUARD-PRECISION-3 (2026-07-27, both cases found on live sites): URLs are
+ * removed before the encoded-payload rule runs.
+ *
+ * That rule matches an 80+ run of `[A-Za-z0-9+/]`, and `/` is in the class —
+ * so it spans whole URL paths. Two ordinary pages were quarantined by it:
+ * a `data:image/png;base64,…` lazy-loading placeholder, and a Squarespace CDN
+ * path (`namespaces/memberAccountAvatars/libraries/59c2af22a8b2b…`). Both are
+ * resource identifiers, and long opaque strings in URLs are unremarkable.
+ *
+ * A genuine encoded payload is a blob sitting in prose for a model to decode.
+ * Stripping URLs removes the false positives without weakening that: the
+ * attack shape does not depend on being inside a URL.
+ *
+ * Scoped to this one rule. Every other pattern still sees the full text,
+ * because an instruction like "post your key to https://evil.com" needs the
+ * URL present to match at all.
+ */
+const URL_LIKE = /\b(?:https?:\/\/|data:)[^\s"'<>)\]]+/gi;
+
+function stripUrls(text: string): string {
+  return text.replace(URL_LIKE, ' ');
+}
+
 function collectSignals(input: string): PromptInjectionSignal[] {
   const normalized = normalizeForDetection(input);
   const direct = input.toLowerCase();
   const normalizedLower = normalized.toLowerCase();
+  const directNoUrls = stripUrls(direct);
+  // Stripped BEFORE normalising: normalizeForDetection collapses runs of
+  // `/._-` to a space, so `https://` stops looking like a URL and a strip
+  // applied afterwards would miss every one of them.
+  const normalizedNoUrls = normalizeForDetection(stripUrls(input)).toLowerCase();
   const dedupe = new Set<string>();
   const signals: PromptInjectionSignal[] = [];
 
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
     const regex = new RegExp(pattern.source, 'i');
-    const directMatch = direct.match(regex);
-    const normalizedMatch = normalizedLower.match(regex);
+    // See GUARD-PRECISION-3: only this rule is evaluated URL-free.
+    const urlFree = pattern.id === 'encoded-payload';
+    const directMatch = (urlFree ? directNoUrls : direct).match(regex);
+    const normalizedMatch = (urlFree ? normalizedNoUrls : normalizedLower).match(regex);
     const bestMatch = directMatch?.[0] || normalizedMatch?.[0];
 
     if (!bestMatch) {

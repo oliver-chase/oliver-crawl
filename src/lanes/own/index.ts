@@ -44,6 +44,7 @@ import { extractPdfText } from '../../fetch/pdf-extract.js';
 import { looksLikeEmptyState } from '../../core/soft-404.js';
 import { EXTRACTOR_VERSION } from '../../core/extractor-version.js';
 import { forgetWinningRung, shouldSkipDirectFetch } from '../../core/rung-memory.js';
+import { looksLikeBlockPage } from '../../core/block-page.js';
 import {
   assertRedirectUrlAllowedForHost,
   assertRequestUrlAllowed,
@@ -489,6 +490,13 @@ export async function crawlWithOwnLane(
     return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target));
   }
 
+  // LADDER-QUALITY-1: a bot wall served with HTTP 200. The text exists but it
+  // is the wall, not the page — treat it exactly like the 403 form of the
+  // same wall and try the rungs that clear it.
+  if (looksLikeBlockPage(page.text)) {
+    return freeFallbackLadder(url, config, options, started, 'Served a bot-wall interstitial (HTTP 200)', hasCredentials(target));
+  }
+
   emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
   return { ok: true, pages: [page] };
 }
@@ -588,7 +596,10 @@ async function renderFallback(
       emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
       return { ok: false, reason: 'quarantined', detail, lane: 'own' };
     }
-    if (localPage.text.trim()) {
+    // LADDER-QUALITY-1: a rendered bot-wall interstitial is a rung FAILURE,
+    // not content. Accepting it here beat the Jina rung, which retrieves the
+    // real page — success reporting a security notice instead of the site.
+    if (localPage.text.trim() && !looksLikeBlockPage(localPage.text)) {
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
       return { ok: true, pages: [localPage] };
     }
@@ -624,7 +635,7 @@ async function renderFallback(
 
     // A render that still yields nothing is not a success — let the caller
     // fall through to Jina rather than returning an empty page.
-    if (!page.text.trim()) return null;
+    if (!page.text.trim() || looksLikeBlockPage(page.text)) return null;
 
     emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started });
     return { ok: true, pages: [page] };

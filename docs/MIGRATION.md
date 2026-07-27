@@ -64,3 +64,7 @@ The test of whether something belongs here is simple: would a consumer in a diff
 - **Copy, verify, then delete.** Fallow keeps its originals until its suite passes against this package.
 - **Pin exact versions** in consumers (`"@oliver/crawl-core": "0.1.0"`, no `^`) so a package change can never silently alter a consumer's crawl behaviour.
 - **Tests move with their module.** They are the evidence the extraction preserved behaviour — that is why the 45-test SSRF suite came over first.
+
+---
+
+**See also:** [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) — where each module lives now · [EXISTING-PROJECTS](EXISTING-PROJECTS.md) — the swap procedure · [BACKLOG](BACKLOG.md) — what is still open

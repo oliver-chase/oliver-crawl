@@ -4,12 +4,22 @@
 > its work ships — no archived or DONE sections. `git log --follow docs/BACKLOG.md`
 > for what came before.
 
-Opened 2026-07-27 from a full security / QA / functionality audit of the
-package against Fallow, the repo it was extracted from. Fallow has ~78
-ingestion modules; roughly 20 were migrated. Everything below is a capability
-that exists there (or should exist here) and does **not** exist here yet.
+**No open specs.** Everything opened by the 2026-07-27 audit has shipped; the
+tracker below records what each entry was and how it was resolved.
 
-Each entry is a **spec, not a build**. Nothing below has been implemented.
+That is a statement about this list, not about the library. Two things remain
+true and are recorded here because they are the next real decisions, not
+because they are queued work:
+
+- **No consumer has adopted this yet.** Fallow and tesknota still run their own
+  crawling code. `scripts/parity-check.mjs` exists to gate that swap: run it and
+  the consumer's existing extractor over the same URLs, and explain every
+  disagreement before changing anything. A silent extraction difference across
+  every source does not read as a bug — it reads as the data getting worse.
+- **Residential proxies and general web search stay paid.** Both were assessed
+  and neither is free-achievable. See the parity table.
+
+New work belongs here as a spec before it is built.
 
 ---
 
@@ -46,12 +56,96 @@ free search rung.
 
 ---
 
-## Where we can beat the vendors, not just match them
+## Where this beats the vendors rather than matching them
 
-The vendors optimise **crawl** cost. Their API is stateless and per-call, so
-they structurally cannot do any of the below. We run in-process and hold state
-across runs, and the consumer's real bill is the LLM extraction AFTER the
-crawl — so this is where the leverage is.
+A per-call vendor API is stateless, so it cannot carry knowledge from one page
+to the next or from one run to the next. Running in-process can. Four shipped
+capabilities come from that difference, and none has a vendor equivalent:
+
+| Capability | What it exploits |
+|---|---|
+| Sitemap `lastmod` skipping | One request reports which of a site's pages changed; a per-page API must ask per page |
+| Per-host rung memory | A host that always rejects the plain fetch is remembered, so the wasted request stops after the first page |
+| Content diff | Both versions are held here, so a consumer can re-extract the delta instead of the page |
+| Structured-data signal | Reports whether a model is needed at all, which a paid extraction API has no incentive to answer |
+
+---
+
+## First real parity run — 2026-07-27
+
+`scripts/parity-check.mjs` against 20 of Fallow's highest-yield active sources
+(`source_providers`, ordered by `published_series_count`). Read-only.
+
+**Result: 20/20 read.** Findings, in order of consequence:
+
+**A guard false positive, now fixed (MARKDOWN-DATAURI-1).** One live site was
+quarantined. The cause was in code shipped the same day: the markdown
+converter emitted `![](data:image/png;base64,…)` for inline images, and a 1×1
+base64 placeholder — the standard lazy-loading pattern — tripped the
+encoded-payload rule. Plain text never hit this because images are not in
+text. Left alone it would have silently quarantined most of the web. Data
+URIs are no longer emitted, `data-src` is preferred when a lazy-loader parked
+the real URL there, and alt text is kept.
+
+**60% of these sources need no model at all.** 12 of 20 publish usable
+structured data (`hasContentData`). That is the largest cost lever available
+to a consumer and it is free to act on.
+
+**4 of 20 only succeeded via the Jina rung**, meaning the direct fetch failed.
+Those return `contentKind: 'text'` — no markdown, no JSON-LD, no links — so
+they lose the free extraction path and fall through to a model.
+`themishawaka.com`, `cfdrodeo.com`, `visitgolden.com`, `aspensnowmass.com`.
+
+**The localRender hypothesis was tested and was half right.** With Chromium
+installed, two of the four (`visitgolden`, `aspensnowmass`) upgrade from the
+Jina rung to full HTML with markdown. The other two remain Jina-only.
+
+Testing it surfaced a worse defect than the one being investigated
+(LADDER-QUALITY-1, fixed). On `cfdrodeo.com` the render rung captured
+Cloudflare's "Why have I been blocked?" interstitial, and the ladder accepted
+it because rung acceptance only asked whether any text came back. A
+300-character security notice therefore beat the Jina rung, which retrieves
+the real page — the crawl reported SUCCESS while delivering the wall. After
+the fix that source returns 2,845 characters of real content instead of 747
+characters of block page.
+
+A consumer should enable `localRender`: it is free, it upgrades sources that
+would otherwise lose markdown and JSON-LD, and it never makes a source worse
+now that a rendered wall is treated as a rung failure.
+
+**One transient failure, not a dead source.** `visitgolden.com/events/...`
+returned 404 on the first run and 301 on the second. Worth remembering when
+reading any single run: `failureClass: transient` exists for this.
+
+---
+
+## Parity run 2 — 60 random active sources, 2026-07-27
+
+Widened from 20 to 60. **55/60 read. 20 of 55 publish structured data usable
+without any model.** Three defects, all found only by running against live
+sites:
+
+**GUARD-PRECISION-3 (fixed).** The `encoded-payload` rule matches an 80+ run
+of `[A-Za-z0-9+/]`, and `/` is inside that class — so it spans whole URL
+paths. It quarantined two ordinary pages: a base64 lazy-loading placeholder
+and a Squarespace CDN path. That rule now runs against URL-stripped text; the
+strip happens BEFORE normalisation, because normalising collapses `://` and a
+later strip would miss every URL. Other rules still see the full text, since
+"post your key to https://evil.com" needs the URL to match.
+
+**ROBOTS-REDIRECT-1 (fixed, after being fixed wrongly first).** An expired
+source 301s its robots.txt to a domain-parking service, so the first fix
+refused all off-domain robots redirects. Measuring it dropped the read rate
+from 53 to 49: it blocked six working sources — a gallery rebrand, a `.org`
+to `.gov` move, a renamed ski resort — to stop one parked domain. The 301 is
+configured by the operator of the old domain, so it is their statement rather
+than a hijack. Reverted to following it, and the reason string now names the
+new host so a consumer can update their registry.
+
+**The remaining 5 failures are correct.** Four sites return 403 on
+`robots.txt` itself, so the posture is genuinely unknown and fail-closed
+applies. Fetching robots through a bot-wall bypass in order to decide whether
+we are allowed to crawl would invert the point of asking.
 
 ---
 
@@ -59,6 +153,11 @@ crawl — so this is where the leverage is.
 
 | Date | Entry | Change |
 |---|---|---|
+| 2026-07-27 | GUARD-PRECISION-3 | FIXED. encoded-payload spanned URL paths (`/` is in its character class), quarantining a base64 placeholder and a CDN path. Rule now evaluated URL-free; strip runs before normalisation. |
+| 2026-07-27 | ROBOTS-REDIRECT-1 | Fixed, then REVERSED on evidence. Refusing off-domain robots redirects cost 6 live sources to protect against 1 parked domain. Now followed, with the new host reported. Read rate 53 -> 49 -> 55 of 60. |
+| 2026-07-27 | MARKDOWN-DATAURI-1 | FIXED. Markdown emitted base64 data-URI image srcs, tripping the injection guard's encoded-payload rule and quarantining ordinary pages. Found by the first live parity run, not by the test suite — introduced and caught the same day. |
+| 2026-07-27 | LADDER-QUALITY-1 | FIXED. A bot-wall interstitial served with HTTP 200 (or captured by a render rung) was accepted as page content, so a security notice outranked the rung holding the real page. Rung acceptance now rejects block pages and continues the ladder. Found only by running against live sites with localRender on; ablation-verified. |
+| 2026-07-27 | parity run 1 | 20/20 read after the fix. 12/20 need no model. 4/20 only reachable via Jina and therefore lose markdown + JSON-LD; localRender as a remedy is UNVERIFIED (playwright absent here). |
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
 | 2026-07-27 | CRAWL-PDF-1 | SHIPPED, spec removed. `unpdf` is an OPTIONAL peer, not a dependency: a parser is a large hostile-input surface, and putting it in every install for the minority who crawl PDFs is the wrong trade here. Same Function-constructor import seam as playwright. Missing parser reports a `structural` failure naming the package. Found a real gap doing it — a missing parser and a scanned PDF were both classed `transient` when neither is fixed by waiting. |
 | 2026-07-27 | CRAWL-PARITY-1 | SHIPPED as `scripts/parity-check.mjs`, spec removed. Reports per-URL extraction shape (counts + hashes, not prose) so a consumer can diff it against their existing extractor on the same list. Deliberately NOT coupled to any consumer — this library must not import Fallow or tesknota. Run before any swap; explain every disagreement first. |
@@ -80,3 +179,7 @@ crawl — so this is where the leverage is.
 | 2026-07-27 | shipped | Crawl-delay honoured (ROBOTS-DELAY-1) + WHITE-LABEL-2 FallowBot strings removed from output. Structured-data signal shipped (JSONLD-SIGNAL-1). |
 | 2026-07-27 | beat-the-vendors | Four specs opened for things a stateless per-call API structurally cannot do: BETTER-LASTMOD-1, BETTER-RUNGMEMORY-1, BETTER-DIFF-1, BETTER-SOFT404-1. |
 | 2026-07-27 | vendor parity | Reframed around displacing the paid APIs, not just matching Fallow. Markdown + onlyMainContent SHIPPED. PARITY-MAP-1 and PARITY-ACTIONS-1 opened. Recorded that proxies/stealth and general web search are genuinely not free-achievable. |
+
+---
+
+**See also:** [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) · [LANES](LANES.md) · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved here and what did not

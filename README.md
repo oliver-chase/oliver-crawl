@@ -2,16 +2,18 @@
 
 A TypeScript library for reading web pages: fetch, clean, extract, repeat on a schedule.
 
-It exists because the obvious way to do this carries two costs that surface late. A crawler that fetches whatever URL it is handed can be aimed at your own network. And the expensive part of a crawling pipeline is rarely the fetch — it is the language-model call made on every page afterward, including the pages that had not changed since yesterday.
+Two problems drive its design.
 
-This library addresses both. Requests are screened before they are made. Pages come back structured, marked with whether a model is needed at all, and re-crawls are built to stop early when nothing has moved.
+A crawler fetches whatever URL it is given. Point one at `169.254.169.254` and it will retrieve your cloud credentials. So every hostname here is resolved and checked against private address ranges before a request is made, and re-checked after each redirect.
+
+The second is cost. In most crawling pipelines the fetch is cheap and the language-model call after it is not — and that call runs on every page, including the pages that have not changed since the last run. So pages come back as structured Markdown, flagged with whether a model is needed at all, and unchanged pages are detected before they are fetched rather than after.
 
 ---
 
 ## Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl#v0.9.0
+npm install github:oliver-chase/oliver-crawl#v0.9.1
 ```
 
 ```ts
@@ -33,15 +35,20 @@ No API key, no account, no configuration file. That path costs nothing per page 
 
 ---
 
-## What it costs
+## How it reads a page
 
-There are two fetch paths.
+Most pages answer a plain HTTP request, so that is what it tries first. When that is not enough it escalates, and each step exists for a failure the previous one cannot solve:
 
-**The library's own crawler** makes an ordinary HTTPS request from your machine — the same request your browser makes. Nobody sits in the middle to bill you. JavaScript rendering runs Chromium locally (`npx playwright install chromium`). Pages behind bot walls fall back to [Jina Reader](https://jina.ai/reader), a public endpoint requiring no key. This is free in the literal sense: you spend bandwidth and CPU you already own.
+1. **Request the page.** Works for most of the web.
+2. **Render it in a real browser** when the HTML arrives nearly empty because the content only appears once scripts run. Chromium runs locally; `npx playwright install chromium` once enables it.
+3. **Retry through [Jina Reader](https://jina.ai/reader)** when a site rejects anything that does not look like a person browsing. Free, no signup.
+4. **Call a paid API** (Firecrawl or Apify) for the remainder — typically sites paying a commercial service specifically to keep crawlers out.
 
-**Third-party APIs** — Firecrawl, Apify — cover the small number of pages the first path genuinely cannot read. They are disabled by default. A vendor key sitting in your environment is ignored unless a call explicitly passes `lanes: ['own', 'vendor']`, and the test suite fails the build if a paid API is reached from the default path.
+Steps 1 to 3 run on your own machine and cost nothing beyond bandwidth. Step 4 is **off unless a request explicitly asks for it**; a paid key sitting in your environment is not enough on its own, and a test fails the build if a paid service is ever reached without that opt-in.
 
-Search is the exception. No free search API is worth building on, so `crawler.search()` requires a key and reports plainly when it does not have one.
+The order is deliberate. A 403 is usually a bot wall rather than a genuine refusal, and a real browser clears most of them, so escalating straight to a paid API on the first rejection would spend money reading pages step 2 handles for free.
+
+Web search is separate and always costs money: there is no free search API worth relying on, so `crawler.search()` needs a key. Reading pages never requires one.
 
 ---
 
@@ -59,7 +66,7 @@ page.links           // same-site links
 page.httpEtag        // pass back next run to skip an unchanged fetch
 ```
 
-Feed a model `markdown`, not `text`. The distinction is load-bearing. `text` is every visible word on the page, navigation and cookie banner included. `markdown` is the main content with the page's own structure preserved — and that structure carries meaning. A pricing table reduced to plain text reads:
+Feed a model `markdown`, not `text`. `text` is every visible word on the page, navigation and cookie banner included. `markdown` is the main content with the page's own structure preserved — and that structure carries meaning. A pricing table reduced to plain text reads:
 
 ```
 Starter 5 seats $29 Pro 25 seats $99
@@ -123,7 +130,7 @@ run.notModified;       // server says unchanged — nothing downloaded
 run.unchanged;         // downloaded, identical — skip re-processing
 ```
 
-The first is the significant one. A sitemap reports which of a site's pages have changed in a single request; asking each page individually costs one request per page. A weekly-changing site polled hourly settles at roughly one real fetch per week.
+The first saves the most. A sitemap reports which of a site's pages have changed in one request; asking each page individually costs one request per page. A weekly-changing site polled hourly settles at roughly one real fetch per week.
 
 ---
 
@@ -202,7 +209,7 @@ found.pages;
 found.skipped;
 ```
 
-Search results pass through the same screening as any other URL. A search provider is an untrusted source of URLs, and handing them straight to a fetcher turns a search feature into a server-side request forgery.
+Search results pass through the same screening as any other URL. A search provider returns URLs from sites you have not vetted, so passing them directly to a fetcher reintroduces exactly the request-forgery risk the screening exists to prevent.
 
 ---
 
