@@ -32,7 +32,7 @@ if (result.ok && !result.notModified) {
 }
 ```
 
-No keys. Nothing to configure. That's Lane 1.
+No keys. Nothing to configure. That's Lane 1 — and it stays that way: a vendor key that happens to be set is **never** used unless you pass `lanes: ['own', 'vendor']`. There are tests that fail if a paid API is ever reached from the default path.
 
 ---
 
@@ -212,7 +212,7 @@ createCrawler({
 
 ## Status
 
-288 tests, strict TypeScript, builds to `dist/`. Verified by a live-network suite against real sites (`npm run live`) and as a real installed dependency. Node 20+; works on edge/serverless with local rendering skipped.
+317 tests, strict TypeScript, builds to `dist/`. Verified by a live-network suite against real sites (`npm run live`) and as a real installed dependency. Node 20+; works on edge/serverless with local rendering skipped.
 
 ## License
 

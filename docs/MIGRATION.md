@@ -36,7 +36,7 @@ Reviewing my own work found four real gaps, all fixed with red-capable tests:
 - **CRAWL-PERF-1** — `buildPage` reloaded the whole document once per JSON-LD `<script>` tag (N+1 full cheerio parses). Now one parse.
 - **Dead API** — `config.onSignals` existed but nothing ever called it. Moved to `SiteCrawlOptions` where the orchestrator actually invokes it, and the return value carries the same validators.
 
-**288 tests, typecheck clean (strict), builds to dist, verified against live sites** (example.com, iana.org, rfc-editor.org; incl. a real multi-page run and a live conditional-GET 304 round-trip).
+**317 tests, typecheck clean (strict), builds to dist, verified against live sites** (example.com, iana.org, rfc-editor.org; incl. a real multi-page run and a live conditional-GET 304 round-trip).
 
 ## Not yet migrated
 
