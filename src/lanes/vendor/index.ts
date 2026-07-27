@@ -18,10 +18,11 @@
 // budgeting, and usage reporting need no changes.
 
 import { availableVendorRungs } from '../../core/config.js';
+import { emitUsage } from '../../core/usage.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
 import { sha256Hex } from '../../core/hash.js';
 import type { ResolvedConfig } from '../../core/config.js';
-import type { CrawlOptions, CrawlResult, CrawlTarget } from '../../core/types.js';
+import type { CrawlOptions, CrawlResult } from '../../core/types.js';
 
 /** One vendor integration. Returns null to mean "I could not serve this",
  *  which lets the lane try the next rung; it throws only on real errors. */
@@ -109,7 +110,6 @@ const RUNGS: Record<string, VendorRung> = {
  * caller is still expected to have vetted the URL (crawl() does).
  */
 export async function crawlWithVendorLane(
-  _target: CrawlTarget,
   url: string,
   config: ResolvedConfig,
   options: CrawlOptions = {},
@@ -137,8 +137,12 @@ export async function crawlWithVendorLane(
     if (rung.paid && config.checkBudget) {
       const allowed = await config.checkBudget();
       if (!allowed) {
+        // BREAK, not continue: the budget is a GLOBAL cap, so if it refuses
+        // one paid rung it will refuse every other one too. Continuing just
+        // re-asked the same question per rung and reported the last rung's
+        // name instead of the real reason.
         lastDetail = 'budget check refused the paid vendor call';
-        continue;
+        break;
       }
     }
 
@@ -147,18 +151,18 @@ export async function crawlWithVendorLane(
       const result = await rung.scrape(url, config, timeoutMs);
       if (!result) {
         lastDetail = `${rungName} returned no content`;
-        emit(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: false, latencyMs: Date.now() - started, error: lastDetail });
+        emitUsage(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: false, latencyMs: Date.now() - started, error: lastDetail });
         continue;
       }
 
       // Vendor output is page content too — it gets the same guard.
       const sanitized = sanitizeCrawledText(result.text, maxTextChars);
       if (sanitized.signals.length > 0) {
-        emit(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
+        emitUsage(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
         return { ok: false, reason: 'quarantined', detail: `Prompt-injection signals in ${rungName} content.`, lane: 'vendor' };
       }
 
-      emit(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: true, latencyMs: Date.now() - started });
+      emitUsage(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: true, latencyMs: Date.now() - started });
       return {
         ok: true,
         pages: [
@@ -168,7 +172,10 @@ export async function crawlWithVendorLane(
             title: result.title,
             contentType: 'text/markdown',
             bodySha256: await sha256Hex(result.text),
-            contentRegionSha256: await sha256Hex(sanitized.text),
+            // Vendors return markdown, not HTML — same reasoning as the Jina
+            // rung: no comparable structural hash (CRAWL-HASH-1).
+            contentRegionSha256: '',
+            textSha256: await sha256Hex(sanitized.text),
             httpEtag: null,
             httpLastModified: null,
             jsonLd: [],
@@ -181,7 +188,7 @@ export async function crawlWithVendorLane(
       };
     } catch (error) {
       lastDetail = error instanceof Error ? error.message : String(error);
-      emit(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: false, latencyMs: Date.now() - started, error: lastDetail });
+      emitUsage(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: false, latencyMs: Date.now() - started, error: lastDetail });
       // Try the next rung — a vendor outage should not end the crawl.
     }
   }
@@ -189,10 +196,3 @@ export async function crawlWithVendorLane(
   return { ok: false, reason: 'unreachable', detail: lastDetail, lane: 'vendor' };
 }
 
-function emit(config: ResolvedConfig, event: Parameters<NonNullable<ResolvedConfig['onUsage']>>[0]): void {
-  try {
-    config.onUsage?.(event);
-  } catch {
-    // never break a crawl on a logging sink
-  }
-}

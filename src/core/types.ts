@@ -77,11 +77,27 @@ export type CrawlPage = {
    *  that feed an LLM should use `text` — it has been through the guard. */
   html?: string;
   contentType: string;
-  /** Full-body hash, and a nav/footer-insensitive content-region hash. A
-   *  cosmetic header change moves the first but not the second, which is
-   *  what makes "has this page really changed" cheap. */
+  /** Hash of the raw body exactly as received. Moves on ANY byte change,
+   *  including a nav tweak or a rotating CSRF token — rarely the signal you
+   *  want on its own. */
   bodySha256: string;
+  /**
+   * Nav/footer/script-INSENSITIVE structural hash of the HTML. The best
+   * "did the real content change" signal — but only computable from HTML,
+   * so it is EMPTY STRING on text-only rungs (Jina, vendor markdown).
+   *
+   * CRAWL-HASH-1: it used to be filled on those rungs with a hash of the
+   * extracted text instead, which silently made it non-comparable with the
+   * HTML-derived value — a page fetched normally one run and via Jina the
+   * next would report a false content change. Empty is honest; compare
+   * `textSha256` when this is absent on either side.
+   */
   contentRegionSha256: string;
+  /** Hash of the delivered sanitised text. ALWAYS set, on every rung, so it
+   *  is the universally comparable change signal — at the cost of moving
+   *  when nav text changes. Use as the fallback when contentRegionSha256 is
+   *  unavailable. */
+  textSha256: string;
   httpEtag: string | null;
   httpLastModified: string | null;
   /** Structured data found on the page, if any — the free, deterministic

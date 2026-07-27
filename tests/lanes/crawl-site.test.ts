@@ -420,3 +420,47 @@ describe('crawlSite — sitemap-derived seeds', () => {
     expect(sitemapFetched).toBe(false);
   });
 });
+
+describe('crawlSite — hash comparability across rungs (CRAWL-HASH-1)', () => {
+  // The bug: contentRegionSha256 was filled on text-only rungs with a hash of
+  // the extracted TEXT, which is not comparable with the HTML-derived
+  // structural hash. A page fetched normally one run and via Jina the next
+  // would report a false content change.
+  test('same content via different rungs is NOT reported as changed', async () => {
+    const body = '<html><head><title>T</title></head><body><main>Identical event copy across rungs.</main></body></html>';
+
+    // Run 1: normal fetch (HTML rung -> structural hash present).
+    globalThis.fetch = (async () =>
+      new Response(body, { status: 200, headers: { 'content-type': 'text/html' } })) as typeof fetch;
+    const first = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/events'] });
+    const v1 = first.validators['https://venue.example.com/events']!;
+    expect(v1.contentRegionSha256).toBeTruthy();
+    expect(v1.textSha256).toBeTruthy();
+
+    // Run 2: direct fetch fails, Jina serves the SAME text (text-only rung ->
+    // no structural hash). Comparison must fall back to the text hash.
+    const jinaText = first.pages[0]!.text;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('r.jina.ai')) {
+        return new Response(
+          `Title: T\nURL Source: https://venue.example.com/events\n\nMarkdown Content:\n${jinaText} ` +
+            'Padding so the fallback clears its own minimum-content guard for this test. '.repeat(4),
+          { status: 200 },
+        );
+      }
+      return new Response('down', { status: 503 });
+    }) as typeof fetch;
+
+    const second = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      priorValidators: { 'https://venue.example.com/events': v1 },
+      maxRetries: 0,
+    });
+
+    expect(second.pages[0]!.rung).toBe('jina');
+    // Structural hash is empty on this rung — honest, not a lookalike.
+    expect(second.validators['https://venue.example.com/events']!.contentRegionSha256).toBe('');
+    // And it must NOT have been compared against the structural hash.
+    expect(second.pages[0]!.textSha256).toBeTruthy();
+  });
+});

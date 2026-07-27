@@ -66,7 +66,7 @@ describe('discoverPaginatedUrls', () => {
 
   test('stops at the cap even if pagination keeps going past page 3', async () => {
     let calls = 0;
-    const fetchImpl = (async (url: string | URL) => {
+    const fetchImpl = (async (_url: string | URL) => {
       calls += 1;
       const n = calls + 1;
       return new Response(`<a href="/events?page=${n + 1}" rel="next">Older</a>`, { status: 200 });

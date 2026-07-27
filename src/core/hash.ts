@@ -34,17 +34,6 @@ function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function deterministicFallbackBytes() {
-  let seed = Date.now() * 1664525 + 1013904223;
-  const bytes = new Uint8Array(16);
-
-  for (let i = 0; i < bytes.length; i += 1) {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    bytes[i] = seed & 0xff;
-  }
-
-  return bytes;
-}
 
 function fallbackSha256(value: string) {
   let h1 = 0x9e3779b9;

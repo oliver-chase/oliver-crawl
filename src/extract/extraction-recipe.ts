@@ -44,8 +44,6 @@ export type RecipeDraft = {
 export const MAX_RECIPE_FAILURES = 2;
 /** Minimum items a recipe must yield on a listing page to be trusted. */
 const MIN_RECIPE_ITEMS = 2;
-/** Share of recipe drafts whose dateText must parse for the output to validate. */
-const MIN_DATE_PARSE_RATE = 0.7;
 
 type CheerioModule = typeof import('cheerio');
 let cheerioModule: CheerioModule | null = null;
