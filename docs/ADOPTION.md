@@ -1,4 +1,8 @@
-# Adopting oliver-crawl in a repo
+# Adopting oliver-crawl in a new project
+
+> Already have a working crawler and real data to protect? Read
+> **[EXISTING-PROJECTS.md](EXISTING-PROJECTS.md)** instead — swapping into a
+> live system has failure modes this page does not cover.
 
 The goal: any of your repos can crawl with a few lines, reuse the same guards and lane logic, and never reimplement providers again. This is the how.
 

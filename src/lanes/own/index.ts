@@ -47,6 +47,7 @@ import { renderServiceFrom, renderViaService } from '../../fetch/browser-render.
 import { renderViaLocalChromium } from '../../fetch/local-render.js';
 import { evaluateRobotsForUrl } from '../../fetch/robots-check.js';
 import { emitUsage } from '../../core/usage.js';
+import { throttleHost } from '../../core/host-throttle.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
 import { computeContentRegionHash } from '../../extract/content-region-hash.js';
 import { extractInlineScriptContent, shouldRecoverFromScripts } from '../../extract/spa-content-extract.js';
@@ -153,6 +154,10 @@ export async function crawlWithOwnLane(
     emitUsage(config, { lane: 'own', rung: 'policy', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return { ok: false, reason: 'blocked', detail, lane: 'own' };
   }
+
+  // Politeness: hold the per-host gap BEFORE the request, after policy has
+  // already approved it — no point rate-limiting a fetch we will refuse.
+  await throttleHost(requestUrl.hostname, config.minHostIntervalMs ?? 0);
 
   // 2-4. Direct fetch, conditional when the caller has validators from a
   // previous crawl of this URL.

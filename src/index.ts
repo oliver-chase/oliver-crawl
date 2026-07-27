@@ -28,6 +28,7 @@ import { resolveConfig, availableVendorRungs, configFromEnv, DEFAULT_USER_AGENT 
 import { crawlWithOwnLane } from './lanes/own/index.js';
 import { crawlWithVendorLane } from './lanes/vendor/index.js';
 import { search, availableSearchProviders } from './search/index.js';
+import { readPageCache, writePageCache } from './core/page-cache.js';
 import { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
 import type { SearchOutcome } from './search/index.js';
 import type { CrawlConfig, CrawlOptions, CrawlResult, CrawlTarget, LaneName } from './core/types.js';
@@ -68,26 +69,41 @@ export function createCrawler(config: CrawlConfig): Crawler {
     async crawl(target, url, options = {}) {
       // Default: own lane only. A caller must opt IN to spending money.
       const lanes: LaneName[] = options.lanes?.length ? options.lanes : ['own'];
+      const ttl = resolved.cacheTtlMs ?? 0;
+
+      // A repeat of the same URL in the cache window costs nothing. Only
+      // successful non-304 results are ever stored — see core/page-cache.ts.
+      const cached = readPageCache(url, lanes, ttl);
+      if (cached) return cached;
+
+      // Retry lives HERE for single-page callers, and crawlSite passes 0
+      // because it runs its own loop — two retry layers would multiply.
+      const attempts = Math.max(0, options.retries ?? 0) + 1;
       let last: CrawlResult = {
         ok: false,
         reason: 'no_lane_available',
         detail: 'No lanes were configured for this crawl.',
       };
 
-      for (const lane of lanes) {
-        const result =
-          lane === 'own'
-            ? await crawlWithOwnLane(target, url, resolved, options)
-            : await crawlWithVendorLane(url, resolved, options);
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        for (const lane of lanes) {
+          const result =
+            lane === 'own'
+              ? await crawlWithOwnLane(target, url, resolved, options)
+              : await crawlWithVendorLane(url, resolved, options);
 
-        if (result.ok) return result;
+          if (result.ok) {
+            writePageCache(url, lanes, ttl, result);
+            return result;
+          }
 
-        // 'blocked' and 'quarantined' are POLICY decisions, not transport
-        // failures — escalating to a vendor would be paying to route around
-        // our own guard, so they end the crawl immediately.
-        if (result.reason === 'blocked' || result.reason === 'quarantined') return result;
+          // 'blocked' and 'quarantined' are POLICY decisions, not transport
+          // failures — escalating to a vendor would be paying to route around
+          // our own guard, and retrying cannot change the answer.
+          if (result.reason === 'blocked' || result.reason === 'quarantined') return result;
 
-        last = result;
+          last = result;
+        }
       }
 
       return last;
@@ -145,6 +161,7 @@ export { findNextPageUrl, discoverPaginatedUrls } from './extract/pagination-dis
 export { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
 export type { SitemapDiscoveryResult } from './fetch/sitemap-discovery.js';
 export { renderViaLocalChromium } from './fetch/local-render.js';
+export { createDohLookup, DEFAULT_DOH_ENDPOINT } from './fetch/host-policy.js';
 export { renderViaService, renderServiceFrom } from './fetch/browser-render.js';
 export type { RenderResult } from './fetch/browser-render.js';
 export { probeCheapChangeSignal, cheapSignalsMatch } from './fetch/cheap-change-probe.js';

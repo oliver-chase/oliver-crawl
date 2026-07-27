@@ -464,3 +464,112 @@ describe('crawlSite — hash comparability across rungs (CRAWL-HASH-1)', () => {
     expect(second.pages[0]!.textSha256).toBeTruthy();
   });
 });
+
+describe('crawlSite — whole-site discovery from one URL (followLinks)', () => {
+  // The question this answers: "I gave it testsite.com — do I get /calendar,
+  // /menu and /locations too?" Without followLinks: no, one page.
+  const site: Record<string, string> = {
+    'https://venue.example.com/': '<a href="/calendar">Calendar</a><a href="/menu">Menu</a><a href="/locations">Locations</a>',
+    'https://venue.example.com/calendar': '<a href="/calendar/august">August</a>',
+    'https://venue.example.com/menu': 'Our menu.',
+    'https://venue.example.com/locations': 'Where to find us.',
+    'https://venue.example.com/calendar/august': 'August events.',
+  };
+
+  function serveSite() {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input).replace(/\/$/, '') || 'https://venue.example.com';
+      const key = site[String(input)] !== undefined ? String(input) : `${url}`;
+      const body = site[key] ?? site[`${key}/`];
+      if (body === undefined) return new Response('not found', { status: 404 });
+      return page(body);
+    }) as typeof fetch;
+  }
+
+  test('one seed with followLinks reaches every linked page', async () => {
+    serveSite();
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/'],
+      followLinks: true,
+      maxPages: 10,
+    });
+
+    const urls = result.pages.map((p) => p.url).sort();
+    expect(urls).toContain('https://venue.example.com/calendar');
+    expect(urls).toContain('https://venue.example.com/menu');
+    expect(urls).toContain('https://venue.example.com/locations');
+    // depth 2 reaches a page linked from a section page
+    expect(urls).toContain('https://venue.example.com/calendar/august');
+  });
+
+  test('without followLinks, one seed means ONE page', async () => {
+    serveSite();
+    const result = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/'] });
+    expect(result.pages).toHaveLength(1);
+  });
+
+  test('maxDepth bounds how far it travels', async () => {
+    serveSite();
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/'],
+      followLinks: true,
+      maxDepth: 1,
+      maxPages: 10,
+    });
+
+    const urls = result.pages.map((p) => p.url);
+    expect(urls).toContain('https://venue.example.com/calendar');
+    // /calendar/august is two hops from the seed — beyond maxDepth 1.
+    expect(urls).not.toContain('https://venue.example.com/calendar/august');
+  });
+
+  test('excludePatterns keep known-useless paths out', async () => {
+    serveSite();
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/'],
+      followLinks: true,
+      maxPages: 10,
+      excludePatterns: [/\/menu/],
+    });
+
+    expect(result.pages.map((p) => p.url)).not.toContain('https://venue.example.com/menu');
+  });
+
+  test('a site where every page links every other page still terminates', async () => {
+    // Classic nav-on-every-page shape — an infinite loop without dedup.
+    globalThis.fetch = (async () =>
+      page('<a href="/a">A</a><a href="/b">B</a><a href="/">Home</a>')) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/'],
+      followLinks: true,
+      maxPages: 20,
+    });
+
+    expect(result.pages.length).toBeLessThanOrEqual(3);
+    expect(result.truncated).toBe(false);
+  });
+});
+
+describe('crawlSite — redirect convergence (CRAWL-DEDUP-1)', () => {
+  // Found in a live run: /index and / are the same page on most sites, but
+  // dedup keyed only on the REQUESTED url, so both were crawled and stored.
+  test('two URLs redirecting to the same page yield ONE page', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/index')) {
+        return new Response(null, { status: 301, headers: { location: 'https://venue.example.com/' } });
+      }
+      const r = page('The one true homepage.');
+      Object.defineProperty(r, 'url', { value: 'https://venue.example.com/' });
+      return r;
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/', 'https://venue.example.com/index'],
+    });
+
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0]!.url).toBe('https://venue.example.com/');
+  });
+});

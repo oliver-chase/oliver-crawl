@@ -65,6 +65,16 @@ export type CrawlOptions = {
    *  nothing further. */
   etag?: string | null;
   lastModified?: string | null;
+  /**
+   * Retry attempts for a transient failure (network, 5xx). Default 0 — one
+   * attempt, no retry. Policy refusals are never retried at any setting,
+   * because the answer cannot change.
+   *
+   * crawlSite does its OWN retrying and passes 0 here deliberately: two
+   * retry layers multiply (3 x 3 = 9 requests for one page), which is how a
+   * polite crawler accidentally becomes a hammer.
+   */
+  retries?: number;
 };
 
 /** What a single fetched page yielded. */
@@ -218,6 +228,22 @@ export type CrawlConfig = {
    * because the right value depends on YOUR pages, and a limit you cannot
    * raise is a limit that silently loses data.
    */
+  /**
+   * Minimum gap between requests to the SAME host, process-wide and across
+   * concurrent callers. Different hosts never wait on each other.
+   *
+   * Default 0 (off). crawlSite's own `politenessDelayMs` only governs one
+   * run; this is what protects an origin when many targets share a host —
+   * fifty venues on one CMS would otherwise all be hit at once.
+   */
+  minHostIntervalMs?: number;
+  /**
+   * Cache successful crawls in memory for this many ms, so the same URL
+   * fetched twice in quick succession costs one request. Default 0 (off) —
+   * a cache that turns itself on is a cache that serves someone a stale page
+   * they did not ask for. Failures and 304s are never cached.
+   */
+  cacheTtlMs?: number;
   limits?: {
     /** Max bytes read from any origin before truncating. Default 2 MB.
      *  Raise for genuinely huge listing pages; lower to harden further. */
