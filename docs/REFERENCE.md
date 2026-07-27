@@ -235,7 +235,7 @@ npm run build     # emit dist/
 
 ## Status
 
-Feature-complete and hardened: 288 tests, typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [ADOPTION.md](ADOPTION.md) to use it in a repo, [LANES.md](LANES.md) for the lane model.
+Feature-complete and hardened: 317 tests, typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [ADOPTION.md](ADOPTION.md) to use it in a repo, [LANES.md](LANES.md) for the lane model.
 
 ## License
 

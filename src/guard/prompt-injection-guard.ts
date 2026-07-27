@@ -26,8 +26,12 @@ const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
     id: 'direct-override',
     severity: 'high',
     label: 'Direct instruction override',
+    // GUARD-PRECISION-2: missed "disregard YOUR prior instructions" — the
+    // optional qualifier group had no slot for a determiner/possessive, so
+    // any word between the verb and the noun broke the match. Attackers
+    // phrase this naturally, not in a fixed template.
     source:
-      String.raw`(?:ignore|disregard|forget|override)\s+(?:all\s+)?(?:previous|prior|system|developer|initial|original)?\s*(?:instructions?|rules?|directives?|prompts?)`,
+      String.raw`(?:ignore|disregard|forget|override)\s+(?:all\s+)?(?:your|the|my|these|those|any\s+)?\s*(?:previous|prior|system|developer|initial|original|above|earlier)?\s*(?:instructions?|rules?|directives?|prompts?)`,
   },
   {
     id: 'system-prompt-exfil',
@@ -40,7 +44,17 @@ const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
     id: 'role-spoofing',
     severity: 'medium',
     label: 'Role spoofing payload',
-    source: String.raw`(?:^|\b)(?:system|developer|assistant)\s*:\s*`,
+    // GUARD-PRECISION-2 (2026-07-27): `\b` matched mid-sentence, so ordinary
+    // copy quarantined real pages — "Our system: reservations are required",
+    // "The assistant: manager on duty can help". Both are exactly the
+    // register a venue or restaurant site writes in.
+    //
+    // A spoofed role turn is the label STANDING ALONE ("System: you are
+    // now..."), never the object of a possessive. Excluding a preceding
+    // determiner keeps the attack shape and drops the English one. The
+    // normaliser flattens newlines, so anchoring to line-start is not
+    // available here.
+    source: String.raw`(?<!\b(?:our|the|this|that|an?|its|his|her|their|your|my|new)\s)(?:^|\b)(?:system|developer|assistant)\s*:\s*`,
   },
   {
     id: 'tool-exfiltration',
@@ -84,7 +98,19 @@ const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
     // `cat ~/.ssh/id_rsa` / `open ~/.aws/credentials` keeps the token within
     // a few chars of the verb, well inside this window.
     label: 'Local secret access request',
-    source: String.raw`(?:cat|read|open|curl|wget)\s+.{0,40}(?:\.env|id_rsa|id_ed25519|secret|credential|passwd)`,
+    // GUARD-PRECISION-2: 'secret' and 'credential' are ordinary English
+    // words, and the verbs are ordinary English verbs, so this fired on
+    // "open the secret garden gate" and "Curl up by the fire with a secret
+    // family recipe" — real copy from the kind of page this crawler exists
+    // to read.
+    //
+    // Split by how unambiguous the token is:
+    //   - .env / id_rsa / id_ed25519 / passwd / .pem are FILE ARTEFACTS that
+    //     essentially never appear in prose — loose verb proximity is fine.
+    //   - 'secret' / 'credential' need a PATH context (~/ , / , or a
+    //     dotfile) to distinguish `cat ~/.aws/credentials` from a secret
+    //     recipe.
+    source: String.raw`(?:cat|read|open|curl|wget)\s+.{0,40}(?:\.env\b|id_rsa|id_ed25519|\bpasswd\b|\.pem\b|[~/][^\s]{0,40}(?:secret|credential))`
   },
   {
     id: 'encoded-payload',
