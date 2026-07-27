@@ -28,8 +28,32 @@ type ValidatedBaseUrl = { url: URL; host: string; port: string };
  *  there on why this is a real choice, not an implementation detail. */
 export const DEFAULT_DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
 
-/** Hosts proven to resolve publicly. Success-only, process-lifetime. */
-const DNS_SAFE_HOST_CACHE = new Map<string, Promise<void>>();
+/**
+ * Hosts proven to resolve publicly. Success-only.
+ *
+ * HOST-CACHE-SCOPE-1 (2026-07-27, found by live validation): this was a
+ * single module-level Map shared by every crawler in the process. A host
+ * validated by one crawler was therefore trusted by ALL of them — including
+ * one deliberately configured with a different resolver. The live SSRF check
+ * failed to block a host resolving to 127.0.0.1 purely because an earlier
+ * check had already cached that hostname as safe.
+ *
+ * A resolver is part of a crawler's SECURITY configuration, so its verdicts
+ * must not leak across instances that were configured differently. The cache
+ * is now keyed per resolver identity; a crawler with its own dnsLookup gets
+ * its own namespace, and the shared default keeps sharing (which is correct —
+ * same resolver, same answer).
+ */
+const DNS_SAFE_HOST_CACHE = new Map<DnsLookupFn, Map<string, Promise<void>>>();
+
+function cacheFor(lookupFn: DnsLookupFn): Map<string, Promise<void>> {
+  let scoped = DNS_SAFE_HOST_CACHE.get(lookupFn);
+  if (!scoped) {
+    scoped = new Map();
+    DNS_SAFE_HOST_CACHE.set(lookupFn, scoped);
+  }
+  return scoped;
+}
 
 /** Test seam — a long-lived process should never need this. */
 export function __clearDnsCacheForTests(): void {
@@ -98,7 +122,8 @@ export async function assertHostResolvesToPublicAddress(
   assertPublicHost(hostname);
 
   const normalizedHost = hostname.toLowerCase();
-  let pending = DNS_SAFE_HOST_CACHE.get(normalizedHost);
+  const cache = cacheFor(lookupFn);
+  let pending = cache.get(normalizedHost);
 
   if (!pending) {
     pending = (async () => {
@@ -122,7 +147,7 @@ export async function assertHostResolvesToPublicAddress(
       }
     })();
 
-    DNS_SAFE_HOST_CACHE.set(normalizedHost, pending);
+    cache.set(normalizedHost, pending);
   }
 
   try {
@@ -130,7 +155,7 @@ export async function assertHostResolvesToPublicAddress(
   } catch (error) {
     // Never cache a failure: one transient SERVFAIL would otherwise blacklist
     // a legitimate host for the life of the process.
-    DNS_SAFE_HOST_CACHE.delete(normalizedHost);
+    cache.delete(normalizedHost);
     throw error;
   }
 }

@@ -47,6 +47,8 @@ import { renderServiceFrom, renderViaService } from '../../fetch/browser-render.
 import { renderViaLocalChromium } from '../../fetch/local-render.js';
 import { evaluateRobotsForUrl } from '../../fetch/robots-check.js';
 import { emitUsage } from '../../core/usage.js';
+import { throttleHost, recordHostLatency } from '../../core/host-throttle.js';
+import { decodeBody } from '../../core/charset.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
 import { computeContentRegionHash } from '../../extract/content-region-hash.js';
 import { extractInlineScriptContent, shouldRecoverFromScripts } from '../../extract/spa-content-extract.js';
@@ -87,16 +89,32 @@ async function resolveRobotsPolicy(url: string, config: ResolvedConfig) {
   return pending;
 }
 
+/**
+ * Parse a Retry-After header, which the spec allows in two forms: delay in
+ * seconds, or an HTTP date. Returns ms, capped at 5 minutes — an origin
+ * asking for an hour should not hang a crawl run that long.
+ */
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 300_000);
+  const asDate = Date.parse(value);
+  if (Number.isFinite(asDate)) return Math.min(Math.max(0, asDate - Date.now()), 300_000);
+  return undefined;
+}
+
 /** Read a response body up to `maxBytes`, truncating (not failing) beyond it —
  *  the readable prefix of a huge page is still worth extracting from. */
 async function readBodyCapped(response: Response, maxBytes: number): Promise<string> {
+  const contentType = response.headers.get('content-type');
   const reader = response.body?.getReader();
   if (!reader) {
     // Runtime without streaming bodies — fall back, but refuse an announced
     // oversize rather than buffering it.
     const announced = Number(response.headers.get('content-length') || 0);
     if (announced > maxBytes) throw new Error(`Response too large: content-length ${announced} > ${maxBytes}`);
-    return response.text();
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    return decodeBody(buffer, contentType);
   }
 
   const chunks: Uint8Array[] = [];
@@ -122,7 +140,9 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<str
     merged.set(room >= chunk.byteLength ? chunk : chunk.subarray(0, room), offset);
     offset += Math.min(chunk.byteLength, room);
   }
-  return new TextDecoder().decode(merged);
+  // Decode with the origin's declared charset, not a UTF-8 assumption —
+  // see core/charset.ts for why that assumption corrupts data silently.
+  return decodeBody(merged, contentType);
 }
 
 /** Crawl a single URL with the own lane. */
@@ -154,20 +174,31 @@ export async function crawlWithOwnLane(
     return { ok: false, reason: 'blocked', detail, lane: 'own' };
   }
 
+  // Politeness: hold the per-host gap BEFORE the request, after policy has
+  // already approved it — no point rate-limiting a fetch we will refuse.
+  await throttleHost(requestUrl.hostname, config.minHostIntervalMs ?? 0, config.adaptiveThrottleMultiplier ?? 0);
+
   // 2-4. Direct fetch, conditional when the caller has validators from a
   // previous crawl of this URL.
   let response: Response;
+  const fetchStartedAt = Date.now();
   try {
-    response = await fetchFollowingSafeRedirects(requestUrl, config, timeoutMs, {
-      etag: options.etag,
-      lastModified: options.lastModified,
-    });
+    response = await fetchFollowingSafeRedirects(
+      requestUrl,
+      config,
+      timeoutMs,
+      { etag: options.etag, lastModified: options.lastModified },
+      targetHeaders(target),
+    );
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // Direct fetch failed — try the free keyless fallback before giving up.
     return jinaFallback(url, config, options, started, detail);
   }
+
+  // How long the origin took is the input to adaptive pacing.
+  recordHostLatency(requestUrl.hostname, Date.now() - fetchStartedAt);
 
   // A 304 is the whole point of sending validators: nothing changed, nothing
   // to parse, nothing charged. Reported distinctly from "empty".
@@ -177,9 +208,18 @@ export async function crawlWithOwnLane(
   }
 
   if (!response.ok) {
-    const detail = `HTTP ${response.status}`;
+    // CRAWL-BACKOFF-1: an origin answering 429/503 often states HOW LONG to
+    // wait. Ignoring that and retrying on our own schedule is precisely the
+    // behaviour that earns a crawler a ban, so the instruction is surfaced
+    // for the retry loop to honour (see crawl-site.ts).
+    const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+    const detail = retryAfterMs
+      ? `HTTP ${response.status} (origin asked to wait ${Math.round(retryAfterMs / 1000)}s)`
+      : `HTTP ${response.status}`;
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-    return jinaFallback(url, config, options, started, detail);
+    const fallback = await jinaFallback(url, config, options, started, detail);
+    if (!fallback.ok && retryAfterMs) return { ...fallback, retryAfterMs };
+    return fallback;
   }
 
   const contentType = response.headers.get('content-type') || '';
@@ -360,11 +400,23 @@ async function jinaFallback(
  * address after the initial checks passed — the redirect target is
  * attacker-controlled input and gets the same guard as the first URL.
  */
+/** Headers the crawler owns; a target cannot override them. */
+const RESERVED_HEADERS = new Set(['host', 'content-length', 'user-agent', 'accept-encoding']);
+
+function targetHeaders(target: CrawlTarget): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(target.headers ?? {})) {
+    if (!RESERVED_HEADERS.has(key.toLowerCase())) out[key.toLowerCase()] = value;
+  }
+  return out;
+}
+
 async function fetchFollowingSafeRedirects(
   url: URL,
   config: ResolvedConfig,
   timeoutMs: number,
   validators: { etag?: string | null; lastModified?: string | null } = {},
+  extraHeaders: Record<string, string> = {},
   maxHops = 5,
 ): Promise<Response> {
   let current = url;
@@ -389,6 +441,10 @@ async function fetchFollowingSafeRedirects(
       headers: {
         'user-agent': config.userAgent,
         accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
+        // Caller-supplied credentials for this target. Safe to keep across
+        // hops because every hop is re-validated same-site (a redirect off
+        // this host throws before we would send anything).
+        ...extraHeaders,
         ...conditionalHeaders,
       },
       signal: AbortSignal.timeout(timeoutMs),

@@ -103,20 +103,42 @@ A site checked hourly that only changes weekly costs **one real fetch a week**, 
 
 ## Crawling a whole site
 
+Give it one URL and let it find the rest:
+
 ```ts
 import { crawlSite } from '@oliver/crawl-core';
 
-const run = await crawlSite(crawler, target, {
-  useSitemap: true,        // ask the site what pages it has
-  followPagination: true,  // follow "next page" links
-  maxPages: 20,
+const run = await crawlSite(crawler, { baseUrl: 'https://testsite.com' }, {
+  followLinks: true,   // follow every same-site link → /calendar, /menu, /locations
+  maxDepth: 2,         // how many hops from the start
+  maxPages: 50,        // hard ceiling
 });
 
-run.pages;     // everything fetched
+run.pages;     // everything found
 run.failures;  // per-page — one bad page never sinks the run
 ```
 
-One request at a time, on purpose. Hammering a small site in parallel is how crawlers get blocked.
+Three ways to decide what gets crawled, usable together:
+
+| Option | Finds |
+|---|---|
+| `followLinks` | Every page reachable by same-site links — the "capture everything" switch |
+| `useSitemap` | Whatever the site's own `/sitemap.xml` lists |
+| `followPagination` | Only "next page" links, for paginated listings |
+
+Without any of them, one URL means **one page**.
+
+One request at a time, on purpose. Hammering a small site in parallel is how crawlers get blocked. Pages already seen are never re-fetched, including URLs that redirect to the same place — so a site whose nav links every page to every other page still terminates.
+
+```ts
+createCrawler({
+  minHostIntervalMs: 500,           // never hit one host more than twice a second
+  adaptiveThrottleMultiplier: 2,    // a slow site gets more room, automatically
+  cacheTtlMs: 60_000,               // same URL twice in a minute = one request
+});
+```
+
+It also obeys `Retry-After` when an origin says to back off, and `maxDurationMs` bounds a whole run by wall-clock — a page budget alone doesn't, since 20 pages at 30s each is a ten-minute run.
 
 ---
 
@@ -125,9 +147,24 @@ One request at a time, on purpose. Hammering a small site in parallel is how cra
 ```ts
 const found = await crawler.search('rochester summer concert series');
 if (found.ok) found.results; // [{ title, snippet, url }]
+
+// Only pages on one site:
+await crawler.search('parking', { site: 'venue.example.com' });
 ```
 
-Search always costs money (there is no free search API), so it needs a key and tells you plainly when it doesn't have one.
+Usually you don't want URLs — you want what's on them:
+
+```ts
+import { searchAndCrawl } from '@oliver/crawl-core';
+
+const found = await searchAndCrawl(crawler, 'summer concert series rochester');
+found.pages;    // the pages themselves, already read and cleaned
+found.skipped;  // results that couldn't be read, and why
+```
+
+Every search result is crawled through the **same guards as any other page** — a search provider is an untrusted source of URLs, and feeding them straight into a fetcher is how a search feature becomes a security hole.
+
+Search always costs money (there is no free search API), so it needs a key and says plainly when it doesn't have one.
 
 ---
 
@@ -166,14 +203,16 @@ createCrawler({
 
 | | |
 |---|---|
-| **[ADOPTION.md](docs/ADOPTION.md)** | Put this in one of your repos |
+| **[ADOPTION.md](docs/ADOPTION.md)** | Put this in a new project |
+| **[EXISTING-PROJECTS.md](docs/EXISTING-PROJECTS.md)** | Add it to a project you've already built |
+| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Diagrams: how a request flows, and why |
 | **[LANES.md](docs/LANES.md)** | How the free lane works, rung by rung |
 | **[REFERENCE.md](docs/REFERENCE.md)** | Every option and return field |
 | **[MIGRATION.md](docs/MIGRATION.md)** | Where the code came from, what moved |
 
 ## Status
 
-246 tests, strict TypeScript, builds to `dist/`. Verified against live sites and as a real installed dependency. Node 20+; works on edge/serverless with local rendering skipped.
+288 tests, strict TypeScript, builds to `dist/`. Verified by a live-network suite against real sites (`npm run live`) and as a real installed dependency. Node 20+; works on edge/serverless with local rendering skipped.
 
 ## License
 

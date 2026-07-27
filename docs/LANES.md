@@ -32,6 +32,34 @@ Firecrawl and Apify behind one interface. **Off by default** — a caller opts i
 
 **A policy refusal never escalates.** If the own lane refuses a URL as `blocked` or `quarantined`, the crawl ends — it does not fall through to a vendor. Paying a third party to fetch what your own guard refused is buying a way around your own security.
 
+## Deciding what to crawl
+
+Given one URL, the lane fetches **one page**. Three switches widen that, and they compose:
+
+| Switch | Finds | Bounded by |
+|---|---|---|
+| `followLinks` | Every page reachable by same-site links, breadth-first | `maxDepth` (default 2), `maxPages` |
+| `useSitemap` | Whatever `/sitemap.xml` lists | `maxPages` |
+| `followPagination` | "Next page" links only | `maxPages` |
+
+Breadth-first is deliberate: the pages a site links from its homepage are the ones it considers important, so a run that hits `maxPages` keeps the useful pages instead of descending one deep branch. Pagination stays at the *same* depth as the page it came from — page 2 of a listing is not further from the seed than page 1.
+
+Everything already seen is skipped, including URLs that redirect to a page already fetched, so a site whose nav links every page to every other page terminates instead of looping.
+
+## Not hammering the origin
+
+| Setting | Scope |
+|---|---|
+| `politenessDelayMs` (per run) | Gap between pages within one `crawlSite` call |
+| `minHostIntervalMs` (config) | Gap between requests to one HOST, process-wide and across concurrent callers |
+| `adaptiveThrottleMultiplier` (config) | Wait `avgLatency x N` instead of a fixed gap — a slow origin gets more room, floored at `minHostIntervalMs` so it can only ever be MORE polite |
+| `cacheTtlMs` (config) | Same URL twice inside the window costs one request |
+| `maxDurationMs` (per run) | Wall-clock ceiling. A page budget alone does not bound time — 20 pages at 30s each is a ten-minute run |
+
+A `429`/`503` carrying `Retry-After` is obeyed as stated rather than retried on our own schedule: the origin telling you when to come back is an instruction, and ignoring it is how a crawler gets banned.
+
+The second matters more than it looks: many targets can share a host (a city's venues on one CMS, several sites behind one CDN). Per-run politeness does nothing there — fifty targets would hit that origin at once.
+
 ## Making re-crawls cheap
 
 Two independent mechanisms, because origins differ:

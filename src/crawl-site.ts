@@ -30,8 +30,50 @@ export type SiteCrawlOptions = CrawlOptions & {
   maxPages?: number;
   /** Attempts per URL before giving up on it. 0 = try once, never retry. */
   maxRetries?: number;
-  /** Follow "next page" links discovered on crawled pages, up to maxPages. */
+  /** Follow "next page" links discovered on crawled pages, up to maxPages.
+   *  Narrow by design: only pagination, so a listing's page 2/3 are read. */
   followPagination?: boolean;
+  /**
+   * Follow ALL same-site links, breadth-first, to discover a whole site from
+   * one starting URL. This is what answers "I gave it example.com, I want
+   * /calendar and /menu and /locations too" — pagination alone will not do
+   * that, and a sitemap only helps if the site publishes one.
+   *
+   * Bounded by maxPages and maxDepth. Breadth-first on purpose: the pages
+   * linked from the homepage are the ones a site considers important, so a
+   * truncated crawl keeps the useful pages rather than descending one deep
+   * branch.
+   */
+  followLinks?: boolean;
+  /** How many link-hops from a seed to travel when followLinks is on.
+   *  Default 2 — the homepage, its sections, and their pages. */
+  maxDepth?: number;
+  /** Skip discovered URLs matching any of these. Applied to the full URL.
+   *  Useful for the parts of a site that are never worth crawling (login,
+   *  cart, calendar permalinks that expand forever). */
+  excludePatterns?: RegExp[];
+  /**
+   * If set, ONLY follow discovered URLs matching one of these — an allowlist
+   * rather than a blocklist. `[/\/events\//]` crawls a site's events
+   * section and nothing else.
+   *
+   * Seeds are always crawled regardless: you asked for those explicitly.
+   * Exclude wins over include when both match.
+   *
+   * (Scrapy's LinkExtractor makes the same allow/deny distinction, for the
+   * same reason: on a large site, naming what you WANT is far shorter than
+   * enumerating everything you don't.)
+   */
+  includePatterns?: RegExp[];
+  /**
+   * Wall-clock ceiling for the whole run, ms. When it expires the run stops
+   * cleanly and reports `truncated`, keeping everything gathered so far.
+   *
+   * A page budget alone does not bound time: 20 pages on a site that takes
+   * 30s each is a ten-minute run. Anything on a schedule needs a time bound
+   * as well, or one slow origin delays every target behind it.
+   */
+  maxDurationMs?: number;
   /** Per-URL conditional-GET validators from a previous run, keyed by URL —
    *  exactly the shape `result.validators` (and `config.onSignals`) hands
    *  back, so the round-trip is: crawl → persist → pass here next run. */
@@ -186,16 +228,49 @@ export async function crawlSite(
     }
   }
 
-  // Dedup across seeds AND discovered pagination — a site whose page 2 links
-  // back to page 1 must not loop.
+  // Dedup across seeds AND everything discovered — a site whose page 2 links
+  // back to page 1, or whose nav links every page to every other page, must
+  // not loop.
   const visited = new Set<string>();
+  const maxDepth = Math.max(0, options.maxDepth ?? 2);
+  // Depth rides alongside the URL so breadth-first ordering is preserved and
+  // a deep branch cannot consume the whole page budget.
+  const depthOf = new Map<string, number>();
+  for (const seed of queue) depthOf.set(seed, 0);
+
+  const shouldSkip = (candidate: string) => {
+    if ((options.excludePatterns ?? []).some((pattern) => pattern.test(candidate))) return true;
+    const include = options.includePatterns;
+    // Allowlist, when given: anything not named is not followed.
+    return Boolean(include?.length) && !include!.some((pattern) => pattern.test(candidate));
+  };
+
+  /** Queue a discovered URL if it is same-site, unseen, and within depth. */
+  const enqueue = (rawUrl: string, depth: number) => {
+    if (depth > maxDepth) return;
+    if (shouldSkip(rawUrl)) return;
+    try {
+      const safe = assertRequestUrlAllowed(target, rawUrl).toString();
+      if (visited.has(safe) || depthOf.has(safe)) return;
+      depthOf.set(safe, depth);
+      queue.push(safe);
+    } catch {
+      // Off-site or unsafe — not an error, just not ours to follow.
+    }
+  };
+
+  const deadline = options.maxDurationMs ? Date.now() + options.maxDurationMs : Infinity;
 
   while (queue.length > 0) {
     if (pages.length + notModified.length >= maxPages) return done(true);
+    // Stop cleanly on the time budget, keeping everything gathered so far —
+    // a partial result is far more useful than an aborted run.
+    if (Date.now() >= deadline) return done(true);
 
     const url = queue.shift()!;
     if (visited.has(url)) continue;
     visited.add(url);
+    const depth = depthOf.get(url) ?? 0;
 
     const prior = options.priorValidators?.[url];
     const perPageOptions: CrawlOptions = {
@@ -205,7 +280,10 @@ export async function crawlSite(
       // Pagination discovery reads markup, so the page must carry its HTML.
       // Requested here rather than left to the caller: otherwise
       // followPagination would silently do nothing.
-      includeHtml: options.includeHtml || options.followPagination === true,
+      includeHtml: options.includeHtml || options.followPagination === true || options.followLinks === true,
+      // This loop does its own retrying; letting crawl() retry too would
+      // multiply attempts (3 x 3 = 9 requests for one page).
+      retries: 0,
     };
 
     let lastFailure: SiteCrawlFailure | null = null;
@@ -231,8 +309,18 @@ export async function crawlSite(
           }
           break;
         }
-        pages.push(...result.pages);
-        for (const p of result.pages) {
+        // CRAWL-DEDUP-1 (found in a live run): dedup keyed only on the
+        // REQUESTED url, so two different URLs that redirect to the same
+        // page were both crawled and both stored — a real site's
+        // /home, /index and / commonly converge. Mark the RESOLVED url
+        // visited too, and drop a page already collected under it.
+        const fresh = result.pages.filter((p) => {
+          if (visited.has(p.url) && p.url !== url) return false;
+          visited.add(p.url);
+          return true;
+        });
+        pages.push(...fresh);
+        for (const p of fresh) {
           // CRAWL-UNCHANGED-1: these hashes were computed on every page and
           // then thrown away. Comparing against last run is what makes
           // re-crawls cheap for origins that send NO ETag (most small sites):
@@ -258,18 +346,20 @@ export async function crawlSite(
           };
         }
 
-        // Pagination is discovered from the page we just read, so it can only
-        // extend the queue — never re-order what was already scheduled.
-        if (options.followPagination && result.pages[0]?.html) {
-          const next = findNextPageUrl(result.pages[0].html, url);
-          if (next) {
-            try {
-              const safeNext = assertRequestUrlAllowed(target, next).toString();
-              if (!visited.has(safeNext)) queue.push(safeNext);
-            } catch {
-              // An off-site "next" link is not an error — just not ours to follow.
-            }
-          }
+        // Discovery from the page just read — appends only, so breadth-first
+        // ordering of what was already scheduled is preserved.
+        const first = fresh[0];
+
+        // Pagination stays at the SAME depth: page 2 of a listing is the same
+        // distance from the seed as page 1, not one hop further.
+        if (options.followPagination && first?.html) {
+          const next = findNextPageUrl(first.html, url);
+          if (next) enqueue(next, depth);
+        }
+
+        // Whole-site discovery: every same-site link, one hop deeper.
+        if (options.followLinks && first) {
+          for (const link of first.links) enqueue(link.url, depth + 1);
         }
         break;
       }
@@ -277,9 +367,13 @@ export async function crawlSite(
       lastFailure = { url, reason: result.reason, detail: result.detail };
       // Retrying these produces the identical answer; spend the budget elsewhere.
       if (isTerminal(result.reason)) break;
-      // Back off before the retry — an origin that just failed usually needs
-      // a moment, and an immediate re-hit reads as hostile.
-      if (attempt < maxRetries) await sleep((options.retryBackoffMs ?? 500) * (attempt + 1));
+      if (attempt < maxRetries) {
+        // CRAWL-BACKOFF-1: when the origin SAID how long to wait (429/503 +
+        // Retry-After), wait that long. Our own schedule is a guess; theirs
+        // is an instruction, and ignoring it is what gets a crawler banned.
+        const ourBackoff = (options.retryBackoffMs ?? 500) * (attempt + 1);
+        await sleep(Math.max(result.retryAfterMs ?? 0, ourBackoff));
+      }
     }
 
     if (!succeeded && lastFailure) failures.push(lastFailure);

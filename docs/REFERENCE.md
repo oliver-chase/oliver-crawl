@@ -96,7 +96,7 @@ Two mechanisms, because origins differ:
 - **Origin sends ETag/Last-Modified** → conditional GET → **304, nothing fetched at all**, reported under `notModified`.
 - **Origin sends nothing** (most small sites) → the **content-region hash** (nav/footer-insensitive) is compared → the page is fetched, but `unchanged` tells you the real content is identical so extraction/LLM can be skipped.
 
-Both use the same loop: store `result.validators`, pass them back as `priorValidators`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire it with `onSignals` (push) or the return value (pull) — see [docs/ADOPTION.md](docs/ADOPTION.md).
+Both use the same loop: store `result.validators`, pass them back as `priorValidators`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire it with `onSignals` (push) or the return value (pull) — see [ADOPTION.md](ADOPTION.md).
 
 ### Discovering what to crawl (free)
 
@@ -209,7 +209,7 @@ These are why it's reusable across projects rather than welded to one:
 8. **Remote render** — your own render service (`browserRender`), for deployments that can't run a browser.
 9. **Jina Reader** — free, keyless last resort for bot-walled or JS-only pages.
 
-Rungs 1-7 need no credentials and cost nothing. See [docs/LANES.md](docs/LANES.md).
+Rungs 1-7 need no credentials and cost nothing. See [LANES.md](LANES.md).
 
 ### The SSRF guard
 
@@ -235,7 +235,7 @@ npm run build     # emit dist/
 
 ## Status
 
-Feature-complete and hardened: 245 tests, typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [docs/ADOPTION.md](docs/ADOPTION.md) to use it in a repo, [docs/LANES.md](docs/LANES.md) for the lane model.
+Feature-complete and hardened: 288 tests, typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [ADOPTION.md](ADOPTION.md) to use it in a repo, [LANES.md](LANES.md) for the lane model.
 
 ## License
 
