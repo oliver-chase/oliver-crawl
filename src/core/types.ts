@@ -1,3 +1,4 @@
+import type { BrowserAction } from '../fetch/local-render.js';
 import type { ContentImage } from '../extract/content-images.js';
 import type { FailureClass } from './failure-class.js';
 import type { StructuredSummary } from '../extract/structured-summary.js';
@@ -221,6 +222,8 @@ export type PageLink = { url: string; text: string };
  */
 export type ContentKind = 'html' | 'calendar' | 'csv' | 'json' | 'feed' | 'text';
 
+export type { BrowserAction } from '../fetch/local-render.js';
+
 export type { ContentImage } from '../extract/content-images.js';
 
 export type { FailureClass } from './failure-class.js';
@@ -378,6 +381,19 @@ export type CrawlConfig = {
    * they did not ask for. Failures and 304s are never cached.
    */
   cacheTtlMs?: number;
+  /**
+   * PARITY-ACTIONS-1: steps run against the page before it is captured, on
+   * the local-render rung only. For "Load more" buttons and infinite-scroll
+   * listings, where the first render genuinely lacks the content.
+   *
+   * Bounded by the library: at most 10 actions and 20 seconds total, no
+   * navigation off the origin, and a failed step is skipped rather than
+   * fatal (a missing "Load more" usually means everything already loaded).
+   *
+   * Never derive these from crawled page content. That would let a page you
+   * fetched script the browser that fetched it.
+   */
+  browserActions?: BrowserAction[];
   /**
    * BETTER-RUNGMEMORY-1: remember which rung actually works per host, and
    * start there next time instead of re-walking the ladder from the top.

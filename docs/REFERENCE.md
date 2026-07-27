@@ -119,6 +119,34 @@ nothing and simply lets the page through to the normal 304 and content-hash
 checks, which are trustworthy. A page publishing no `<lastmod>` is always
 crawled. Omit `priorLastmod` to disable entirely.
 
+### Pages that need a click first
+
+Some listings render their content only after a "Load more" button or an
+infinite scroll. The first render is technically correct and practically
+empty.
+
+```ts
+createCrawler({
+  localRender: true,
+  browserActions: [
+    { type: 'click', selector: '.load-more' },
+    { type: 'scroll', times: 3 },
+    { type: 'wait', ms: 500 },
+  ],
+});
+```
+
+Runs on the local-render rung only. The bounds are library constants, not
+options: at most 10 actions, 20 seconds total, 5 seconds per wait. A step that
+fails is skipped rather than fatal, because a missing "Load more" usually means
+everything already loaded. The page's origin is re-checked after every step and
+the run stops if it navigated away — a click can navigate, and continuing to
+script a page that was never vetted would be a request forgery with a real
+browser behind it.
+
+**Never build these from crawled content.** An action derived from a page you
+fetched lets that page script the browser that fetched it.
+
 ### Resuming a killed crawl
 
 `crawlSite` keeps its queue in memory, so a 500-page run killed at page 400

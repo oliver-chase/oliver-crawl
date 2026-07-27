@@ -518,7 +518,7 @@ async function renderFallback(
   // FREE rung first: local Chromium (config.localRender). Costs nothing on
   // a machine that has it; silently absent everywhere else. Only then the
   // remote render service.
-  const localHtml = await renderViaLocalChromium(url, config.localRender === true);
+  const localHtml = await renderViaLocalChromium(url, config.localRender === true, config.browserActions ?? []);
   if (localHtml) {
     const localPage = await buildPage({
       url,

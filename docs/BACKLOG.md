@@ -27,7 +27,7 @@ Measured against what the paid APIs actually do:
 | Change tracking / caching | shipped (conditional GET + region hash + sitemap lastmod) — better than Firecrawl's `maxAge`: lastmod covers a whole site in ONE request | Yes |
 | JS rendering | shipped (local Chromium + own service) | Yes |
 | `/map` — fast whole-domain URL discovery | **shipped** 2026-07-27 (`mapSite`) | Yes |
-| Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
+| Browser actions (click "load more", scroll, wait) | **shipped** 2026-07-27 | Yes |
 | Feeds / calendars / CSV / JSON as first-class documents | **shipped** 2026-07-27 (CRAWL-FEED-1) | Yes |
 | PDF parsing | **CRAWL-PDF-1** below | Yes |
 | Screenshots | not planned — no consumer needs it yet | Yes |
@@ -52,26 +52,6 @@ The vendors optimise **crawl** cost. Their API is stateless and per-call, so
 they structurally cannot do any of the below. We run in-process and hold state
 across runs, and the consumer's real bill is the LLM extraction AFTER the
 crawl — so this is where the leverage is.
-
----
-
-## PARITY-ACTIONS-1 — browser actions before capture
-
-Firecrawl scripts the page before scraping: click, scroll, wait, type. The
-common real case is a "Load more events" button or an infinite-scroll calendar
-— pages where the FIRST render genuinely does not contain the content, so our
-render rung returns a page that is technically correct and practically empty.
-
-We already run Chromium (`fetch/local-render.ts`). The gap is purely that
-nothing can be scripted before the capture.
-
-**Spec.** `browserActions?: Array<{ type: 'click' | 'scroll' | 'wait'; selector?: string; ms?: number }>`
-on the crawl options, executed by the local-render rung only.
-
-**Watch out:** actions are caller-supplied instructions driving a real browser.
-Cap the count and total duration, allow no navigation to another origin, and
-never let an action come from crawled page content — that would be a
-prompt-injection path straight into a browser we control.
 
 ---
 
@@ -111,6 +91,7 @@ exactly this procedure for consumers; the package has not run it on itself.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | PARITY-ACTIONS-1 | SHIPPED, spec removed. `browserActions` on config, local-render rung only. Bounds are library constants a caller cannot raise: 10 actions, 20s total, 5s per wait. Origin re-checked after every step — ablation-verified. Failed step skipped (a missing "Load more" means the list already loaded). Tests drive `runActions` directly: playwright is not a dependency and its import is deliberately invisible to bundlers, so the module cannot be mocked. |
 | 2026-07-27 | backlog batch | SHIPPED 5: CRAWL-VISION-1 (candidateContentImages, free half only — ranking not a verdict), CRAWL-DETAILLINK-1 (pickDetailLinks, caller supplies vocabulary), BETTER-DIFF-1 (diffContent, set-based so reordering is not a change), CRAWL-CONCURRENCY-1 (searchAndCrawl concurrency, safe because host-throttle already serialises per host; default 1). CRAWL-SESSION-1 CLOSED AS DOCUMENTED, not built — a cookie jar is a credential store and the spec itself called documenting the honest answer. |
 | 2026-07-27 | BETTER-RUNGMEMORY-1 | SHIPPED, spec removed. Per-host winning rung, 30min TTL, recorded at one chokepoint in crawl(). Store is PER CRAWLER — first cut was module-level and broke 10 tests, same defect class as HOST-CACHE-SCOPE-1. Self-heals: a failed remembered rung is forgotten and the full ladder re-runs, else a rung outage would cost the page. `rungMemory: false` opts out. |
 | 2026-07-27 | PARITY-MAP-1 | SHIPPED, spec removed. mapSite(crawler, target) = sitemap + homepage links + declared feeds, ONE page body fetched. Feeds surfaced separately. Live: 25 urls off rfc-editor. Live gap: maxUrls filled from sitemap alone there, so the homepage-links path is fixture-covered only. |
