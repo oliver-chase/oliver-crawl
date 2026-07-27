@@ -13,6 +13,69 @@ Each entry is a **spec, not a build**. Nothing below has been implemented.
 
 ---
 
+## Vendor parity — the actual bar
+
+The goal is not "lane 1 runs first." It is **lane 1 making lane 2 unnecessary**.
+Measured against what the paid APIs actually do:
+
+| Vendor capability | Status here | Free-achievable? |
+|---|---|---|
+| Markdown output, `onlyMainContent` | **shipped** 2026-07-27 | Yes |
+| Whole-site crawl, depth/limits | shipped | Yes |
+| Change tracking / caching | shipped (conditional GET + region hash) — arguably better than Firecrawl's `maxAge` | Yes |
+| JS rendering | shipped (local Chromium + own service) | Yes |
+| `/map` — fast whole-domain URL discovery | **PARITY-MAP-1** below | Yes |
+| Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
+| PDF parsing | **CRAWL-FEED-1** below (same content-type gap) | Yes |
+| Screenshots | not planned — no consumer needs it yet | Yes |
+| Residential proxies / stealth | **not achievable free** — lane 2 keeps this | No |
+| General web search (Serper/Tavily) | **not achievable free** — see note | No |
+| Apify actor marketplace | not a capability gap; a different ops model | n/a |
+
+**On search, honestly:** free SERP scraping (DuckDuckGo HTML, etc.) is fragile
+and terms-of-service grey, and building on it would make the package's most
+security-conscious surface its least reliable one. The right move is to reduce
+DEPENDENCE on search — `/map`, sitemap and feed discovery answer "what pages
+does this site have" without asking a search engine at all — not to fake a
+free search rung.
+
+---
+
+## PARITY-MAP-1 — fast whole-domain URL discovery
+
+Firecrawl's `/map` returns hundreds of a domain's URLs in about one request.
+Ours needs `crawlSite` with `followLinks`, which FETCHES every page to find the
+next — minutes and hundreds of requests to answer a question that is mostly
+already published.
+
+**Spec.** `mapSite(target)` returning URLs without fetching each one: sitemap
+(+ index files), feed URLs, and the link graph of the homepage only. No page
+bodies, no parsing beyond hrefs. Cheap enough to run before deciding what a
+real crawl should even target — and it makes `maxPages` a budget you spend
+deliberately instead of one the queue order spends for you.
+
+---
+
+## PARITY-ACTIONS-1 — browser actions before capture
+
+Firecrawl scripts the page before scraping: click, scroll, wait, type. The
+common real case is a "Load more events" button or an infinite-scroll calendar
+— pages where the FIRST render genuinely does not contain the content, so our
+render rung returns a page that is technically correct and practically empty.
+
+We already run Chromium (`fetch/local-render.ts`). The gap is purely that
+nothing can be scripted before the capture.
+
+**Spec.** `browserActions?: Array<{ type: 'click' | 'scroll' | 'wait'; selector?: string; ms?: number }>`
+on the crawl options, executed by the local-render rung only.
+
+**Watch out:** actions are caller-supplied instructions driving a real browser.
+Cap the count and total duration, allow no navigation to another origin, and
+never let an action come from crawled page content — that would be a
+prompt-injection path straight into a browser we control.
+
+---
+
 ## CRAWL-FEED-1 — the package can discover a feed it cannot read
 
 **Priority: highest. This is a half-capability, not a missing feature.**
@@ -194,3 +257,4 @@ package has the context to judge it correctly.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | vendor parity | Reframed around displacing the paid APIs, not just matching Fallow. Markdown + onlyMainContent SHIPPED. PARITY-MAP-1 and PARITY-ACTIONS-1 opened. Recorded that proxies/stealth and general web search are genuinely not free-achievable. |
