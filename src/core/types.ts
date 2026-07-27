@@ -98,6 +98,20 @@ export type CrawlPage = {
   url: string;
   /** Cleaned, sanitised, length-capped visible text. Never raw HTML. */
   text: string;
+  /**
+   * The main content region as Markdown — headings, lists, tables and links
+   * preserved, page chrome (nav/header/footer/aside) removed.
+   *
+   * VENDOR-PARITY-1: prefer this over `text` when feeding an LLM. Plain text
+   * flattens a schedule table into an unlabelled token soup; markdown keeps
+   * the structure the page's author already encoded, which is the difference
+   * between an extractor guessing and reading.
+   *
+   * Empty string on text-only rungs (Jina, vendor markdown) where there is no
+   * HTML to convert — those rungs already deliver prose. Always check `text`
+   * as the fallback.
+   */
+  markdown: string;
   title: string | null;
   /** Raw HTML, only when the caller asked for it (`includeHtml`). Callers
    *  that feed an LLM should use `text` — it has been through the guard. */

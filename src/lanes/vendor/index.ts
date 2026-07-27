@@ -169,6 +169,10 @@ export async function crawlWithVendorLane(
           {
             url,
             text: sanitized.text,
+            // Both vendor rungs are ASKED for markdown (Firecrawl with
+            // onlyMainContent, Apify likewise), so the delivered text already
+            // is markdown — same value, not a second conversion.
+            markdown: sanitized.text,
             title: result.title,
             contentType: 'text/markdown',
             bodySha256: await sha256Hex(result.text),

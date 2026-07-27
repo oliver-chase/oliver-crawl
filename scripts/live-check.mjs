@@ -212,6 +212,29 @@ await check('links and outbound hosts are separated correctly', async () => {
   return `${page.links.length} same-site, ${page.outboundHosts.length} outbound hosts`;
 });
 
+await check('markdown preserves real page structure', async () => {
+  // VENDOR-PARITY-1: the free lane must produce what a caller would otherwise
+  // pay Firecrawl for. Asserts structure survived, not just that a string came
+  // back — flattened text would still be non-empty.
+  const r = await crawler.crawl(RFC, 'https://www.rfc-editor.org/');
+  assert(r.ok, r.detail);
+  const { markdown, text } = r.pages[0];
+  assert(markdown.length > 200, `markdown suspiciously short: ${markdown.length}`);
+  assert(/^#{1,6} /m.test(markdown), 'no headings survived');
+  assert(/\[[^\]]+\]\([^)]+\)/.test(markdown), 'no links survived');
+  return `${markdown.length} md chars vs ${text.length} text`;
+});
+
+await check('markdown drops page chrome', async () => {
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/about');
+  assert(r.ok, r.detail);
+  const { markdown, text } = r.pages[0];
+  // The nav appears in flat text but must not appear in the main region.
+  assert(markdown.length > 0, 'no markdown produced');
+  assert(markdown.length < text.length * 3, 'markdown implausibly larger than text');
+  return `${markdown.length} chars, chrome-scoped`;
+});
+
 console.log('\nSearch (skipped without a key)');
 if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
   const searchCrawler = createCrawler({

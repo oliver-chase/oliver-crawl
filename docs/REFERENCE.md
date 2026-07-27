@@ -118,7 +118,22 @@ const crawler = createCrawler({ userAgent: 'MyBot/1.0', autoRobots: true });
 
 Without this, the crawler trusts the `robotsPolicy` you set on each target (and fails closed on `'unknown'`). With it, an unknown posture is resolved by actually fetching and parsing robots.txt — **cached per host**, so it costs one request per host, not per page. An explicit posture you set is never overridden.
 
-### Search
+### Feeding an LLM: use `markdown`, not `text`
+
+`page.markdown` is the main content region as Markdown — headings, lists,
+tables and links preserved, nav/header/footer/sidebar removed. `page.text` is
+the flat visible text of the whole page, kept for compatibility.
+
+Prefer `markdown`. A schedule table in `text` is an unlabelled token soup, and
+an extractor has to guess which token is a date and which row it belonged to;
+in `markdown` the columns still carry their meaning. Both fields go through the
+prompt-injection guard.
+
+`markdown` is an empty string on text-only rungs (Jina, vendor) where there is
+no HTML to convert — those rungs already deliver prose in `text`. Fall back to
+`text` when it is empty.
+
+## Search
 
 Query in, URLs out — a different surface from crawling, and always paid.
 
