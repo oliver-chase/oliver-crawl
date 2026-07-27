@@ -37,6 +37,7 @@
 
 import * as cheerio from 'cheerio';
 import { htmlToMarkdown } from '../../extract/html-to-markdown.js';
+import { summarizeStructuredData } from '../../extract/structured-summary.js';
 import {
   assertRedirectUrlAllowedForHost,
   assertRequestUrlAllowed,
@@ -95,9 +96,21 @@ type RobotsCacheEntry = { pending: Promise<RobotsPolicyValue>; expiresAt: number
 
 const ROBOTS_CACHE = new Map<string, RobotsCacheEntry>();
 
+// ROBOTS-DELAY-1: a site's published Crawl-delay, per host, learned whenever
+// robots.txt is resolved. Kept beside the policy cache rather than threaded
+// through every call, because the throttle runs at a different point in the
+// request than the policy check does.
+const ROBOTS_DELAY_MS = new Map<string, number>();
+
+/** The site's own Crawl-delay for this host, if we have seen its robots.txt. */
+export function publishedCrawlDelayMs(hostname: string): number | null {
+  return ROBOTS_DELAY_MS.get(hostname.toLowerCase()) ?? null;
+}
+
 /** Test seam. */
 export function __clearRobotsCacheForTests(): void {
   ROBOTS_CACHE.clear();
+  ROBOTS_DELAY_MS.clear();
 }
 
 async function resolveRobotsPolicy(url: string, config: ResolvedConfig): Promise<RobotsPolicyValue> {
@@ -118,6 +131,7 @@ async function resolveRobotsPolicy(url: string, config: ResolvedConfig): Promise
     .then((r) => {
       // 'unknown' from a real answer is still unresolved — retry it soon.
       entry.expiresAt = Date.now() + (r.policy === 'unknown' ? ROBOTS_FAILURE_TTL_MS : ROBOTS_CACHE_TTL_MS);
+      if (r.crawlDelayMs !== null) ROBOTS_DELAY_MS.set(host, r.crawlDelayMs);
       return r.policy;
     })
     // A robots fetch that itself fails leaves the posture unknown, which still
@@ -219,7 +233,17 @@ export async function crawlWithOwnLane(
 
   // Politeness: hold the per-host gap BEFORE the request, after policy has
   // already approved it — no point rate-limiting a fetch we will refuse.
-  await throttleHost(requestUrl.hostname, config.minHostIntervalMs ?? 0, config.adaptiveThrottleMultiplier ?? 0);
+  // ROBOTS-DELAY-1: the site's own Crawl-delay is a FLOOR, not a replacement.
+  // Parsing robots.txt for permission and then ignoring its pacing is taking
+  // only the half of the file that suits us — and it is a common way to get
+  // blocked by a site that technically allowed you. A caller who configured a
+  // slower interval still wins; this can only ever make us more polite.
+  const publishedDelay = publishedCrawlDelayMs(requestUrl.hostname) ?? 0;
+  await throttleHost(
+    requestUrl.hostname,
+    Math.max(config.minHostIntervalMs ?? 0, publishedDelay),
+    config.adaptiveThrottleMultiplier ?? 0,
+  );
 
   // 2-4. Direct fetch, conditional when the caller has validators from a
   // previous crawl of this URL.
@@ -481,6 +505,10 @@ async function jinaFallback(
           // No HTML to convert on a text-only rung. Empty rather than
           // pretending, same rule as contentRegionSha256 (CRAWL-HASH-1).
           markdown: '',
+          // Jina returns prose, not the page's script tags — no JSON-LD to
+          // summarise. Reported honestly as "none found", which correctly
+          // tells a caller a model is their only option on this rung.
+          structuredData: summarizeStructuredData([]),
           title: jina.title,
           contentType: 'text/markdown',
           bodySha256: await sha256Hex(jina.text),
@@ -659,6 +687,7 @@ async function buildPage(input: {
     url: input.url,
     text: sanitized.text,
     markdown: sanitizedMarkdown.text,
+    structuredData: summarizeStructuredData(jsonLd),
     title,
     ...(input.includeHtml ? { html: input.html } : {}),
     contentType: input.contentType,
