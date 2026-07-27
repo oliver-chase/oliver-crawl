@@ -26,7 +26,7 @@ Measured against what the paid APIs actually do:
 | Whole-site crawl, depth/limits | shipped | Yes |
 | Change tracking / caching | shipped (conditional GET + region hash + sitemap lastmod) — better than Firecrawl's `maxAge`: lastmod covers a whole site in ONE request | Yes |
 | JS rendering | shipped (local Chromium + own service) | Yes |
-| `/map` — fast whole-domain URL discovery | **PARITY-MAP-1** below | Yes |
+| `/map` — fast whole-domain URL discovery | **shipped** 2026-07-27 (`mapSite`) | Yes |
 | Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
 | Feeds / calendars / CSV / JSON as first-class documents | **shipped** 2026-07-27 (CRAWL-FEED-1) | Yes |
 | PDF parsing | **CRAWL-PDF-1** below | Yes |
@@ -55,21 +55,6 @@ crawl — so this is where the leverage is.
 
 ---
 
-## BETTER-RUNGMEMORY-1 — remember which rung works for a host
-
-Every crawl walks the ladder from the top. A host that always 403s the direct
-fetch and always succeeds on render costs a guaranteed wasted request, every
-page, forever.
-
-**Spec.** Record the rung that succeeded per host and start there next time,
-with the full ladder still available beneath it. Re-probe from the top
-periodically so a site that stops blocking is not pinned to the expensive rung.
-
-Strictly a latency and success-rate win, needs no new dependency, and a
-stateless per-call vendor API cannot do it by construction.
-
----
-
 ## BETTER-DIFF-1 — report WHAT changed, not just THAT it changed
 
 `unchanged` is a boolean. A consumer whose page gained one event re-extracts
@@ -82,38 +67,6 @@ line item.
 **Spec.** Optional `priorText`/`priorMarkdown` in, `changedRegions` out (added
 and removed blocks). Markdown makes this far more tractable than flat text did,
 since block boundaries are now explicit.
-
----
-
-## BETTER-SOFT404-1 — don't pay to extract a page that says nothing
-
-"No events scheduled at this time" is a perfectly valid 200 that costs a full
-model call to learn nothing. So are parked domains, soft-404s, and "page under
-construction".
-
-**Spec.** A free heuristic — very low content length after main-region
-scoping, boilerplate empty-state phrases, a title that matches a known 404
-shape — surfaced as `CrawlPage.likelyEmptyState: boolean`. Advisory only:
-never refuse to return the page, just let a caller skip paying for it.
-
-**Watch out:** a real venue page in the off-season genuinely IS "no events
-scheduled", and that is a true fact a consumer may want to record rather than
-discard. This must inform the caller, never filter for them.
-
----
-
-## PARITY-MAP-1 — fast whole-domain URL discovery
-
-Firecrawl's `/map` returns hundreds of a domain's URLs in about one request.
-Ours needs `crawlSite` with `followLinks`, which FETCHES every page to find the
-next — minutes and hundreds of requests to answer a question that is mostly
-already published.
-
-**Spec.** `mapSite(target)` returning URLs without fetching each one: sitemap
-(+ index files), feed URLs, and the link graph of the homepage only. No page
-bodies, no parsing beyond hrefs. Cheap enough to run before deciding what a
-real crawl should even target — and it makes `maxPages` a budget you spend
-deliberately instead of one the queue order spends for you.
 
 ---
 
@@ -173,24 +126,6 @@ free ladder, and returns `unreachable`. The content was there the entire time.
 
 Shipping only the free half is the right first step and is genuinely useful on
 its own — a caller can then decide whether an image is worth paying to read.
-
----
-
-## CRAWL-CONTENTKIND-1 — extraction version stamping
-
-Fallow has `lib/ingestion/extraction-version.ts`. oliver-crawl can *replay* a
-stored recipe (`applyRecipe`) but stamps nothing on its output, so a consumer
-holding a stored page has no way to answer "was this extracted by an older,
-worse version — should I re-run it?"
-
-Without this, improving the extractor has no mechanism to reprocess everything
-it would now do better. The improvement only ever applies to pages crawled
-after it shipped.
-
-**Spec.** Add `CrawlPage.extractorVersion: string`, bumped on any change to
-text/link/JSON-LD extraction, and document the re-crawl contract: a consumer
-compares stored version against `EXTRACTOR_VERSION` and re-processes what is
-behind. Cheap to add, and impossible to add retroactively with any value.
 
 ---
 
@@ -261,43 +196,14 @@ exactly this procedure for consumers; the package has not run it on itself.
 
 ---
 
-## CRAWL-UA-1 — no contact URL in the user agent goes unflagged
-
-`userAgent` is required but unvalidated. A UA with no contact URL is a
-significant cause of being blocked — a site operator seeing unexplained traffic
-has no way to reach you, so they block. Fallow derives its UA from
-`FALLOW_APP_ORIGIN` for exactly this reason (`lib/ingestion/user-agent.ts`,
-WHITE-LABEL-1).
-
-**Spec.** Warn once (never throw) when `userAgent` contains no `http(s)://` or
-`+`-prefixed contact. Document the convention in ADOPTION.md. Deliberately not
-an error: a caller may have a legitimate reason, and breaking their crawl over
-a style rule would be worse than the problem.
-
----
-
-## CRAWL-DEGRADE-1 — no notion of a source degrading over time
-
-The package reports per-crawl outcomes. It has no concept of "this source has
-failed six runs in a row and needs attention." Fallow builds that on top
-(`source-autofix.ts`, `source-recover.ts`, `refresh-failure.ts`).
-
-Most of that is rightly the consumer's — it needs a database. But the package
-currently gives a consumer no *shape* to build against, so every consumer
-re-invents failure classification from raw `reason` strings.
-
-**Spec.** Classify failures as `transient` (timeout, 5xx, DNS blip) vs
-`structural` (404, robots disallow, dead host) on the result. That single bit
-is what a consumer needs to decide "retry" vs "tell a human", and only the
-package has the context to judge it correctly.
-
----
-
 ## Live tracker
 
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | BETTER-RUNGMEMORY-1 | SHIPPED, spec removed. Per-host winning rung, 30min TTL, recorded at one chokepoint in crawl(). Store is PER CRAWLER — first cut was module-level and broke 10 tests, same defect class as HOST-CACHE-SCOPE-1. Self-heals: a failed remembered rung is forgotten and the full ladder re-runs, else a rung outage would cost the page. `rungMemory: false` opts out. |
+| 2026-07-27 | PARITY-MAP-1 | SHIPPED, spec removed. mapSite(crawler, target) = sitemap + homepage links + declared feeds, ONE page body fetched. Feeds surfaced separately. Live: 25 urls off rfc-editor. Live gap: maxUrls filled from sitemap alone there, so the homepage-links path is fixture-covered only. |
+| 2026-07-27 | consumer signals | SHIPPED 4 specs, all removed: CRAWL-DEGRADE-1 (failureClass transient/structural, classified at one chokepoint in crawl()), BETTER-SOFT404-1 (likelyEmptyState, advisory only), CRAWL-CONTENTKIND-1 (extractorVersion stamp), CRAWL-UA-1 (warn once per UA with no contact, never throw). 22 new tests. |
 | 2026-07-27 | CRAWL-RESUME-1 | SHIPPED, spec removed. onProgress emits CrawlProgress{queue,visited,depths,collected}; resumeFrom restores it. No storage in the package. Ablation note: removing `visited` restore ALONE stays green because `depths` also blocks re-enqueue — the two overlap for dedup. Removing both turns 3 tests red. |
 | 2026-07-27 | README | Fixed a wrong claim (said `text` had nav stripped — that is `markdown`), added markdown/structuredData/contentKind/lastmod, corrected 317 -> 432 tests. Counts taken from a real run. |
 | 2026-07-27 | BETTER-LASTMOD-1 | SHIPPED, spec removed. SitemapEntry{url,lastmod}; crawlSite priorLastmod skips unfetched; returns lastmod + skippedByLastmod. Skip-only by design (lastmod lies). Ablation-verified. Live gap: rfc-editor publishes no lastmod, so real-sitemap extraction is fixture-covered, shape-only live. |

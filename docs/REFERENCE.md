@@ -145,6 +145,32 @@ retrying it on resume would just repeat the failure.
 already persisted those when you received them. This resumes the work, not the
 results.
 
+### Mapping a site without crawling it
+
+`crawlSite` with `followLinks` has to FETCH every page to find the next one.
+When you only need to know what exists, that is minutes and hundreds of
+requests for something the site mostly already publishes:
+
+```ts
+import { mapSite } from '@oliver/crawl-core';
+
+const map = await mapSite(crawler, target, { maxUrls: 500 });
+
+map.feeds;    // ICS/RSS/Atom — usually the best targets on any site
+map.urls;     // everything found
+map.sources;  // { sitemap, feeds, homepageLinks } — why the result looks how it does
+```
+
+Exactly **one page body** is fetched: the homepage. Everything else comes from
+listing documents. Cheap enough to run *before* deciding what a real crawl
+should target, which makes `maxPages` a budget you spend deliberately instead
+of one the queue order spends for you.
+
+It is not a crawl — no recursion, no page content. Feed `map.urls` to
+`crawlSite` as `seeds` when you want the content. A missing sitemap or an
+unreachable homepage degrades to whichever source did answer, rather than
+returning nothing.
+
 ### Discovering what to crawl (free)
 
 ```ts
@@ -193,6 +219,39 @@ every kind: a calendar feed is untrusted remote text like any page.
 Only `text` and `textSha256` are meaningful on non-HTML kinds; `markdown` and
 `contentRegionSha256` are empty rather than faked, so a rung or kind change
 can never look like a content change.
+
+## Deciding what to do next
+
+Three fields exist so you don't have to re-derive them from prose:
+
+```ts
+if (!result.ok) {
+  result.failureClass;  // 'transient' | 'structural'
+}
+
+page.likelyEmptyState;  // page loaded but appears to say nothing
+page.extractorVersion;  // which version of extraction produced this
+```
+
+**`failureClass`** answers "is retrying worth it?". `transient` means the
+world might differ next time — DNS blips, timeouts, 5xx, and bot walls.
+`structural` means retrying changes nothing until something is fixed — a 404,
+a robots disallow, an inactive target, an unsupported content-type. Count
+consecutive `structural` failures per source to retire a dead one
+automatically; counting `transient` ones tells you only that the internet is
+the internet. Note a **403 is transient**: it is a bot wall far more often
+than a permanent refusal, and treating it as structural would retire sources
+that work on the next run.
+
+**`likelyEmptyState`** flags "No events scheduled at this time", parked
+domains and soft-404s — valid 200s that cost a full model call to learn
+nothing. Advisory only: the page is still returned in full, because an
+off-season venue really *is* "no events scheduled", and that may be a fact you
+want to record rather than discard.
+
+**`extractorVersion`** lets an extraction improvement reach pages you already
+stored. Keep it beside the page; when it falls behind `EXTRACTOR_VERSION`,
+re-process. It cannot be added retroactively with any value.
 
 ## Feeding an LLM: use `markdown`, not `text`
 
