@@ -157,7 +157,7 @@ export { searchAndCrawl } from './search-and-crawl.js';
 export type { SearchAndCrawlOptions, SearchAndCrawlResult } from './search-and-crawl.js';
 export { search as searchWeb, availableSearchProviders, DEFAULT_SEARCH_PROVIDER_ORDER } from './search/index.js';
 export type { SearchResult, SearchOutcome, SearchOptions } from './search/index.js';
-export type { SiteCrawlOptions, SiteCrawlResult, SiteCrawlFailure } from './crawl-site.js';
+export type { SiteCrawlOptions, SiteCrawlResult, SiteCrawlFailure, CrawlProgress } from './crawl-site.js';
 export { DEFAULT_VENDOR_RUNG_ORDER } from './core/config.js';
 export type { ResolvedConfig } from './core/config.js';
 

@@ -137,19 +137,6 @@ prompt-injection path straight into a browser we control.
 
 ---
 
-## CRAWL-RESUME-1 — a killed crawlSite loses everything
-
-`crawlSite`'s queue/visited/results live in memory only. A 500-page crawl
-killed at page 400 restarts from zero. Crawlee persists its request queue to
-disk for exactly this reason; Firecrawl runs async jobs you can re-poll.
-
-**Spec.** Smallest honest version: `onProgress(state)` callback emitting
-`{ queue, visited, collected }` snapshots, and `crawlSite` accepting a
-`resumeFrom` of the same shape. No storage in the package — the consumer
-persists it, same contract as validators. (Do NOT build a job system here.)
-
----
-
 ## CRAWL-PDF-1 — PDFs are still refused
 
 Split out of CRAWL-FEED-1, which shipped everything text-shaped. PDFs remain
@@ -311,6 +298,8 @@ package has the context to judge it correctly.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | CRAWL-RESUME-1 | SHIPPED, spec removed. onProgress emits CrawlProgress{queue,visited,depths,collected}; resumeFrom restores it. No storage in the package. Ablation note: removing `visited` restore ALONE stays green because `depths` also blocks re-enqueue — the two overlap for dedup. Removing both turns 3 tests red. |
+| 2026-07-27 | README | Fixed a wrong claim (said `text` had nav stripped — that is `markdown`), added markdown/structuredData/contentKind/lastmod, corrected 317 -> 432 tests. Counts taken from a real run. |
 | 2026-07-27 | BETTER-LASTMOD-1 | SHIPPED, spec removed. SitemapEntry{url,lastmod}; crawlSite priorLastmod skips unfetched; returns lastmod + skippedByLastmod. Skip-only by design (lastmod lies). Ablation-verified. Live gap: rfc-editor publishes no lastmod, so real-sitemap extraction is fixture-covered, shape-only live. |
 | 2026-07-27 | CRAWL-FEED-1 | SHIPPED, spec removed. contentKind on CrawlPage; ICS/CSV/JSON/RSS/Atom/XML delivered verbatim; images+binaries still refused; guard runs on every kind. PDF split out as CRAWL-PDF-1. |
 | 2026-07-27 | review fixes | CACHE-POLICY-1 (cache read ran before the policy gate; cache is keyed on url+lanes, not target — a second target could read a page it was never allowed to fetch) and READABILITY-CHROME-1 (scoring ran before chrome removal, so a prose-heavy aside/nav could win and the later strip could not undo it). Both ablation-verified red first. |

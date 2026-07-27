@@ -119,6 +119,32 @@ nothing and simply lets the page through to the normal 304 and content-hash
 checks, which are trustworthy. A page publishing no `<lastmod>` is always
 crawled. Omit `priorLastmod` to disable entirely.
 
+### Resuming a killed crawl
+
+`crawlSite` keeps its queue in memory, so a 500-page run killed at page 400
+restarts from zero unless you save its progress. The package stores nothing —
+it hands you a snapshot and takes one back:
+
+```ts
+const run = await crawlSite(crawler, target, {
+  followLinks: true,
+  onProgress: (state) => myStore.save(target.id, state),  // plain JSON
+});
+
+// later, in a new process
+await crawlSite(crawler, target, { followLinks: true, resumeFrom: myStore.load(target.id) });
+```
+
+The snapshot is emitted after each page is marked done *and* after the links
+it discovered are queued, so it is always a coherent "everything up to here is
+finished" — never one that would re-fetch the page just handled or lose its
+links. Failures snapshot too: a terminally failed page is finished with, and
+retrying it on resume would just repeat the failure.
+
+`resumeFrom` replaces the seeds entirely. Pages are **not** carried over — you
+already persisted those when you received them. This resumes the work, not the
+results.
+
 ### Discovering what to crawl (free)
 
 ```ts
