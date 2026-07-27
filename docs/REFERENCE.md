@@ -126,12 +126,19 @@ Query in, URLs out — a different surface from crawling, and always paid.
 const found = await crawler.search('rochester ny summer concert series', { maxResults: 5 });
 
 if (found.ok) {
-  found.results;   // [{ title, snippet, url }]
+  found.results;   // [{ title, snippet, url, injectionFiltered? }]
   found.provider;  // which one answered
 } else {
   found.reason;    // 'no_provider_configured' | 'no_results' | 'budget_refused' | 'error'
 }
 ```
+
+A search provider is untrusted on both counts, so results are filtered before you see them:
+
+- **`url`** — anything that is not a safe public `http(s)` URL is dropped. A `javascript:` href would be an XSS in your UI; a private-network URL would be an SSRF in your fetcher.
+- **`title` / `snippet`** — run through the same prompt-injection guard as crawled page text. A snippet is usually the target page's own meta description, so it is attacker-influenceable prose, and these strings are the ones people feed to a model. When the guard trips, both fields come back empty with **`injectionFiltered: true`**, and the `url` is still returned — it is validated separately and still worth crawling.
+
+Check `injectionFiltered` if you display snippets; an empty snippet on a real URL is otherwise puzzling, and the flag is itself a useful signal about the page behind it.
 
 Returns an outcome rather than a bare array on purpose: an empty array cannot tell you whether the web had nothing, your key was missing, or your budget said no. Serper is tried before Tavily by default (roughly 5x cheaper per call for the same job). Provider results are filtered through the same URL-safety check as extracted links, so a `javascript:` or private-host result never reaches you.
 
