@@ -237,6 +237,17 @@ crawler.crawl(
 
 Sent only to that target's own host — the same-site rule means a redirect cannot walk your token to another origin.
 
+**There is no cookie jar (CRAWL-SESSION-1).** Headers you supply are sent on
+every request for that target, but a `Set-Cookie` the server returns is not
+captured or replayed. So a login that establishes a session on request one
+cannot carry it to request two, and multi-page crawling behind a login does
+not work — even though single-page crawling with a token you already hold does.
+
+If you need it, acquire the session yourself and pass the cookie in `headers`.
+A cookie jar is a credential store, and one that outlived a single crawl or
+leaked between targets would be a worse problem than the one it solved, so it
+stays out until there is a consumer that genuinely needs it.
+
 Setting `headers` also **disables the Jina fallback rung for that target**. Jina is a public service that fetches the URL on your behalf, so a members-only URL would be disclosed to a third party, and the fetch would fail anyway without your token. Local and remote rendering still run, because those are your own infrastructure. If a credentialed page is JS-rendered, configure `localRender` or `browserRender` — the Jina rung is not available to catch it.
 
 ### Learning extraction recipes — yours

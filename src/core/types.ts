@@ -1,3 +1,4 @@
+import type { ContentImage } from '../extract/content-images.js';
 import type { FailureClass } from './failure-class.js';
 import type { StructuredSummary } from '../extract/structured-summary.js';
 // ─── Core contract ──────────────────────────────────────────────────────────
@@ -138,6 +139,16 @@ export type CrawlPage = {
    */
   likelyEmptyState: boolean;
   /**
+   * CRAWL-VISION-1: images that plausibly carry this page's real content —
+   * the poster or flyer some venue and municipal pages publish INSTEAD of
+   * text, ranked best-first and usually empty.
+   *
+   * Finding them is free and ours; reading them needs a vision model and is
+   * yours. A page with little text but a candidate image here is not empty —
+   * it is a page whose content you have not paid to read yet.
+   */
+  candidateContentImages: ContentImage[];
+  /**
    * CRAWL-CONTENTKIND-1: which version of this package's extraction produced
    * the page. Bumped whenever text/markdown/link/JSON-LD extraction changes.
    *
@@ -209,6 +220,8 @@ export type PageLink = { url: string; text: string };
  * them, so the best source we could find was the one we could not use.
  */
 export type ContentKind = 'html' | 'calendar' | 'csv' | 'json' | 'feed' | 'text';
+
+export type { ContentImage } from '../extract/content-images.js';
 
 export type { FailureClass } from './failure-class.js';
 
