@@ -20,6 +20,18 @@ Its rung ladder, in order — each rung only runs when the ones above it couldn'
 | 8 | Remote render | yours | Your own render service (`browserRender` config) — for serverless deployments that can't run a browser |
 | 9 | Jina Reader | free | Keyless public service; clears bot walls and JS shells the direct fetch can't |
 
+### When rungs 7–9 engage
+
+The recovery rungs run on **any** failure of the direct fetch, not just one kind:
+
+- a **network error** (connection reset, DNS failure, timeout)
+- an **HTTP status** the fetch can't use — a 403 bot wall, a 429, a 5xx
+- **HTML that parsed but had no readable text** — a JavaScript shell
+
+All three take the same path, in the same order, and rung 7 is tried before rung 9. That ordering is the point: a 403 is precisely where a real browser — real TLS fingerprint, real headers, real JS — succeeds where a bare `fetch` cannot. Trying Jina first would skip a free rung we control in favour of a third party, and a skipped free rung is what pushes a crawl into the paid lane sooner than it needed to go.
+
+The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lanes/own/index.ts`) so the order can't drift between the failure paths as rungs are added. `tests/lanes/lane-exhaustion.test.ts` asserts it, including that a vendor is never called while a free rung could still have worked.
+
 ## Lane 2: `vendor` — third-party APIs
 
 Firecrawl and Apify behind one interface. **Off by default** — a caller opts in per crawl with `lanes: ['own', 'vendor']`. Exists for the residue: pages the entire own ladder genuinely cannot read.

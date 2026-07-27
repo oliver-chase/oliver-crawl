@@ -193,8 +193,9 @@ export async function crawlWithOwnLane(
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-    // Direct fetch failed — try the free keyless fallback before giving up.
-    return jinaFallback(url, config, options, started, detail);
+    // Direct fetch failed — exhaust every remaining FREE rung before giving
+    // up (and long before anything paid is considered).
+    return freeFallbackLadder(url, config, options, started, detail);
   }
 
   // How long the origin took is the input to adaptive pacing.
@@ -217,7 +218,9 @@ export async function crawlWithOwnLane(
       ? `HTTP ${response.status} (origin asked to wait ${Math.round(retryAfterMs / 1000)}s)`
       : `HTTP ${response.status}`;
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-    const fallback = await jinaFallback(url, config, options, started, detail);
+    // A 403/429/503 is where a real browser most often succeeds — render
+    // rungs come BEFORE Jina here (LANE-EXHAUST-1).
+    const fallback = await freeFallbackLadder(url, config, options, started, detail);
     if (!fallback.ok && retryAfterMs) return { ...fallback, retryAfterMs };
     return fallback;
   }
@@ -251,15 +254,43 @@ export async function crawlWithOwnLane(
   }
 
   if (!page.text.trim()) {
-    // Served HTML had no readable text — a JS shell. Try our own render
-    // service first (infrastructure we control), then the free Jina rung.
-    const rendered = await renderFallback(url, config, options, started);
-    if (rendered) return rendered;
-    return jinaFallback(url, config, options, started, 'No visible text in the served HTML');
+    // Served HTML had no readable text — a JS shell. Same free ladder.
+    return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML');
   }
 
   emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
   return { ok: true, pages: [page] };
+}
+
+/**
+ * LANE-EXHAUST-1 (2026-07-27, found in audit): the remaining FREE rungs, in
+ * order, as one function.
+ *
+ * Before this, a failed fetch (network error, or an HTTP status like a 403
+ * bot wall) jumped straight to Jina and never tried rendering at all — while
+ * only the "fetched but empty" path tried the render rungs. That is exactly
+ * backwards for the most common blocking case: a 403 is precisely where a
+ * real headless browser, with a real TLS fingerprint and real headers, tends
+ * to succeed where a bare fetch cannot.
+ *
+ * The consequence was not just a missed page: skipping a free rung makes the
+ * crawl fall through to the PAID lane sooner. Lane 1 must be exhausted before
+ * lane 2 is reached, and defining the order in one place is what keeps that
+ * true as rungs are added.
+ *
+ * Order: free local Chromium (your CPU) -> your own render service -> Jina
+ * (free public). Returns null only when every rung declined.
+ */
+async function freeFallbackLadder(
+  url: string,
+  config: ResolvedConfig,
+  options: CrawlOptions,
+  started: number,
+  priorDetail: string,
+): Promise<CrawlResult> {
+  const rendered = await renderFallback(url, config, options, started);
+  if (rendered) return rendered;
+  return jinaFallback(url, config, options, started, priorDetail);
 }
 
 /**
@@ -294,7 +325,9 @@ async function renderFallback(
     });
     if (localPage === 'quarantined') {
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
-      return { ok: false, reason: 'quarantined', detail: 'Locally rendered content tripped the prompt-injection guard.', lane: 'own' };
+      const detail = 'Locally rendered content tripped the prompt-injection guard.';
+      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
     }
     if (localPage.text.trim()) {
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
@@ -325,7 +358,9 @@ async function renderFallback(
 
     if (page === 'quarantined') {
       emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
-      return { ok: false, reason: 'quarantined', detail: 'Rendered content tripped the prompt-injection guard.', lane: 'own' };
+      const detail = 'Rendered content tripped the prompt-injection guard.';
+      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
     }
 
     // A render that still yields nothing is not a success — let the caller
@@ -360,7 +395,9 @@ async function jinaFallback(
 
     const sanitized = sanitizeCrawledText(jina.text, maxTextChars);
     if (sanitized.signals.length > 0) {
-      return { ok: false, reason: 'quarantined', detail: 'Prompt-injection signals in fallback content.', lane: 'own' };
+      const detail = 'Prompt-injection signals in fallback content.';
+      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
     }
 
     emitUsage(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
