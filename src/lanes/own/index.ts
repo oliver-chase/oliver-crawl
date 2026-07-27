@@ -36,6 +36,7 @@
 // caller may fall through to the vendor lane — but only if it asked for it.
 
 import * as cheerio from 'cheerio';
+import { htmlToMarkdown } from '../../extract/html-to-markdown.js';
 import {
   assertRedirectUrlAllowedForHost,
   assertRequestUrlAllowed,
@@ -477,6 +478,9 @@ async function jinaFallback(
         {
           url,
           text: sanitized.text,
+          // No HTML to convert on a text-only rung. Empty rather than
+          // pretending, same rule as contentRegionSha256 (CRAWL-HASH-1).
+          markdown: '',
           title: jina.title,
           contentType: 'text/markdown',
           bodySha256: await sha256Hex(jina.text),
@@ -606,6 +610,10 @@ async function buildPage(input: {
 
   const title = $('title').first().text().trim() || null;
 
+  // Built BEFORE the destructive strip below, and from a clone internally, so
+  // the link pass further down still sees the whole document.
+  const markdownRaw = htmlToMarkdown($, { maxChars: input.maxTextChars });
+
   $('script, style, noscript, template').remove();
   let visibleText = $('body').text().replace(/\s+/g, ' ').trim();
 
@@ -619,6 +627,12 @@ async function buildPage(input: {
   // Guard BEFORE returning: nothing downstream should ever see raw page text.
   const sanitized = sanitizeCrawledText(visibleText, input.maxTextChars);
   if (sanitized.signals.length > 0) return 'quarantined';
+
+  // Markdown is untrusted page content exactly like the text is — an
+  // injection payload inside a <table> cell is still an injection payload,
+  // and this is the field callers are told to feed a model.
+  const sanitizedMarkdown = sanitizeCrawledText(markdownRaw, input.maxTextChars);
+  if (sanitizedMarkdown.signals.length > 0) return 'quarantined';
 
   const links: PageLink[] = [];
   const outbound = new Set<string>();
@@ -644,6 +658,7 @@ async function buildPage(input: {
   return {
     url: input.url,
     text: sanitized.text,
+    markdown: sanitizedMarkdown.text,
     title,
     ...(input.includeHtml ? { html: input.html } : {}),
     contentType: input.contentType,
