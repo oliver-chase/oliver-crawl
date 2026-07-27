@@ -71,10 +71,48 @@ capabilities come from that difference, and none has a vendor equivalent:
 
 ---
 
+## First real parity run — 2026-07-27
+
+`scripts/parity-check.mjs` against 20 of Fallow's highest-yield active sources
+(`source_providers`, ordered by `published_series_count`). Read-only.
+
+**Result: 20/20 read.** Findings, in order of consequence:
+
+**A guard false positive, now fixed (MARKDOWN-DATAURI-1).** One live site was
+quarantined. The cause was in code shipped the same day: the markdown
+converter emitted `![](data:image/png;base64,…)` for inline images, and a 1×1
+base64 placeholder — the standard lazy-loading pattern — tripped the
+encoded-payload rule. Plain text never hit this because images are not in
+text. Left alone it would have silently quarantined most of the web. Data
+URIs are no longer emitted, `data-src` is preferred when a lazy-loader parked
+the real URL there, and alt text is kept.
+
+**60% of these sources need no model at all.** 12 of 20 publish usable
+structured data (`hasContentData`). That is the largest cost lever available
+to a consumer and it is free to act on.
+
+**4 of 20 only succeeded via the Jina rung**, meaning the direct fetch failed.
+Those return `contentKind: 'text'` — no markdown, no JSON-LD, no links — so
+they lose the free extraction path and fall through to a model.
+`themishawaka.com`, `cfdrodeo.com`, `visitgolden.com`, `aspensnowmass.com`.
+
+> **Open, unverified:** enabling `localRender` should route those four through
+> the HTML path instead, restoring structured data and markdown. Playwright is
+> not installed in this repo, so that was NOT tested — it is a hypothesis to
+> check before wiring a consumer, not a finding.
+
+**One transient failure, not a dead source.** `visitgolden.com/events/...`
+returned 404 on the first run and 301 on the second. Worth remembering when
+reading any single run: `failureClass: transient` exists for this.
+
+---
+
 ## Live tracker
 
 | Date | Entry | Change |
 |---|---|---|
+| 2026-07-27 | MARKDOWN-DATAURI-1 | FIXED. Markdown emitted base64 data-URI image srcs, tripping the injection guard's encoded-payload rule and quarantining ordinary pages. Found by the first live parity run, not by the test suite — introduced and caught the same day. |
+| 2026-07-27 | parity run 1 | 20/20 read after the fix. 12/20 need no model. 4/20 only reachable via Jina and therefore lose markdown + JSON-LD; localRender as a remedy is UNVERIFIED (playwright absent here). |
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
 | 2026-07-27 | CRAWL-PDF-1 | SHIPPED, spec removed. `unpdf` is an OPTIONAL peer, not a dependency: a parser is a large hostile-input surface, and putting it in every install for the minority who crawl PDFs is the wrong trade here. Same Function-constructor import seam as playwright. Missing parser reports a `structural` failure naming the package. Found a real gap doing it — a missing parser and a scanned PDF were both classed `transient` when neither is fixed by waiting. |
 | 2026-07-27 | CRAWL-PARITY-1 | SHIPPED as `scripts/parity-check.mjs`, spec removed. Reports per-URL extraction shape (counts + hashes, not prose) so a consumer can diff it against their existing extractor on the same list. Deliberately NOT coupled to any consumer — this library must not import Fallow or tesknota. Run before any swap; explain every disagreement first. |

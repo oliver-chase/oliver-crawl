@@ -193,3 +193,40 @@ describe('READABILITY-CHROME-1 — scoring must ignore page furniture', () => {
     expect(out).not.toContain('Browse concerts');
   });
 });
+
+describe('MARKDOWN-DATAURI-1 — inline data URIs must not reach the guard', () => {
+  // Found on a live site by scripts/parity-check.mjs. A 1x1 base64 PNG is the
+  // standard lazy-loading placeholder, and emitting it as an image src tripped
+  // the prompt-injection guard's encoded-payload rule — quarantining a
+  // perfectly ordinary page. Plain text never hit this because images are not
+  // in text; the markdown converter introduced it.
+  const PLACEHOLDER =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAQAAAA3fa6RAAAADklEQVR42mNkAANGCAUAACMAA2w/AMgAAAAASUVORK5CYII=';
+
+  test('a base64 placeholder src is not emitted', () => {
+    const out = md(`<main><p>Concerts on Friday.</p><img src="${PLACEHOLDER}" alt=""></main>`);
+    expect(out).not.toContain('base64');
+    expect(out).not.toContain('data:image');
+  });
+
+  test('alt text survives even when the src is dropped', () => {
+    // The alt is often the only description of the image, so losing it would
+    // trade one bug for another.
+    const out = md(`<main><img src="${PLACEHOLDER}" alt="Summer schedule poster"></main>`);
+    expect(out).toContain('Summer schedule poster');
+    expect(out).not.toContain('base64');
+  });
+
+  test('a real image URL is still emitted', () => {
+    const out = md('<main><img src="/uploads/banner.webp" alt="Banner"></main>');
+    expect(out).toContain('/uploads/banner.webp');
+  });
+
+  test('a page carrying placeholders is not quarantined', async () => {
+    const { sanitizeCrawledText } = await import('@/guard/prompt-injection-guard');
+    const out = md(
+      `<main><img src="${PLACEHOLDER}" alt=""><p>The summer season opens on Friday with live music and a full bar.</p></main>`,
+    );
+    expect(sanitizeCrawledText(out, 20000).signals).toEqual([]);
+  });
+});

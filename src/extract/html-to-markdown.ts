@@ -255,11 +255,28 @@ function renderNode($: CheerioAPI, $el: Cheerio<AnyNode>, el: AnyNode, blocks: s
   }
 }
 
-/** Render one <img> as markdown. Shared by the block and inline paths. */
+/**
+ * Render one <img> as markdown. Shared by the block and inline paths.
+ *
+ * MARKDOWN-DATAURI-1 (2026-07-27, found by scripts/parity-check.mjs on a live
+ * site): a `data:` src is never emitted. Lazy-loading libraries put a 1x1
+ * base64 PNG in `src` and the real URL in `data-src`, and emitting that
+ * base64 blob tripped the injection guard's encoded-payload rule — which
+ * quarantined an ordinary page and would have done so for every site using
+ * the pattern, which is most of them.
+ *
+ * Dropping it costs nothing: an extractor cannot read pixels, so a data URI
+ * carries no information a consumer can use. The alt text is kept, since it
+ * is frequently the only description of the image.
+ */
 function inlineImage($: CheerioAPI, $img: Cheerio<AnyNode>): string {
   const alt = ($img.attr('alt') || '').trim();
-  const src = $img.attr('src') || '';
-  if (!alt && !src) return '';
+  const rawSrc = ($img.attr('src') || '').trim();
+  // Prefer the real URL a lazy-loader parked in data-src over its placeholder.
+  const src = /^data:/i.test(rawSrc) ? ($img.attr('data-src') || '').trim() : rawSrc;
+
+  if (/^data:/i.test(src) || (!alt && !src)) return alt ? escapeInline(alt) : '';
+  if (!src) return escapeInline(alt);
   return `![${escapeInline(alt)}](${src})`;
 }
 
