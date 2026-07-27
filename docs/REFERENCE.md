@@ -145,6 +145,32 @@ retrying it on resume would just repeat the failure.
 already persisted those when you received them. This resumes the work, not the
 results.
 
+### Mapping a site without crawling it
+
+`crawlSite` with `followLinks` has to FETCH every page to find the next one.
+When you only need to know what exists, that is minutes and hundreds of
+requests for something the site mostly already publishes:
+
+```ts
+import { mapSite } from '@oliver/crawl-core';
+
+const map = await mapSite(crawler, target, { maxUrls: 500 });
+
+map.feeds;    // ICS/RSS/Atom — usually the best targets on any site
+map.urls;     // everything found
+map.sources;  // { sitemap, feeds, homepageLinks } — why the result looks how it does
+```
+
+Exactly **one page body** is fetched: the homepage. Everything else comes from
+listing documents. Cheap enough to run *before* deciding what a real crawl
+should target, which makes `maxPages` a budget you spend deliberately instead
+of one the queue order spends for you.
+
+It is not a crawl — no recursion, no page content. Feed `map.urls` to
+`crawlSite` as `seeds` when you want the content. A missing sitemap or an
+unreachable homepage degrades to whichever source did answer, rather than
+returning nothing.
+
 ### Discovering what to crawl (free)
 
 ```ts

@@ -26,7 +26,7 @@ Measured against what the paid APIs actually do:
 | Whole-site crawl, depth/limits | shipped | Yes |
 | Change tracking / caching | shipped (conditional GET + region hash + sitemap lastmod) — better than Firecrawl's `maxAge`: lastmod covers a whole site in ONE request | Yes |
 | JS rendering | shipped (local Chromium + own service) | Yes |
-| `/map` — fast whole-domain URL discovery | **PARITY-MAP-1** below | Yes |
+| `/map` — fast whole-domain URL discovery | **shipped** 2026-07-27 (`mapSite`) | Yes |
 | Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
 | Feeds / calendars / CSV / JSON as first-class documents | **shipped** 2026-07-27 (CRAWL-FEED-1) | Yes |
 | PDF parsing | **CRAWL-PDF-1** below | Yes |
@@ -82,21 +82,6 @@ line item.
 **Spec.** Optional `priorText`/`priorMarkdown` in, `changedRegions` out (added
 and removed blocks). Markdown makes this far more tractable than flat text did,
 since block boundaries are now explicit.
-
----
-
-## PARITY-MAP-1 — fast whole-domain URL discovery
-
-Firecrawl's `/map` returns hundreds of a domain's URLs in about one request.
-Ours needs `crawlSite` with `followLinks`, which FETCHES every page to find the
-next — minutes and hundreds of requests to answer a question that is mostly
-already published.
-
-**Spec.** `mapSite(target)` returning URLs without fetching each one: sitemap
-(+ index files), feed URLs, and the link graph of the homepage only. No page
-bodies, no parsing beyond hrefs. Cheap enough to run before deciding what a
-real crawl should even target — and it makes `maxPages` a budget you spend
-deliberately instead of one the queue order spends for you.
 
 ---
 
@@ -231,6 +216,7 @@ exactly this procedure for consumers; the package has not run it on itself.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | PARITY-MAP-1 | SHIPPED, spec removed. mapSite(crawler, target) = sitemap + homepage links + declared feeds, ONE page body fetched. Feeds surfaced separately. Live: 25 urls off rfc-editor. Live gap: maxUrls filled from sitemap alone there, so the homepage-links path is fixture-covered only. |
 | 2026-07-27 | consumer signals | SHIPPED 4 specs, all removed: CRAWL-DEGRADE-1 (failureClass transient/structural, classified at one chokepoint in crawl()), BETTER-SOFT404-1 (likelyEmptyState, advisory only), CRAWL-CONTENTKIND-1 (extractorVersion stamp), CRAWL-UA-1 (warn once per UA with no contact, never throw). 22 new tests. |
 | 2026-07-27 | CRAWL-RESUME-1 | SHIPPED, spec removed. onProgress emits CrawlProgress{queue,visited,depths,collected}; resumeFrom restores it. No storage in the package. Ablation note: removing `visited` restore ALONE stays green because `depths` also blocks re-enqueue — the two overlap for dedup. Removing both turns 3 tests red. |
 | 2026-07-27 | README | Fixed a wrong claim (said `text` had nav stripped — that is `markdown`), added markdown/structuredData/contentKind/lastmod, corrected 317 -> 432 tests. Counts taken from a real run. |

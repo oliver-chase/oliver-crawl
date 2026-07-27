@@ -15,7 +15,7 @@
 // standards/documentation sites that are used to being crawled. Politeness
 // settings here are deliberately conservative.
 
-import { createCrawler, crawlSite, discoverSitemapUrls, searchAndCrawl } from '../dist/index.js';
+import { createCrawler, crawlSite, discoverSitemapUrls, mapSite, searchAndCrawl } from '../dist/index.js';
 import { lookup } from 'node:dns/promises';
 
 const dns = async (h) => (await lookup(h, { all: true })).map((r) => ({ address: r.address, family: r.family }));
@@ -182,6 +182,15 @@ await check('sitemap lastmod is captured from a real site', async () => {
   assert(found.entries.every((e) => e.lastmod === null || typeof e.lastmod === 'string'), 'bad lastmod type');
   const withMod = found.entries.filter((e) => e.lastmod).length;
   return `${found.entries.length} entries, ${withMod} with lastmod`;
+});
+
+await check('mapSite lists a real site cheaply', async () => {
+  // PARITY-MAP-1: answers "what pages exist" without crawling them.
+  const map = await mapSite(crawler, RFC, { maxUrls: 25 });
+  assert(map.urls.length > 1, `too few urls: ${map.urls.length}`);
+  assert(map.urls.every((u) => u.includes('rfc-editor.org')), 'an off-site URL survived');
+  assert(new Set(map.urls).size === map.urls.length, 'duplicate urls returned');
+  return `${map.urls.length} urls (sitemap ${map.sources.sitemap}, links ${map.sources.homepageLinks}), ${map.feeds.length} feeds`;
 });
 
 await check('whole-site link following from ONE seed', async () => {

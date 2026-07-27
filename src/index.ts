@@ -160,6 +160,8 @@ export { configFromEnv, resolveConfig, availableVendorRungs, DEFAULT_USER_AGENT 
 // Multi-page orchestration: drives crawl() across a target's seeds, with a
 // page budget, retry policy, dedup and optional pagination following.
 export { crawlSite } from './crawl-site.js';
+export { mapSite } from './map-site.js';
+export type { SiteMapResult, SiteMapOptions } from './map-site.js';
 // Search then read what was found — with host policy re-applied per result,
 // because a search provider is an untrusted source of URLs.
 export { searchAndCrawl } from './search-and-crawl.js';
