@@ -30,7 +30,8 @@ Measured against what the paid APIs actually do:
 | Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
 | PDF parsing | **CRAWL-FEED-1** below (same content-type gap) | Yes |
 | Screenshots | not planned — no consumer needs it yet | Yes |
-| Browser fingerprint realism (fingerprint-suite-class) | **PARITY-HEADERS-1** below — correction: this half IS free | Partly |
+| Consistent polite-client headers (free half of stealth) | **shipped** 2026-07-27 — accept-language + full accept; sec-ch-ua deliberately excluded (a half-consistent browser disguise is a stronger tell than none) | Yes |
+| Readability-class content scoring for div-soup pages | **shipped** 2026-07-27 | Yes |
 | Residential proxies | **not achievable free** — lane 2 keeps this | No |
 | General web search (Serper/Tavily) | **not achievable free** — see note | No |
 | Apify actor marketplace | not a capability gap; a different ops model | n/a |
@@ -151,41 +152,6 @@ on the crawl options, executed by the local-render rung only.
 Cap the count and total duration, allow no navigation to another origin, and
 never let an action come from crawled page content — that would be a
 prompt-injection path straight into a browser we control.
-
----
-
-## PARITY-READABILITY-1 — content scoring for div-soup pages
-
-Our main-region selection is `<main>`/`<article>`, else body-minus-chrome
-(`extract/content-region-hash.ts`, reused by the markdown converter). Right
-for semantic HTML; weak on the div-soup sites that never use those tags —
-there the "main region" is the whole body and chrome stripping is all we have.
-
-Firecrawl and ScrapeGraphAI both lean on Mozilla-Readability-class content
-scoring: text density, link density, paragraph clustering. That algorithm is
-open, old, and dependency-free to reimplement in ~150 lines.
-
-**Spec.** Score candidate blocks (text length vs link density per subtree),
-pick the densest cluster when no semantic tag exists. Fallback only — a
-`<main>` tag keeps winning. Feeds BOTH the markdown scope and the content
-hash, which must stay in agreement (same rule as today).
-
----
-
-## PARITY-HEADERS-1 — realistic request headers (the free half of stealth)
-
-Correction to this table's earlier claim that stealth is wholly paid:
-residential proxies are, but header/fingerprint realism is not. Crawlee ships
-`got-scraping` and `fingerprint-suite` — open source — which generate
-consistent, browser-plausible header sets (accept-language, sec-ch-ua family,
-header ORDER) because half-real headers are a bot-wall tell on their own.
-
-We send `user-agent` + `accept` only (`src/lanes/own/index.ts` fetch call).
-
-**Spec.** One static, internally-consistent modern-browser header set for the
-direct-fetch rung, verbatim except the caller's UA. No dependency needed for
-the 80% version. Raises the fetch rung's pass rate, which keeps crawls off
-the render rung — free is only free if the cheap rung usually wins.
 
 ---
 
@@ -383,6 +349,7 @@ package has the context to judge it correctly.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | PARITY-HEADERS-1 + PARITY-READABILITY-1 | SHIPPED, specs removed per policy. Headers: accept-language + richer accept on the direct-fetch rung; accept-encoding left runtime-owned on purpose. Readability: paragraphs-vote-for-parent scoring as the no-semantic-tag fallback, 40% mass guardrail, ablation-verified. v0.2.0 tagged; update flow documented in EXISTING-PROJECTS.md. |
 | 2026-07-27 | VENDOR-POLICY-1 | SHIPPED same day as found: crawl() now runs eligibility+robots+same-site lane-independently; vendor-only crawls were previously entirely unvetted. Ablation-verified (4 tests red without gate). |
 | 2026-07-27 | cleanup | DELETED buildQuarantineTask + tests (remove-don't-archive): Fallow's curation-task shape, zero consumers here, belongs in Fallow at wiring time. |
 | 2026-07-27 | external-tools honesty | Firecrawl/ScrapeGraphAI/Crawlee audited at API/architecture level, NOT full source. Their free techniques we lack are now specs: PARITY-READABILITY-1, PARITY-HEADERS-1, CRAWL-RESUME-1. |
