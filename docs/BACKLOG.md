@@ -24,7 +24,7 @@ Measured against what the paid APIs actually do:
 | `Crawl-delay` compliance | **shipped** 2026-07-27 | Yes |
 | "Do I even need an LLM?" signal | **shipped** 2026-07-27 — vendors do NOT offer this | Yes |
 | Whole-site crawl, depth/limits | shipped | Yes |
-| Change tracking / caching | shipped (conditional GET + region hash) — arguably better than Firecrawl's `maxAge` | Yes |
+| Change tracking / caching | shipped (conditional GET + region hash + sitemap lastmod) — better than Firecrawl's `maxAge`: lastmod covers a whole site in ONE request | Yes |
 | JS rendering | shipped (local Chromium + own service) | Yes |
 | `/map` — fast whole-domain URL discovery | **PARITY-MAP-1** below | Yes |
 | Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
@@ -52,25 +52,6 @@ The vendors optimise **crawl** cost. Their API is stateless and per-call, so
 they structurally cannot do any of the below. We run in-process and hold state
 across runs, and the consumer's real bill is the LLM extraction AFTER the
 crawl — so this is where the leverage is.
-
----
-
-## BETTER-LASTMOD-1 — site-wide change detection in one request
-
-Sitemaps carry `<lastmod>` per URL. `fetch/sitemap-discovery.ts` fetches them
-and throws that field away.
-
-Conditional GET is one request per page to learn nothing changed. `lastmod` is
-**one request for all 500 pages**. For a scheduled re-crawl that is the
-difference between 500 round-trips and one, and no vendor offers it.
-
-**Spec.** Capture `lastmod` in `SitemapDiscoveryResult`; accept a
-`priorLastmod` map in `crawlSite` and skip any URL whose value has not moved.
-
-**Watch out:** `lastmod` is origin-supplied and frequently lies — plenty of
-CMSs stamp every URL with today's date. It may only ever be used to SKIP work,
-never to assert a page did change, and a caller must be able to turn it off.
-Pair it with the existing hash check rather than replacing that.
 
 ---
 
@@ -330,6 +311,7 @@ package has the context to judge it correctly.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | BETTER-LASTMOD-1 | SHIPPED, spec removed. SitemapEntry{url,lastmod}; crawlSite priorLastmod skips unfetched; returns lastmod + skippedByLastmod. Skip-only by design (lastmod lies). Ablation-verified. Live gap: rfc-editor publishes no lastmod, so real-sitemap extraction is fixture-covered, shape-only live. |
 | 2026-07-27 | CRAWL-FEED-1 | SHIPPED, spec removed. contentKind on CrawlPage; ICS/CSV/JSON/RSS/Atom/XML delivered verbatim; images+binaries still refused; guard runs on every kind. PDF split out as CRAWL-PDF-1. |
 | 2026-07-27 | review fixes | CACHE-POLICY-1 (cache read ran before the policy gate; cache is keyed on url+lanes, not target — a second target could read a page it was never allowed to fetch) and READABILITY-CHROME-1 (scoring ran before chrome removal, so a prose-heavy aside/nav could win and the later strip could not undo it). Both ablation-verified red first. |
 | 2026-07-27 | process | `npm run check` had been exiting 1 since the buildQuarantineTask cleanup left an orphan test file with no suite; masked by grepping the "Tests" line, which shows passing count and hides a failed SUITE. Read the exit code. |

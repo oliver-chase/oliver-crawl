@@ -171,6 +171,19 @@ await check('sitemap discovery on a real site', async () => {
   return `${found.urls.length} urls`;
 });
 
+await check('sitemap lastmod is captured from a real site', async () => {
+  // BETTER-LASTMOD-1: one request answers "which pages changed" for the whole
+  // site. Real sitemaps vary — many publish no lastmod at all — so this
+  // asserts the SHAPE is right and reports whether this origin publishes it.
+  const found = await discoverSitemapUrls(RFC, { userAgent: 'OliverCrawl-LiveCheck/0.1', maxUrls: 10, dnsLookup: dns });
+  assert(found.entries.length > 0, `no sitemap entries: ${found.reason}`);
+  assert(found.entries.length === found.urls.length, 'entries and urls disagree');
+  assert(found.entries.every((e) => typeof e.url === 'string'), 'entry missing url');
+  assert(found.entries.every((e) => e.lastmod === null || typeof e.lastmod === 'string'), 'bad lastmod type');
+  const withMod = found.entries.filter((e) => e.lastmod).length;
+  return `${found.entries.length} entries, ${withMod} with lastmod`;
+});
+
 await check('whole-site link following from ONE seed', async () => {
   const run = await crawlSite(crawler, RFC, {
     seeds: ['https://www.rfc-editor.org/'],

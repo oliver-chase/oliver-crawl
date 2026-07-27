@@ -98,6 +98,27 @@ Two mechanisms, because origins differ:
 
 Both use the same loop: store `result.validators`, pass them back as `priorValidators`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire it with `onSignals` (push) or the return value (pull) — see [ADOPTION.md](ADOPTION.md).
 
+### Site-wide change detection in one request
+
+A sitemap's `<lastmod>` tells you which pages moved without fetching any of
+them. Conditional GET answers the same question one request per page:
+
+```ts
+const run = await crawlSite(crawler, target, {
+  useSitemap: true,
+  priorLastmod: stored.lastmod,   // from last run
+});
+
+run.lastmod;           // { [url]: lastmod } — store for next time
+run.skippedByLastmod;  // never fetched at all
+```
+
+Used only to **skip**. `<lastmod>` is origin-supplied and frequently a lie —
+plenty of CMSs stamp every URL with today's date — so a *changed* value proves
+nothing and simply lets the page through to the normal 304 and content-hash
+checks, which are trustworthy. A page publishing no `<lastmod>` is always
+crawled. Omit `priorLastmod` to disable entirely.
+
 ### Discovering what to crawl (free)
 
 ```ts

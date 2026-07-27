@@ -27,6 +27,7 @@
 import { resolveConfig, availableVendorRungs, configFromEnv, DEFAULT_USER_AGENT } from './core/config.js';
 import { crawlWithOwnLane } from './lanes/own/index.js';
 import { crawlWithVendorLane } from './lanes/vendor/index.js';
+import type { SitemapEntry } from './fetch/sitemap-discovery.js';
 import { approveCrawlPolicy } from './lanes/own/index.js';
 import { search, availableSearchProviders } from './search/index.js';
 import { readPageCache, writePageCache } from './core/page-cache.js';
@@ -40,6 +41,12 @@ export type Crawler = {
   /** Search the web. A different surface from crawling — query in, URLs out —
    *  and always paid, so it reports WHY it came back empty. */
   search: (query: string, options?: SearchOptions) => Promise<SearchOutcome>;
+  /**
+   * Sitemap entries WITH their `<lastmod>` (BETTER-LASTMOD-1). Same request
+   * as discoverSeeds — goes through the crawler so it uses the configured
+   * User-Agent and DNS resolver, not a second set.
+   */
+  discoverSeedEntries: (target: CrawlTarget, maxUrls?: number) => Promise<SitemapEntry[]>;
   /** Which vendor rungs are usable with the current keys. Empty is normal
    *  and fine — it just means the own lane is the only one available. */
   vendorRungs: () => string[];
@@ -64,6 +71,14 @@ export function createCrawler(config: CrawlConfig): Crawler {
         ...(maxUrls === undefined ? {} : { maxUrls }),
       });
       return found.urls;
+    },
+    discoverSeedEntries: async (target, maxUrls) => {
+      const found = await discoverSitemapUrls(target, {
+        userAgent: resolved.userAgent,
+        dnsLookup: resolved.dnsLookup,
+        ...(maxUrls === undefined ? {} : { maxUrls }),
+      });
+      return found.entries;
     },
     search: (query, options) => search(query, resolved, options),
 
@@ -189,7 +204,7 @@ export {
 export type { FeedDiscoveryResult } from './fetch/feed-discovery.js';
 export { findNextPageUrl, discoverPaginatedUrls } from './extract/pagination-discovery.js';
 export { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
-export type { SitemapDiscoveryResult } from './fetch/sitemap-discovery.js';
+export type { SitemapDiscoveryResult, SitemapEntry } from './fetch/sitemap-discovery.js';
 export { renderViaLocalChromium } from './fetch/local-render.js';
 export { createDohLookup, DEFAULT_DOH_ENDPOINT } from './fetch/host-policy.js';
 export { renderViaService, renderServiceFrom } from './fetch/browser-render.js';
