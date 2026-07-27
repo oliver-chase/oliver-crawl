@@ -87,17 +87,32 @@ Sequential by design (one request at a time): hammering a small site in parallel
 
 ### Cheap re-crawls (the point of scheduled crawling)
 
-`crawlSite` returns `result.validators` — an ETag/Last-Modified per URL. Store them, pass them back as `priorValidators` next run, and unchanged pages answer **304**: nothing fetched, nothing parsed, nothing charged, reported under `notModified`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire the loop with `onSignals` (push) or the return value (pull) — see [docs/ADOPTION.md](docs/ADOPTION.md).
+Two mechanisms, because origins differ:
+
+- **Origin sends ETag/Last-Modified** → conditional GET → **304, nothing fetched at all**, reported under `notModified`.
+- **Origin sends nothing** (most small sites) → the **content-region hash** (nav/footer-insensitive) is compared → the page is fetched, but `unchanged` tells you the real content is identical so extraction/LLM can be skipped.
+
+Both use the same loop: store `result.validators`, pass them back as `priorValidators`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire it with `onSignals` (push) or the return value (pull) — see [docs/ADOPTION.md](docs/ADOPTION.md).
 
 ### Discovering what to crawl (free)
 
 ```ts
-import { discoverSitemapUrls } from '@oliver/crawl-core';
-const found = await discoverSitemapUrls(target, { userAgent: 'MyBot/1.0', maxUrls: 100 });
-const run = await crawlSite(crawler, target, { seeds: found.urls });
+// Simplest: let crawlSite find the pages itself.
+const run = await crawlSite(crawler, target, { useSitemap: true, maxPages: 50 });
+
+// Or discover explicitly:
+const seeds = await crawler.discoverSeeds(target, 100);
 ```
 
-Reads `/sitemap.xml` (following index files one level), filtered to same-site https URLs — a sitemap is origin-controlled content and gets no more trust than a page's own links.
+Reads `/sitemap.xml` (following index files one level), filtered to same-site https URLs — a sitemap is origin-controlled content and gets no more trust than a page's own links. No sitemap falls back to `baseUrl`.
+
+### Letting the crawler govern itself
+
+```ts
+const crawler = createCrawler({ userAgent: 'MyBot/1.0', autoRobots: true });
+```
+
+Without this, the crawler trusts the `robotsPolicy` you set on each target (and fails closed on `'unknown'`). With it, an unknown posture is resolved by actually fetching and parsing robots.txt — **cached per host**, so it costs one request per host, not per page. An explicit posture you set is never overridden.
 
 ### Search
 
@@ -216,7 +231,7 @@ npm run build     # emit dist/
 
 ## Status
 
-Feature-complete and hardened for single-page and multi-page crawling: 235 tests, typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites. Both lanes, the full free-first rung ladder (fetch → local render → remote render → Jina), JSON-LD, conditional GET with a working re-crawl loop, cheap-change probing, robots.txt, sitemap + feed + pagination discovery, recipe replay, the multi-page orchestrator, and web search. See [docs/ADOPTION.md](docs/ADOPTION.md) to use it in a repo, [docs/LANES.md](docs/LANES.md) for the lane model, [docs/MIGRATION.md](docs/MIGRATION.md) for provenance.
+Feature-complete and hardened: 245 tests, typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [docs/ADOPTION.md](docs/ADOPTION.md) to use it in a repo, [docs/LANES.md](docs/LANES.md) for the lane model.
 
 ## License
 

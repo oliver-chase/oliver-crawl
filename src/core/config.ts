@@ -76,6 +76,7 @@ function pick(env: EnvBag, ...names: string[]): string | undefined {
  *   OLIVER_CRAWL_VENDOR_ORDER   (comma-separated)
  *   OLIVER_CRAWL_SEARCH_ORDER   (comma-separated)
  *   OLIVER_CRAWL_LOCAL_RENDER=1 (free local-Chromium render rung)
+ *   OLIVER_CRAWL_AUTO_ROBOTS=1  (resolve unknown robots posture for real)
  *
  * Every one is optional. A missing vendor key disables that rung only — the
  * own lane never needs a key and keeps working regardless, which is the whole
@@ -96,6 +97,7 @@ export function configFromEnv(env: EnvBag = safeProcessEnv(), overrides: Partial
     userAgent: env.OLIVER_CRAWL_USER_AGENT || DEFAULT_USER_AGENT,
     vendor,
     ...(env.OLIVER_CRAWL_LOCAL_RENDER === '1' ? { localRender: true } : {}),
+    ...(env.OLIVER_CRAWL_AUTO_ROBOTS === '1' ? { autoRobots: true } : {}),
     ...(order && order.length > 0 ? { vendorRungOrder: order } : {}),
     ...(searchOrder && searchOrder.length > 0 ? { searchProviderOrder: searchOrder } : {}),
     ...overrides,

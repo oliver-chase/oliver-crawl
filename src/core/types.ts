@@ -31,7 +31,11 @@ export type CrawlTarget = {
   name?: string;
   /** Robots posture the CONSUMER has already decided for this target. The
    *  package enforces it; it does not overrule it. 'unknown' is treated as
-   *  not-allowed by the default policy — fail closed. */
+   *  not-allowed by the default policy — fail closed.
+   *
+   *  Leave it UNSET (or 'unknown') and turn on `autoRobots` to have the
+   *  crawler fetch and evaluate robots.txt itself instead of trusting your
+   *  bookkeeping — see CrawlConfig.autoRobots. */
   robotsPolicy?: 'allow' | 'disallow' | 'conditional' | 'unknown';
   /** Consumer-defined eligibility flag. False short-circuits every fetch. */
   active?: boolean;
@@ -179,6 +183,18 @@ export type CrawlConfig = {
    * playwright degrades silently to the next rung.
    */
   localRender?: boolean;
+  /**
+   * Fetch and evaluate robots.txt automatically when a target's own
+   * robotsPolicy is 'unknown' (or unset), instead of failing closed on the
+   * caller's missing bookkeeping.
+   *
+   * Off by default, deliberately: a consumer that already tracks robots
+   * posture in its own database should keep that as the source of truth, and
+   * silently adding a network call per target would be a surprise. Turned on,
+   * it makes the crawler self-governing — the result is cached per host for
+   * the process lifetime, so it costs one request per host, not per page.
+   */
+  autoRobots?: boolean;
   /** Default caps, overridable per request. */
   defaults?: Required<Pick<CrawlOptions, 'maxTextChars' | 'timeoutMs' | 'maxPages'>>;
 };

@@ -28,6 +28,7 @@ import { resolveConfig, availableVendorRungs, configFromEnv, DEFAULT_USER_AGENT 
 import { crawlWithOwnLane } from './lanes/own/index.js';
 import { crawlWithVendorLane } from './lanes/vendor/index.js';
 import { search, availableSearchProviders } from './search/index.js';
+import { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
 import type { SearchOutcome } from './search/index.js';
 import type { CrawlConfig, CrawlOptions, CrawlResult, CrawlTarget, LaneName } from './core/types.js';
 
@@ -42,6 +43,10 @@ export type Crawler = {
   vendorRungs: () => string[];
   /** Which search providers are usable with the current keys. */
   searchProviders: () => string[];
+  /** Discover a target's pages from its own /sitemap.xml, using THIS
+   *  crawler's User-Agent and DNS resolver. Free. Empty list when the site
+   *  has no sitemap — a normal condition, not an error. */
+  discoverSeeds: (target: CrawlTarget, maxUrls?: number) => Promise<string[]>;
 };
 
 export function createCrawler(config: CrawlConfig): Crawler {
@@ -50,6 +55,14 @@ export function createCrawler(config: CrawlConfig): Crawler {
   return {
     vendorRungs: () => availableVendorRungs(resolved),
     searchProviders: () => availableSearchProviders(resolved),
+    discoverSeeds: async (target, maxUrls) => {
+      const found = await discoverSitemapUrls(target, {
+        userAgent: resolved.userAgent,
+        dnsLookup: resolved.dnsLookup,
+        ...(maxUrls === undefined ? {} : { maxUrls }),
+      });
+      return found.urls;
+    },
     search: (query, options) => search(query, resolved, options),
 
     async crawl(target, url, options = {}) {

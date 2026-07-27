@@ -35,13 +35,21 @@ export type SiteCrawlOptions = CrawlOptions & {
   /** Per-URL conditional-GET validators from a previous run, keyed by URL —
    *  exactly the shape `result.validators` (and `config.onSignals`) hands
    *  back, so the round-trip is: crawl → persist → pass here next run. */
-  priorValidators?: Record<string, { etag?: string | null; lastModified?: string | null }>;
+  priorValidators?: Record<
+    string,
+    { etag?: string | null; lastModified?: string | null; contentRegionSha256?: string }
+  >;
   /** Pause between page fetches, ms. Sequential is already the default;
    *  this adds breathing room for small origins. 0 = none. */
   politenessDelayMs?: number;
   /** Consumer id for this target, passed to onSignals so the consumer knows
    *  which of its records the validators belong to. Defaults to baseUrl. */
   targetId?: string;
+  /** Discover seeds from the site's own /sitemap.xml when no seeds were
+   *  given. Free, and far more accurate than guessing paths — the site is
+   *  telling you what it has. Falls back to baseUrl if there is no sitemap. */
+  useSitemap?: boolean;
+
   /** Persistence hook for this run's fresh validators — same data as
    *  `result.validators`, delivered as a callback for consumers that prefer
    *  push over return-value plumbing. Fire-and-forget: a throwing sink never
@@ -67,8 +75,18 @@ export type SiteCrawlResult = {
   /** Fresh conditional-GET validators per URL from THIS run. Persist these
    *  and pass them back as `priorValidators` next run — that round-trip is
    *  what turns a scheduled re-crawl of an unchanged page into a free 304.
-   *  Also delivered via config.onSignals when set. */
-  validators: Record<string, { etag: string | null; lastModified: string | null; bodySha256: string }>;
+   *  Also delivered via onSignals when set. `contentRegionSha256` is the
+   *  nav/footer-INSENSITIVE hash: it answers "did the real content change"
+   *  for the many origins that send no ETag at all. */
+  validators: Record<
+    string,
+    { etag: string | null; lastModified: string | null; bodySha256: string; contentRegionSha256: string }
+  >;
+  /** URLs that WERE re-fetched (the origin gave no 304) but whose meaningful
+   *  content is byte-identical to last run, by content-region hash. A
+   *  consumer can skip re-extraction/re-LLM for these — the fetch was
+   *  unavoidable, the expensive downstream work is not. */
+  unchanged: string[];
   startedAt: string;
   finishedAt: string;
 };
@@ -109,6 +127,7 @@ export async function crawlSite(
   const notModified: string[] = [];
   const failures: SiteCrawlFailure[] = [];
   const validators: SiteCrawlResult['validators'] = {};
+  const unchanged: string[] = [];
 
   const done = (truncated: boolean): SiteCrawlResult => {
     // Deliver fresh validators to the consumer's persistence hook, fire-and-
@@ -120,7 +139,7 @@ export async function crawlSite(
         // deliberately swallowed
       }
     }
-    return { pages, notModified, failures, truncated, validators, startedAt, finishedAt: new Date().toISOString() };
+    return { pages, notModified, failures, truncated, validators, unchanged, startedAt, finishedAt: new Date().toISOString() };
   };
 
   // Eligibility is a property of the TARGET, not of any one URL — check it
@@ -139,7 +158,17 @@ export async function crawlSite(
   // Seeds: explicit list, else the base URL. Each is validated same-site up
   // front so a bad seed is reported as itself rather than surfacing later as
   // a confusing mid-run failure.
-  const rawSeeds = options.seeds ?? target.seeds ?? [target.baseUrl];
+  let rawSeeds = options.seeds ?? target.seeds;
+  if (!rawSeeds && options.useSitemap) {
+    // Free page discovery: the site's own sitemap beats guessing paths.
+    // Goes through the crawler so it uses the SAME User-Agent and DNS
+    // resolver as every other request — a discovery call that resolved DNS
+    // differently from the crawl would be both inconsistent and, in tests,
+    // an unstubbed network call.
+    const discovered = await crawler.discoverSeeds(target, maxPages);
+    if (discovered.length > 0) rawSeeds = discovered;
+  }
+  rawSeeds = rawSeeds ?? [target.baseUrl];
   const queue: string[] = [];
   for (const seed of rawSeeds) {
     try {
@@ -184,13 +213,30 @@ export async function crawlSite(
           // The stored validators are still current — carry them forward so
           // the consumer's next run keeps getting free 304s.
           if (prior?.etag || prior?.lastModified) {
-            validators[url] = { etag: prior.etag ?? null, lastModified: prior.lastModified ?? null, bodySha256: '' };
+            validators[url] = {
+              etag: prior.etag ?? null,
+              lastModified: prior.lastModified ?? null,
+              bodySha256: '',
+              contentRegionSha256: prior.contentRegionSha256 ?? '',
+            };
           }
           break;
         }
         pages.push(...result.pages);
         for (const p of result.pages) {
-          validators[p.url] = { etag: p.httpEtag, lastModified: p.httpLastModified, bodySha256: p.bodySha256 };
+          // CRAWL-UNCHANGED-1: the content-region hash was computed on every
+          // page and then thrown away. Comparing it against last run's is
+          // what makes re-crawls cheap for origins that send NO ETag (most
+          // small sites) — the page had to be fetched, but nothing
+          // downstream has to re-run.
+          const priorRegion = options.priorValidators?.[p.url]?.contentRegionSha256;
+          if (priorRegion && priorRegion === p.contentRegionSha256) unchanged.push(p.url);
+          validators[p.url] = {
+            etag: p.httpEtag,
+            lastModified: p.httpLastModified,
+            bodySha256: p.bodySha256,
+            contentRegionSha256: p.contentRegionSha256,
+          };
         }
 
         // Pagination is discovered from the page we just read, so it can only
