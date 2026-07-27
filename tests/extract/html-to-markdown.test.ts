@@ -160,3 +160,36 @@ describe('PARITY-READABILITY-1 — div-soup pages without semantic tags', () => 
     expect(out).toContain('stray');
   });
 });
+
+describe('READABILITY-CHROME-1 — scoring must ignore page furniture', () => {
+  test('a prose-heavy sidebar never wins the vote', () => {
+    // The aside carries MORE prose than the content div. Scoring that ignores
+    // chrome hands back the sidebar as the page's main content.
+    const out = md(`<body>
+      <aside>
+        <p>Our venue has served the riverside district since nineteen seventy two, hosting weddings and civic functions throughout the year.</p>
+        <p>Sign up to the mailing list for occasional updates about upcoming shows, volunteer opportunities and seasonal closures.</p>
+      </aside>
+      <div id="content">
+        <p>The summer concert series runs every Friday evening in July.</p>
+      </div>
+    </body>`);
+
+    expect(out).toContain('summer concert series');
+    expect(out).not.toContain('nineteen seventy two');
+    expect(out).not.toContain('mailing list');
+  });
+
+  test('a prose-heavy nav never wins the vote', () => {
+    const out = md(`<body>
+      <nav>
+        <p>Browse concerts, browse theatre, browse comedy, browse family shows and browse seasonal events here.</p>
+        <p>Accessibility information, parking information, ticketing information and contact information all live here.</p>
+      </nav>
+      <div><p>Doors open at six on Friday.</p></div>
+    </body>`);
+
+    expect(out).toContain('Doors open at six');
+    expect(out).not.toContain('Browse concerts');
+  });
+});

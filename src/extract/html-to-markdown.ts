@@ -98,6 +98,14 @@ function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
 
   $('p').each((_, p) => {
     const $p = $(p);
+    // READABILITY-CHROME-1 (2026-07-27, found in review): a paragraph inside
+    // nav/header/footer/aside is furniture and must not vote. Without this a
+    // prose-heavy sidebar outscores a short real article and is returned AS
+    // the main region — and because the winner is then a DESCENDANT of the
+    // chrome element, the later chrome strip cannot undo it (it removes
+    // chrome inside the scope, not the scope's own ancestors).
+    if ($p.closest(CHROME_SELECTOR).length > 0) return;
+
     const text = $p.text().trim();
     if (text.length < 25) return; // too short to be prose
 
