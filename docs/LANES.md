@@ -39,9 +39,16 @@ Two independent mechanisms, because origins differ:
 | Origin sends | Mechanism | Result |
 |---|---|---|
 | ETag / Last-Modified | Conditional GET | **304 — nothing fetched at all.** Free |
-| Nothing (most small sites) | Content-region hash | Page is fetched, but `unchanged` tells you the meaningful content is identical, so extraction/LLM can be skipped |
+| Nothing (most small sites) | Content hash | Page is fetched, but `unchanged` tells you the meaningful content is identical, so extraction/LLM can be skipped |
 
-The content-region hash ignores nav, header, footer and script noise — a cookie-banner tweak does not read as a content change. Both need the same loop: store `result.validators`, pass them back as `priorValidators`.
+Two hashes are stored per page, and the comparison picks the right one:
+
+- **`contentRegionSha256`** — structural, ignores nav/header/footer/script, so a cookie-banner tweak is not a content change. The better signal, but **only computable from HTML**, so it is empty on text-only rungs (Jina, vendor markdown).
+- **`textSha256`** — hash of the delivered text. Always present, so always comparable, at the cost of moving when nav text changes.
+
+`unchanged` uses the structural hash only when **both** runs have it, and falls back to the text hash otherwise. Comparing a structural hash against a text hash across a rung change would report a false content change — which is exactly the bug this design replaced.
+
+Both need the same loop: store `result.validators`, pass them back as `priorValidators`.
 
 ## Search is not a lane
 

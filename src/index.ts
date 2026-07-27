@@ -78,7 +78,7 @@ export function createCrawler(config: CrawlConfig): Crawler {
         const result =
           lane === 'own'
             ? await crawlWithOwnLane(target, url, resolved, options)
-            : await crawlWithVendorLane(target, url, resolved, options);
+            : await crawlWithVendorLane(url, resolved, options);
 
         if (result.ok) return result;
 

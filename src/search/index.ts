@@ -19,6 +19,7 @@
 // what a corroboration query actually wants.
 
 import type { ResolvedConfig } from '../core/config.js';
+import { emitUsage } from '../core/usage.js';
 import { isSafeHttpUrl } from '../core/url-safety.js';
 
 export type SearchResult = {
@@ -157,15 +158,15 @@ export async function search(
       const latencyMs = Date.now() - started;
 
       if (results.length > 0) {
-        emit(config, { lane: 'vendor', rung: name, kind: 'search', ok: true, latencyMs });
+        emitUsage(config, { lane: 'vendor', rung: name, kind: 'search', ok: true, latencyMs });
         return { ok: true, results, provider: name };
       }
 
       lastDetail = `${name} returned no results`;
-      emit(config, { lane: 'vendor', rung: name, kind: 'search', ok: true, latencyMs });
+      emitUsage(config, { lane: 'vendor', rung: name, kind: 'search', ok: true, latencyMs });
     } catch (error) {
       lastDetail = error instanceof Error ? error.message : String(error);
-      emit(config, { lane: 'vendor', rung: name, kind: 'search', ok: false, latencyMs: Date.now() - started, error: lastDetail });
+      emitUsage(config, { lane: 'vendor', rung: name, kind: 'search', ok: false, latencyMs: Date.now() - started, error: lastDetail });
       // Fall through to the next provider — one outage is not a dead end.
     }
   }
@@ -173,10 +174,3 @@ export async function search(
   return { ok: false, reason: 'no_results', detail: lastDetail };
 }
 
-function emit(config: ResolvedConfig, event: Parameters<NonNullable<ResolvedConfig['onUsage']>>[0]): void {
-  try {
-    config.onUsage?.(event);
-  } catch {
-    // a logging sink must never break a search
-  }
-}

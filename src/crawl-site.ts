@@ -37,7 +37,7 @@ export type SiteCrawlOptions = CrawlOptions & {
    *  back, so the round-trip is: crawl → persist → pass here next run. */
   priorValidators?: Record<
     string,
-    { etag?: string | null; lastModified?: string | null; contentRegionSha256?: string }
+    { etag?: string | null; lastModified?: string | null; contentRegionSha256?: string; textSha256?: string }
   >;
   /** Pause between page fetches, ms. Sequential is already the default;
    *  this adds breathing room for small origins. 0 = none. */
@@ -80,7 +80,15 @@ export type SiteCrawlResult = {
    *  for the many origins that send no ETag at all. */
   validators: Record<
     string,
-    { etag: string | null; lastModified: string | null; bodySha256: string; contentRegionSha256: string }
+    {
+      etag: string | null;
+      lastModified: string | null;
+      bodySha256: string;
+      /** Structural, nav-insensitive. EMPTY on text-only rungs (Jina/vendor). */
+      contentRegionSha256: string;
+      /** Always set — the universally comparable signal. */
+      textSha256: string;
+    }
   >;
   /** URLs that WERE re-fetched (the origin gave no 304) but whose meaningful
    *  content is byte-identical to last run, by content-region hash. A
@@ -218,24 +226,35 @@ export async function crawlSite(
               lastModified: prior.lastModified ?? null,
               bodySha256: '',
               contentRegionSha256: prior.contentRegionSha256 ?? '',
+              textSha256: prior.textSha256 ?? '',
             };
           }
           break;
         }
         pages.push(...result.pages);
         for (const p of result.pages) {
-          // CRAWL-UNCHANGED-1: the content-region hash was computed on every
-          // page and then thrown away. Comparing it against last run's is
-          // what makes re-crawls cheap for origins that send NO ETag (most
-          // small sites) — the page had to be fetched, but nothing
-          // downstream has to re-run.
-          const priorRegion = options.priorValidators?.[p.url]?.contentRegionSha256;
-          if (priorRegion && priorRegion === p.contentRegionSha256) unchanged.push(p.url);
+          // CRAWL-UNCHANGED-1: these hashes were computed on every page and
+          // then thrown away. Comparing against last run is what makes
+          // re-crawls cheap for origins that send NO ETag (most small sites):
+          // the page had to be fetched, but extraction/LLM need not re-run.
+          //
+          // CRAWL-HASH-1: compare LIKE WITH LIKE. contentRegionSha256 is
+          // structural (HTML-only) and is the better signal, but it is empty
+          // on text-only rungs — comparing it across a rung change would
+          // report a false content change. Prefer it only when both sides
+          // have it; otherwise fall back to the always-present text hash.
+          const prev = options.priorValidators?.[p.url];
+          const bothStructural = Boolean(prev?.contentRegionSha256 && p.contentRegionSha256);
+          const same = bothStructural
+            ? prev!.contentRegionSha256 === p.contentRegionSha256
+            : Boolean(prev?.textSha256 && prev.textSha256 === p.textSha256);
+          if (same) unchanged.push(p.url);
           validators[p.url] = {
             etag: p.httpEtag,
             lastModified: p.httpLastModified,
             bodySha256: p.bodySha256,
             contentRegionSha256: p.contentRegionSha256,
+            textSha256: p.textSha256,
           };
         }
 

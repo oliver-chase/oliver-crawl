@@ -46,6 +46,7 @@ import { fetchViaJina } from '../../fetch/jina-fetch.js';
 import { renderServiceFrom, renderViaService } from '../../fetch/browser-render.js';
 import { renderViaLocalChromium } from '../../fetch/local-render.js';
 import { evaluateRobotsForUrl } from '../../fetch/robots-check.js';
+import { emitUsage } from '../../core/usage.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
 import { computeContentRegionHash } from '../../extract/content-region-hash.js';
 import { extractInlineScriptContent, shouldRecoverFromScripts } from '../../extract/spa-content-extract.js';
@@ -53,16 +54,12 @@ import { sha256Hex } from '../../core/hash.js';
 import type { ResolvedConfig } from '../../core/config.js';
 import type { CrawlOptions, CrawlPage, CrawlResult, CrawlTarget, PageLink } from '../../core/types.js';
 
-const MAX_OUTBOUND_HOSTS = 25;
-const MAX_LINKS = 200;
 
-// CRAWL-HARDEN-1: hard cap on bytes read from any origin. Without one, a
-// hostile or misconfigured origin streaming an endless (or multi-hundred-MB)
-// body ties up memory until the process dies — response.text() reads
-// EVERYTHING before returning. 2 MB is far above any real event/listing page
-// and far below anything that could hurt; the sanitiser's char cap protects
-// the LLM, this protects the crawler itself.
-const MAX_BODY_BYTES = 2_000_000;
+// CRAWL-HARDEN-1: bytes read from any origin are capped (config.limits
+// .maxBodyBytes, default 2 MB). Without a cap, a hostile or misconfigured
+// origin streaming an endless body ties up memory until the process dies —
+// response.text() reads EVERYTHING before returning. The sanitiser's char
+// cap protects the LLM; this protects the crawler itself.
 
 // CRAWL-ROBOTS-1: robots.txt was ported but nothing ever CALLED it — the lane
 // trusted whatever robotsPolicy the caller set, so a "governed crawler" was
@@ -153,7 +150,7 @@ export async function crawlWithOwnLane(
     await assertHostResolvesToPublicAddress(requestUrl.hostname, config.dnsLookup);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    emit(config, { lane: 'own', rung: 'policy', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    emitUsage(config, { lane: 'own', rung: 'policy', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return { ok: false, reason: 'blocked', detail, lane: 'own' };
   }
 
@@ -167,32 +164,32 @@ export async function crawlWithOwnLane(
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    emit(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // Direct fetch failed — try the free keyless fallback before giving up.
-    return jinaFallback(target, url, config, options, started, detail);
+    return jinaFallback(url, config, options, started, detail);
   }
 
   // A 304 is the whole point of sending validators: nothing changed, nothing
   // to parse, nothing charged. Reported distinctly from "empty".
   if (response.status === 304) {
-    emit(config, { lane: 'own', rung: 'conditional', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+    emitUsage(config, { lane: 'own', rung: 'conditional', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
     return { ok: true, pages: [], notModified: true };
   }
 
   if (!response.ok) {
     const detail = `HTTP ${response.status}`;
-    emit(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-    return jinaFallback(target, url, config, options, started, detail);
+    emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    return jinaFallback(url, config, options, started, detail);
   }
 
   const contentType = response.headers.get('content-type') || '';
   if (!/text\/html|application\/xhtml|text\/plain/i.test(contentType)) {
     const detail = `Unsupported content-type: ${contentType || 'unknown'}`;
-    emit(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return { ok: false, reason: 'empty', detail, lane: 'own' };
   }
 
-  const html = await readBodyCapped(response, MAX_BODY_BYTES);
+  const html = await readBodyCapped(response, config.limits.maxBodyBytes);
   const page = await buildPage({
     url: response.url || requestUrl.toString(),
     html,
@@ -203,11 +200,13 @@ export async function crawlWithOwnLane(
     maxTextChars,
     rung: 'fetch',
     includeHtml: options.includeHtml ?? false,
+    maxLinks: config.limits.maxLinksPerPage,
+    maxOutboundHosts: config.limits.maxOutboundHosts,
   });
 
   if (page === 'quarantined') {
     const detail = 'Content tripped the prompt-injection guard and was quarantined.';
-    emit(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return { ok: false, reason: 'quarantined', detail, lane: 'own' };
   }
 
@@ -216,10 +215,10 @@ export async function crawlWithOwnLane(
     // service first (infrastructure we control), then the free Jina rung.
     const rendered = await renderFallback(url, config, options, started);
     if (rendered) return rendered;
-    return jinaFallback(target, url, config, options, started, 'No visible text in the served HTML');
+    return jinaFallback(url, config, options, started, 'No visible text in the served HTML');
   }
 
-  emit(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+  emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
   return { ok: true, pages: [page] };
 }
 
@@ -250,13 +249,15 @@ async function renderFallback(
       maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
       rung: 'local-render',
       includeHtml: options.includeHtml ?? false,
+      maxLinks: config.limits.maxLinksPerPage,
+      maxOutboundHosts: config.limits.maxOutboundHosts,
     });
     if (localPage === 'quarantined') {
-      emit(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
+      emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
       return { ok: false, reason: 'quarantined', detail: 'Locally rendered content tripped the prompt-injection guard.', lane: 'own' };
     }
     if (localPage.text.trim()) {
-      emit(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+      emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
       return { ok: true, pages: [localPage] };
     }
     // Rendered but still empty — fall through to the remote service.
@@ -278,10 +279,12 @@ async function renderFallback(
       maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
       rung: 'browser-render',
       includeHtml: options.includeHtml ?? false,
+      maxLinks: config.limits.maxLinksPerPage,
+      maxOutboundHosts: config.limits.maxOutboundHosts,
     });
 
     if (page === 'quarantined') {
-      emit(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
+      emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
       return { ok: false, reason: 'quarantined', detail: 'Rendered content tripped the prompt-injection guard.', lane: 'own' };
     }
 
@@ -289,11 +292,11 @@ async function renderFallback(
     // fall through to Jina rather than returning an empty page.
     if (!page.text.trim()) return null;
 
-    emit(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started });
+    emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started });
     return { ok: true, pages: [page] };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    emit(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return null; // broken render service must not end the crawl — Jina may still work
   }
 }
@@ -301,7 +304,6 @@ async function renderFallback(
 /** Free, keyless last resort — see fetch/jina-fetch.ts for why it clears
  *  bot walls the direct fetch cannot. */
 async function jinaFallback(
-  target: CrawlTarget,
   url: string,
   config: ResolvedConfig,
   options: CrawlOptions,
@@ -312,7 +314,7 @@ async function jinaFallback(
   try {
     const jina = await fetchViaJina(url);
     if (!jina || !jina.text.trim()) {
-      emit(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: 'no content' });
+      emitUsage(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: 'no content' });
       return { ok: false, reason: 'unreachable', detail: priorDetail, lane: 'own' };
     }
 
@@ -321,7 +323,7 @@ async function jinaFallback(
       return { ok: false, reason: 'quarantined', detail: 'Prompt-injection signals in fallback content.', lane: 'own' };
     }
 
-    emit(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+    emitUsage(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
     return {
       ok: true,
       pages: [
@@ -331,7 +333,10 @@ async function jinaFallback(
           title: jina.title,
           contentType: 'text/markdown',
           bodySha256: await sha256Hex(jina.text),
-          contentRegionSha256: await sha256Hex(sanitized.text),
+          // Text-only rung: no HTML structure to strip, so no comparable
+          // structural hash exists. Empty rather than a lookalike (CRAWL-HASH-1).
+          contentRegionSha256: '',
+          textSha256: await sha256Hex(sanitized.text),
           httpEtag: null,
           httpLastModified: null,
           jsonLd: [],
@@ -344,7 +349,7 @@ async function jinaFallback(
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    emit(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    emitUsage(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return { ok: false, reason: 'unreachable', detail: priorDetail, lane: 'own' };
   }
 }
@@ -416,6 +421,8 @@ async function buildPage(input: {
   maxTextChars: number;
   rung: string;
   includeHtml: boolean;
+  maxLinks: number;
+  maxOutboundHosts: number;
 }): Promise<CrawlPage | 'quarantined'> {
   // ONE parse (CRAWL-PERF-1, found in self-audit): the first version loaded
   // the document once for text, then RELOADED it once per JSON-LD script tag
@@ -465,8 +472,8 @@ async function buildPage(input: {
 
     const sameSite = resolved.hostname.replace(/^www\./, '') === input.baseHost.replace(/^www\./, '');
     if (sameSite) {
-      if (links.length < MAX_LINKS) links.push({ url: resolved.toString(), text: $(el).text().trim().slice(0, 200) });
-    } else if (outbound.size < MAX_OUTBOUND_HOSTS) {
+      if (links.length < input.maxLinks) links.push({ url: resolved.toString(), text: $(el).text().trim().slice(0, 200) });
+    } else if (outbound.size < input.maxOutboundHosts) {
       outbound.add(resolved.hostname);
     }
   });
@@ -479,6 +486,7 @@ async function buildPage(input: {
     contentType: input.contentType,
     bodySha256: await sha256Hex(input.html),
     contentRegionSha256: await computeContentRegionHash(input.html),
+    textSha256: await sha256Hex(sanitized.text),
     httpEtag: input.etag,
     httpLastModified: input.lastModified,
     jsonLd,
@@ -489,12 +497,3 @@ async function buildPage(input: {
   };
 }
 
-/** Usage emission must never break a crawl — a consumer's sink is not
- *  trusted to be fast or total. */
-function emit(config: ResolvedConfig, event: Parameters<NonNullable<ResolvedConfig['onUsage']>>[0]): void {
-  try {
-    config.onUsage?.(event);
-  } catch {
-    // deliberately swallowed
-  }
-}

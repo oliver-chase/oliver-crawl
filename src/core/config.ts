@@ -18,6 +18,7 @@
 // vendors' own docs use and what existing repos already have set, so adopting
 // this package does not mean renaming working env vars.
 
+import { createDohLookup } from '../fetch/host-policy.js';
 import {
   DEFAULT_MAX_PAGES,
   DEFAULT_MAX_TEXT_CHARS,
@@ -29,6 +30,16 @@ import {
 export type ResolvedConfig = CrawlConfig & {
   defaults: Required<NonNullable<CrawlConfig['defaults']>>;
   vendorRungOrder: string[];
+  limits: Required<NonNullable<CrawlConfig['limits']>>;
+};
+
+/** Safety/scale defaults. Exposed as config because the right value depends
+ *  on the pages a consumer actually crawls — a limit you cannot raise is a
+ *  limit that silently loses data. */
+export const DEFAULT_LIMITS = {
+  maxBodyBytes: 2_000_000,
+  maxLinksPerPage: 200,
+  maxOutboundHosts: 25,
 };
 
 /** Vendor rungs, cheapest/most-permissive first. Overridable via config. */
@@ -49,6 +60,13 @@ export function resolveConfig(config: CrawlConfig): ResolvedConfig {
       timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxPages: config.defaults?.maxPages ?? DEFAULT_MAX_PAGES,
     },
+    limits: {
+      maxBodyBytes: config.limits?.maxBodyBytes ?? DEFAULT_LIMITS.maxBodyBytes,
+      maxLinksPerPage: config.limits?.maxLinksPerPage ?? DEFAULT_LIMITS.maxLinksPerPage,
+      maxOutboundHosts: config.limits?.maxOutboundHosts ?? DEFAULT_LIMITS.maxOutboundHosts,
+    },
+    // A custom DoH endpoint only matters when no resolver was injected.
+    dnsLookup: config.dnsLookup ?? (config.dohEndpoint ? createDohLookup(config.dohEndpoint) : undefined),
   };
 }
 
