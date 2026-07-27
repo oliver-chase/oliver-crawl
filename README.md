@@ -209,6 +209,7 @@ createCrawler({
 | **[LANES.md](docs/LANES.md)** | How the free lane works, rung by rung |
 | **[REFERENCE.md](docs/REFERENCE.md)** | Every option and return field |
 | **[MIGRATION.md](docs/MIGRATION.md)** | Where the code came from, what moved |
+| **[BACKLOG.md](docs/BACKLOG.md)** | Known gaps and open specs — read before assuming a capability exists |
 
 ## Status
 
