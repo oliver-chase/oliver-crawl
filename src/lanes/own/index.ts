@@ -37,6 +37,7 @@
 
 import * as cheerio from 'cheerio';
 import { htmlToMarkdown } from '../../extract/html-to-markdown.js';
+import { summarizeStructuredData } from '../../extract/structured-summary.js';
 import {
   assertRedirectUrlAllowedForHost,
   assertRequestUrlAllowed,
@@ -504,6 +505,10 @@ async function jinaFallback(
           // No HTML to convert on a text-only rung. Empty rather than
           // pretending, same rule as contentRegionSha256 (CRAWL-HASH-1).
           markdown: '',
+          // Jina returns prose, not the page's script tags — no JSON-LD to
+          // summarise. Reported honestly as "none found", which correctly
+          // tells a caller a model is their only option on this rung.
+          structuredData: summarizeStructuredData([]),
           title: jina.title,
           contentType: 'text/markdown',
           bodySha256: await sha256Hex(jina.text),
@@ -682,6 +687,7 @@ async function buildPage(input: {
     url: input.url,
     text: sanitized.text,
     markdown: sanitizedMarkdown.text,
+    structuredData: summarizeStructuredData(jsonLd),
     title,
     ...(input.includeHtml ? { html: input.html } : {}),
     contentType: input.contentType,

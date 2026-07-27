@@ -1,3 +1,4 @@
+import type { StructuredSummary } from '../extract/structured-summary.js';
 // ─── Core contract ──────────────────────────────────────────────────────────
 //
 // Everything in this package is built against these types. Three rules govern
@@ -143,6 +144,16 @@ export type CrawlPage = {
   /** Structured data found on the page, if any — the free, deterministic
    *  extraction path that needs no LLM. */
   jsonLd: unknown[];
+  /**
+   * What that structured data actually IS (JSONLD-SIGNAL-1).
+   *
+   * `jsonLd.length > 0` is a misleading test: most JSON-LD in the wild is site
+   * furniture (WebSite, Organization, BreadcrumbList) that says nothing about
+   * the page's subject. Check `structuredData.hasContentData` instead — false
+   * means a model is the only way to get anything off this page, true means
+   * read the structured data first, because it is free and exact.
+   */
+  structuredData: StructuredSummary;
   /** Distinct off-site https hosts linked from this page (capped). */
   outboundHosts: string[];
   /** Same-site links found, for pagination/detail-page following. */
@@ -154,6 +165,8 @@ export type CrawlPage = {
 };
 
 export type PageLink = { url: string; text: string };
+
+export type { StructuredSummary } from '../extract/structured-summary.js';
 
 /** The result of a crawl. Ordinary failure is a value, not an exception. */
 export type CrawlResult =
