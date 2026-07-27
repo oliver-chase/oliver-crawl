@@ -222,6 +222,8 @@ export type { DetailLinkMatch, DetailKeywords } from './extract/detail-link-pick
 export type { StructuredSummary } from './extract/structured-summary.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
 export { classifyContentType, refineKindByUrl } from './core/content-kind.js';
+export { extractPdfText } from './fetch/pdf-extract.js';
+export type { PdfExtractResult } from './fetch/pdf-extract.js';
 export { classifyFailure } from './core/failure-class.js';
 export type { FailureClass } from './core/failure-class.js';
 export { looksLikeEmptyState } from './core/soft-404.js';
@@ -243,7 +245,8 @@ export type { FeedDiscoveryResult } from './fetch/feed-discovery.js';
 export { findNextPageUrl, discoverPaginatedUrls } from './extract/pagination-discovery.js';
 export { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
 export type { SitemapDiscoveryResult, SitemapEntry } from './fetch/sitemap-discovery.js';
-export { renderViaLocalChromium } from './fetch/local-render.js';
+export { renderViaLocalChromium, MAX_ACTIONS, MAX_ACTION_TOTAL_MS } from './fetch/local-render.js';
+export type { BrowserAction } from './fetch/local-render.js';
 export { createDohLookup, DEFAULT_DOH_ENDPOINT } from './fetch/host-policy.js';
 export { renderViaService, renderServiceFrom } from './fetch/browser-render.js';
 export type { RenderResult } from './fetch/browser-render.js';

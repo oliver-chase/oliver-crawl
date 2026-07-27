@@ -27,9 +27,9 @@ Measured against what the paid APIs actually do:
 | Change tracking / caching | shipped (conditional GET + region hash + sitemap lastmod) — better than Firecrawl's `maxAge`: lastmod covers a whole site in ONE request | Yes |
 | JS rendering | shipped (local Chromium + own service) | Yes |
 | `/map` — fast whole-domain URL discovery | **shipped** 2026-07-27 (`mapSite`) | Yes |
-| Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
+| Browser actions (click "load more", scroll, wait) | **shipped** 2026-07-27 | Yes |
 | Feeds / calendars / CSV / JSON as first-class documents | **shipped** 2026-07-27 (CRAWL-FEED-1) | Yes |
-| PDF parsing | **CRAWL-PDF-1** below | Yes |
+| PDF parsing | **shipped** 2026-07-27 (optional peer) | Yes |
 | Screenshots | not planned — no consumer needs it yet | Yes |
 | Consistent polite-client headers (free half of stealth) | **shipped** 2026-07-27 — accept-language + full accept; sec-ch-ua deliberately excluded (a half-consistent browser disguise is a stronger tell than none) | Yes |
 | Readability-class content scoring for div-soup pages | **shipped** 2026-07-27 | Yes |
@@ -55,62 +55,14 @@ crawl — so this is where the leverage is.
 
 ---
 
-## PARITY-ACTIONS-1 — browser actions before capture
-
-Firecrawl scripts the page before scraping: click, scroll, wait, type. The
-common real case is a "Load more events" button or an infinite-scroll calendar
-— pages where the FIRST render genuinely does not contain the content, so our
-render rung returns a page that is technically correct and practically empty.
-
-We already run Chromium (`fetch/local-render.ts`). The gap is purely that
-nothing can be scripted before the capture.
-
-**Spec.** `browserActions?: Array<{ type: 'click' | 'scroll' | 'wait'; selector?: string; ms?: number }>`
-on the crawl options, executed by the local-render rung only.
-
-**Watch out:** actions are caller-supplied instructions driving a real browser.
-Cap the count and total duration, allow no navigation to another origin, and
-never let an action come from crawled page content — that would be a
-prompt-injection path straight into a browser we control.
-
----
-
-## CRAWL-PDF-1 — PDFs are still refused
-
-Split out of CRAWL-FEED-1, which shipped everything text-shaped. PDFs remain
-refused because they need a real parser, not a wider content-type gate — many
-venues publish season schedules as a single PDF.
-
-**Spec.** Accept `application/pdf`, extract the text layer, deliver as
-`contentKind: 'pdf'`. Needs a dependency (`unpdf` or similar, ESM + no native
-build); audit it for the same ReDoS/injection concerns as everything else
-here. A scanned PDF has no text layer and should report `empty` honestly
-rather than returning a blank page — that case belongs to CRAWL-VISION-1.
-
----
-
-## CRAWL-PARITY-1 — extraction parity with Fallow's cheerio runner is unverified
-
-Fallow's `secure-crawlee-runner.ts` (515 lines) extracts with cheerio.
-oliver-crawl uses its own parser. **Nobody has compared their output on the
-same pages.** The migration assumed parity and never demonstrated it.
-
-This matters before Fallow is wired to consume the package: a silent extraction
-regression across every source is the exact failure this repo exists to avoid,
-and it would look like a data-quality drift rather than a code bug.
-
-**Spec.** A differential harness — run N real Fallow source URLs through both,
-diff text length, title, link count, JSON-LD node count. Every disagreement
-gets explained before any swap. `docs/EXISTING-PROJECTS.md` already prescribes
-exactly this procedure for consumers; the package has not run it on itself.
-
----
-
 ## Live tracker
 
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | CRAWL-PDF-1 | SHIPPED, spec removed. `unpdf` is an OPTIONAL peer, not a dependency: a parser is a large hostile-input surface, and putting it in every install for the minority who crawl PDFs is the wrong trade here. Same Function-constructor import seam as playwright. Missing parser reports a `structural` failure naming the package. Found a real gap doing it — a missing parser and a scanned PDF were both classed `transient` when neither is fixed by waiting. |
+| 2026-07-27 | CRAWL-PARITY-1 | SHIPPED as `scripts/parity-check.mjs`, spec removed. Reports per-URL extraction shape (counts + hashes, not prose) so a consumer can diff it against their existing extractor on the same list. Deliberately NOT coupled to any consumer — this library must not import Fallow or tesknota. Run before any swap; explain every disagreement first. |
+| 2026-07-27 | PARITY-ACTIONS-1 | SHIPPED, spec removed. `browserActions` on config, local-render rung only. Bounds are library constants a caller cannot raise: 10 actions, 20s total, 5s per wait. Origin re-checked after every step — ablation-verified. Failed step skipped (a missing "Load more" means the list already loaded). Tests drive `runActions` directly: playwright is not a dependency and its import is deliberately invisible to bundlers, so the module cannot be mocked. |
 | 2026-07-27 | backlog batch | SHIPPED 5: CRAWL-VISION-1 (candidateContentImages, free half only — ranking not a verdict), CRAWL-DETAILLINK-1 (pickDetailLinks, caller supplies vocabulary), BETTER-DIFF-1 (diffContent, set-based so reordering is not a change), CRAWL-CONCURRENCY-1 (searchAndCrawl concurrency, safe because host-throttle already serialises per host; default 1). CRAWL-SESSION-1 CLOSED AS DOCUMENTED, not built — a cookie jar is a credential store and the spec itself called documenting the honest answer. |
 | 2026-07-27 | BETTER-RUNGMEMORY-1 | SHIPPED, spec removed. Per-host winning rung, 30min TTL, recorded at one chokepoint in crawl(). Store is PER CRAWLER — first cut was module-level and broke 10 tests, same defect class as HOST-CACHE-SCOPE-1. Self-heals: a failed remembered rung is forgotten and the full ladder re-runs, else a rung outage would cost the page. `rungMemory: false` opts out. |
 | 2026-07-27 | PARITY-MAP-1 | SHIPPED, spec removed. mapSite(crawler, target) = sitemap + homepage links + declared feeds, ONE page body fetched. Feeds surfaced separately. Live: 25 urls off rfc-editor. Live gap: maxUrls filled from sitemap alone there, so the homepage-links path is fixture-covered only. |
