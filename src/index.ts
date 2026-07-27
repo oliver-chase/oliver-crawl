@@ -103,6 +103,21 @@ export { extractJsonLdEvent, extractAllJsonLdEvents } from './extract/jsonld-eve
 export { extractJsonLdAddress, formatJsonLdAddress } from './extract/jsonld-address.js';
 export { computeContentRegionHash } from './extract/content-region-hash.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
+export { evaluateRobotsForUrl, parseRobots, userAgentToken } from './fetch/robots-check.js';
+export type { RobotsPolicy, RobotsCheckResult } from './fetch/robots-check.js';
+export {
+  discoverIcsFeed,
+  parseFeedLinksFromHtml,
+  googleCalendarIcsCandidates,
+  candidateIcsUrls,
+  safeFetch,
+} from './fetch/feed-discovery.js';
+export type { FeedDiscoveryResult } from './fetch/feed-discovery.js';
+export { findNextPageUrl, discoverPaginatedUrls } from './extract/pagination-discovery.js';
+// Recipe REPLAY only — learning a recipe is domain-specific and stays in the
+// consuming app (see src/extract/extraction-recipe.ts's header).
+export { applyRecipe, parseStoredRecipe, MAX_RECIPE_FAILURES } from './extract/extraction-recipe.js';
+export type { ExtractionRecipe, RecipeDraft, RecipeFieldRule } from './extract/extraction-recipe.js';
 export {
   assertHostResolvesToPublicAddress,
   assertRequestUrlAllowed,

@@ -17,8 +17,12 @@ Where each capability from the origin codebase (Fallow, `lib/ingestion/*`) stand
 | Cross-runtime SHA-256 | `core/hash.ts` | (via above) | `createRandomId` dropped — not crawl-related |
 | URL safety for extracted values | `core/url-safety.ts` | (via above) | Now shares `net-address` with the SSRF guard |
 | **Lane orchestration** | `index.ts`, `lanes/*` | 14 | New. Did not exist in the origin — lanes were implicit |
+| robots.txt fetching + parsing | `fetch/robots-check.ts` | 21 | Bot identity is now DERIVED from the configured User-Agent (`userAgentToken`) instead of a hardcoded `fallowbot`, so a consumer's robots group matches the UA it actually sends. That derivation was new, so it got its own 4 tests |
+| ICS/feed discovery | `fetch/feed-discovery.ts` | 14 | Unchanged besides UA/DNS injection |
+| Pagination discovery | `extract/pagination-discovery.ts` | 13 | Unchanged |
+| Extraction recipes (REPLAY half) | `extract/extraction-recipe.ts` | 5 | `applyRecipe` + `parseStoredRecipe` only — see below |
 
-**124 tests, typecheck clean, verified against live sites** (example.com, iana.org).
+**177 tests, typecheck clean, builds to dist, verified against live sites** (example.com, iana.org).
 
 ## Not yet migrated
 
@@ -26,9 +30,7 @@ Where each capability from the origin codebase (Fallow, `lib/ingestion/*`) stand
 |---|---|---|
 | Multi-page crawl orchestrator | `secure-crawlee-runner.ts` (515 ln) | Coupled to Fallow's source registry, extraction recipes, and `cheap-change-probe`. The single-page path is already here; this adds seeds, pagination and per-run budgeting |
 | Browser render rung | `secure-browser-runner.ts` (503 ln) | Imports Fallow's usage-tracking **and** its source registry (a DB read). Needs both replaced by injected callbacks first |
-| Extraction recipes | `extraction-recipe.ts` (201 ln) | **Splits.** `applyRecipe` + `parseStoredRecipe` are generic and movable; `learnRecipe` / `validateRecipeDrafts` call an LLM and validate with event-domain rules (`parseDateText`, `looksLikeAddress`) and must stay in Fallow. The original spec wrongly listed this module as fully generic |
-| robots.txt fetching | `robots-check.ts` (212 ln) | Straightforward once `user-agent` config lands; depends on host-policy (already here) |
-| Feed + pagination discovery | `feed-discovery.ts`, `pagination-discovery.ts` | Depend on robots-check and the crawl orchestrator |
+| Extraction recipes (LEARN half) | `extraction-recipe.ts` | **Stays in Fallow, permanently.** `learnRecipe` calls an LLM to propose selectors; `validateRecipeDrafts` gates them with event-domain rules (`parseDateText`, `looksLikeAddress`). A different consumer must learn against ITS own domain's validity rules. The replay half has moved |
 | Search providers | `lib/ai/research.ts` (Tavily/Serper) | Search is a different shape from crawling (query in, results out). Belongs in this package but as its own surface, not a crawl lane |
 
 ## Staying in Fallow permanently
