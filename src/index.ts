@@ -152,7 +152,8 @@ export { extractJsonLdAddress, formatJsonLdAddress } from './extract/jsonld-addr
 export { computeContentRegionHash } from './extract/content-region-hash.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
 export { urlDedupKey, sameUrlResource } from './core/url-dedup-key.js';
-export { evaluateRobotsForUrl, parseRobots, userAgentToken } from './fetch/robots-check.js';
+export { evaluateRobotsForUrl, parseRobots, userAgentToken, MAX_HONORED_CRAWL_DELAY_MS } from './fetch/robots-check.js';
+export { publishedCrawlDelayMs } from './lanes/own/index.js';
 export type { RobotsPolicy, RobotsCheckResult } from './fetch/robots-check.js';
 export {
   discoverIcsFeed,

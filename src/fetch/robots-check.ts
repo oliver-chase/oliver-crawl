@@ -4,22 +4,44 @@
 // crawl gate fail-closes on 'unknown' — so a source whose robots.txt was never
 // actually fetched (or whose fetch hiccuped once) sits blocked forever even
 // when the site plainly allows crawlers. This module fetches robots.txt for
-// real, as FallowBot, and decides. It's the auto-fix behind:
+// real, as the configured user agent, and decides. It's the auto-fix behind:
 //   - the per-row / bulk "Re-check robots" admin action, and
 //   - the self-heal step on the crawl path (auto-recheck an 'unknown' source
 //     once before giving up on it).
 //
 // Fail-closed: ANY fetch/parse failure returns 'unknown' (never a false
-// 'allow') — a site actively blocking FallowBot's request stays blocked, which
+// 'allow') — a site actively blocking this crawler's request stays blocked, which
 // is the honest outcome. A missing robots.txt (404) is 'allow' per the
-// standard. Matches FallowBot's own group first, then '*'.
+// standard. Matches the caller's own user-agent group first, then '*'.
 
 import { assertHostResolvesToPublicAddress } from './host-policy.js';
 import { DEFAULT_USER_AGENT } from '../core/config.js';
 import type { DnsLookupFn } from '../core/types.js';
 
 export type RobotsPolicy = 'allow' | 'disallow' | 'conditional' | 'unknown';
-export type RobotsCheckResult = { policy: RobotsPolicy; reason: string };
+export type RobotsCheckResult = {
+  policy: RobotsPolicy;
+  reason: string;
+  /**
+   * ROBOTS-DELAY-1 (2026-07-27): the site's own `Crawl-delay`, in ms, when it
+   * published one. Null when absent.
+   *
+   * This is the origin stating, in the one machine-readable place it has, how
+   * fast it is willing to be crawled. Parsing robots.txt for permission and
+   * then ignoring its pacing is taking the half of the file that suits us —
+   * and it is a common way to get blocked by a site that technically allowed
+   * you.
+   */
+  crawlDelayMs: number | null;
+};
+
+/**
+ * Ceiling on a published Crawl-delay. Some sites publish absurd values
+ * (86400 = one day), which would stall a crawl indefinitely rather than slow
+ * it politely. Above this we treat the site as effectively refusing frequent
+ * crawling and let the caller's own pacing govern.
+ */
+export const MAX_HONORED_CRAWL_DELAY_MS = 30_000;
 
 const ROBOTS_TIMEOUT_MS = 8_000;
 const ROBOTS_MAX_BYTES = 512_000;
@@ -44,18 +66,18 @@ export async function evaluateRobotsForUrl(
   try {
     target = new URL(rawUrl);
     if (target.protocol !== 'https:' && target.protocol !== 'http:') {
-      return { policy: 'unknown', reason: 'source URL is not http(s)' };
+      return { policy: 'unknown', reason: 'source URL is not http(s)', crawlDelayMs: null };
     }
     robotsUrl = new URL('/robots.txt', target.origin);
   } catch {
-    return { policy: 'unknown', reason: 'source URL is invalid' };
+    return { policy: 'unknown', reason: 'source URL is invalid', crawlDelayMs: null };
   }
 
   try {
     // Same SSRF/DNS-rebinding guard every direct-fetch call site uses.
     await assertHostResolvesToPublicAddress(target.hostname, opts?.dnsLookup);
   } catch {
-    return { policy: 'unknown', reason: 'host does not resolve to a public address' };
+    return { policy: 'unknown', reason: 'host does not resolve to a public address', crawlDelayMs: null };
   }
 
   const controller = new AbortController();
@@ -78,37 +100,43 @@ export async function evaluateRobotsForUrl(
       if (res.status < 300 || res.status >= 400) break;
       const location = res.headers.get('location');
       if (!location || hop === MAX_ROBOTS_REDIRECTS) {
-        return { policy: 'unknown', reason: `robots.txt redirected (${res.status}) too many times — inconclusive` };
+        return { policy: 'unknown', reason: `robots.txt redirected (${res.status}) too many times — inconclusive`, crawlDelayMs: null };
       }
       let next: URL;
       try {
         next = new URL(location, currentUrl);
       } catch {
-        return { policy: 'unknown', reason: 'robots.txt redirect target is not a valid URL' };
+        return { policy: 'unknown', reason: 'robots.txt redirect target is not a valid URL', crawlDelayMs: null };
       }
       if (next.protocol !== 'https:' && next.protocol !== 'http:') {
-        return { policy: 'unknown', reason: 'robots.txt redirected to a non-http(s) URL' };
+        return { policy: 'unknown', reason: 'robots.txt redirected to a non-http(s) URL', crawlDelayMs: null };
       }
       try {
         await assertHostResolvesToPublicAddress(next.hostname, opts?.dnsLookup);
       } catch {
-        return { policy: 'unknown', reason: 'robots.txt redirected to a non-public host' };
+        return { policy: 'unknown', reason: 'robots.txt redirected to a non-public host', crawlDelayMs: null };
       }
       currentUrl = next;
     }
     if (!res) {
-      return { policy: 'unknown', reason: 'robots.txt could not be fetched' };
+      return { policy: 'unknown', reason: 'robots.txt could not be fetched', crawlDelayMs: null };
     }
     // No robots.txt at all = crawling allowed (standard interpretation).
     if (res.status === 404 || res.status === 410) {
-      return { policy: 'allow', reason: 'no robots.txt (site returns 404) — crawling allowed by default' };
+      return { policy: 'allow', reason: 'no robots.txt (site returns 404) — crawling allowed by default', crawlDelayMs: null };
     }
     if (!res.ok) {
-      return { policy: 'unknown', reason: `robots.txt fetch returned ${res.status} — likely the site is blocking FallowBot` };
+      // WHITE-LABEL-2: this said "blocking FallowBot" regardless of the
+      // caller's actual user agent — wrong output in any consumer but Fallow.
+      return {
+        policy: 'unknown',
+        reason: `robots.txt fetch returned ${res.status} — the site may be blocking this crawler`,
+        crawlDelayMs: null,
+      };
     }
     body = (await res.text()).slice(0, ROBOTS_MAX_BYTES);
   } catch {
-    return { policy: 'unknown', reason: 'robots.txt fetch failed or timed out (the site may be blocking the crawler)' };
+    return { policy: 'unknown', reason: 'robots.txt fetch failed or timed out (the site may be blocking the crawler)', crawlDelayMs: null };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -116,12 +144,13 @@ export async function evaluateRobotsForUrl(
   return parseRobots(body, userAgentToken(userAgent), target.pathname || '/');
 }
 
-type RobotsGroup = { allows: string[]; disallows: string[] };
+type RobotsGroup = { allows: string[]; disallows: string[]; crawlDelayMs: number | null };
 
 // Minimal, standards-shaped robots.txt evaluator. Groups rules by user-agent,
-// picks FallowBot's group over '*', then applies longest-match Allow/Disallow
-// to the path (Allow wins ties, per Google's spec). Non-standard directives
-// (Sitemap, Content-Signal, Crawl-delay, etc.) are ignored. Exported for tests.
+// picks the caller's own user-agent group over '*', then applies longest-match
+// Allow/Disallow to the path (Allow wins ties, per Google's spec). Crawl-delay
+// IS read and honoured (ROBOTS-DELAY-1). Other non-standard directives
+// (Sitemap, Content-Signal) are ignored. Exported for tests.
 export function parseRobots(text: string, uaToken: string, path: string): RobotsCheckResult {
   const groups = new Map<string, RobotsGroup>();
   let currentAgents: string[] = [];
@@ -131,7 +160,7 @@ export function parseRobots(text: string, uaToken: string, path: string): Robots
     const key = agent.toLowerCase();
     let group = groups.get(key);
     if (!group) {
-      group = { allows: [], disallows: [] };
+      group = { allows: [], disallows: [], crawlDelayMs: null };
       groups.set(key, group);
     }
     return group;
@@ -154,6 +183,14 @@ export function parseRobots(text: string, uaToken: string, path: string): Robots
       }
       currentAgents.push(value.toLowerCase());
       ensure(value);
+    } else if (field === 'crawl-delay') {
+      sawDirectiveSinceAgent = true;
+      const seconds = Number(value);
+      if (Number.isFinite(seconds) && seconds > 0) {
+        for (const agent of currentAgents) {
+          ensure(agent).crawlDelayMs = Math.min(Math.round(seconds * 1000), MAX_HONORED_CRAWL_DELAY_MS);
+        }
+      }
     } else if (field === 'allow' || field === 'disallow') {
       sawDirectiveSinceAgent = true;
       // A directive before any User-agent line has no group — ignore it.
@@ -174,7 +211,7 @@ export function parseRobots(text: string, uaToken: string, path: string): Robots
   }
   if (!group) group = groups.get('*');
   if (!group) {
-    return { policy: 'allow', reason: 'robots.txt has no rule for FallowBot or * — crawling allowed' };
+    return { policy: 'allow', reason: 'robots.txt has no rule for this crawler or * — crawling allowed', crawlDelayMs: null };
   }
 
   const matchLen = (rule: string): number => (robotsRuleMatch(rule, path) ? rule.replace(/[*$]/g, '').length : -1);
@@ -190,12 +227,12 @@ export function parseRobots(text: string, uaToken: string, path: string): Robots
   }
 
   if (bestDisallow === -1) {
-    return { policy: 'allow', reason: 'robots.txt permits this path for FallowBot' };
+    return { policy: 'allow', reason: 'robots.txt permits this path for this crawler', crawlDelayMs: group.crawlDelayMs };
   }
   if (bestAllow >= bestDisallow) {
-    return { policy: 'allow', reason: 'robots.txt Allow rule overrides the Disallow for this path' };
+    return { policy: 'allow', reason: 'robots.txt Allow rule overrides the Disallow for this path', crawlDelayMs: group.crawlDelayMs };
   }
-  return { policy: 'disallow', reason: 'robots.txt disallows this path for FallowBot' };
+  return { policy: 'disallow', reason: 'robots.txt disallows this path for this crawler', crawlDelayMs: group.crawlDelayMs };
 }
 
 // Robots path pattern → regex: '*' is any run of chars, trailing '$' anchors
