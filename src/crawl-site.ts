@@ -107,6 +107,24 @@ export type SiteCrawlOptions = CrawlOptions & {
    * content-hash checks, which are trustworthy. Omit this to disable.
    */
   priorLastmod?: Record<string, string>;
+  /**
+   * CRAWL-RESUME-1: called after each page, with everything needed to pick
+   * the run back up. Persist it (your storage, not ours) and pass the last
+   * snapshot as `resumeFrom` to continue.
+   *
+   * Without this, a 500-page crawl killed at page 400 restarts from zero —
+   * the queue and visited set live only in memory.
+   */
+  onProgress?: (state: CrawlProgress) => void;
+  /**
+   * A snapshot from a previous run's `onProgress`. Its `visited` set is
+   * honoured, so pages already collected are not fetched again, and its
+   * queue replaces the seeds.
+   *
+   * The pages themselves are NOT carried over — you already persisted those
+   * when you received them. This resumes the WORK, not the results.
+   */
+  resumeFrom?: CrawlProgress;
 
   /** Persistence hook for this run's fresh validators — same data as
    *  `result.validators`, delivered as a callback for consumers that prefer
@@ -119,6 +137,21 @@ export type SiteCrawlOptions = CrawlOptions & {
 };
 
 export type SiteCrawlFailure = { url: string; reason: string; detail: string };
+
+/**
+ * Enough state to resume a crawl. Plain JSON so a consumer can put it in a
+ * row, a file or a queue message without a serialiser.
+ */
+export type CrawlProgress = {
+  /** URLs still waiting, in breadth-first order. */
+  queue: string[];
+  /** Canonical dedup keys already handled — never fetch these again. */
+  visited: string[];
+  /** Depth per queued URL, so resuming preserves the depth limit. */
+  depths: Record<string, number>;
+  /** How many pages this run has collected so far, against maxPages. */
+  collected: number;
+};
 
 export type SiteCrawlResult = {
   /** Pages successfully fetched and parsed. */
@@ -274,6 +307,11 @@ export async function crawlSite(
 
     if (entries.length > 0) rawSeeds = fresh.map((entry) => entry.url);
   }
+  // CRAWL-RESUME-1: a snapshot replaces the seeds entirely — its queue is
+  // where the previous run stopped, and re-seeding from baseUrl on top would
+  // re-walk ground already covered.
+  if (options.resumeFrom) rawSeeds = options.resumeFrom.queue;
+
   rawSeeds = rawSeeds ?? [target.baseUrl];
   const queue: string[] = [];
   for (const seed of rawSeeds) {
@@ -290,12 +328,17 @@ export async function crawlSite(
   // Keyed on the canonical resource identity, not the raw string — see
   // core/url-dedup-key.ts. /events, /events/, /events#lineup and
   // /events?utm_source=x are one page, and must cost one slot of maxPages.
-  const visited = new Set<string>();
+  const visited = new Set<string>(options.resumeFrom?.visited ?? []);
   const maxDepth = Math.max(0, options.maxDepth ?? 2);
   // Depth rides alongside the URL so breadth-first ordering is preserved and
   // a deep branch cannot consume the whole page budget.
   const depthOf = new Map<string, number>();
   for (const seed of queue) depthOf.set(urlDedupKey(seed), 0);
+  // Restored depths win over the seed default, so a resumed run cannot
+  // silently reset a deep page back to depth 0 and blow past maxDepth.
+  for (const [key, depth] of Object.entries(options.resumeFrom?.depths ?? {})) {
+    depthOf.set(key, depth);
+  }
 
   const shouldSkip = (candidate: string) => {
     if ((options.excludePatterns ?? []).some((pattern) => pattern.test(candidate))) return true;
@@ -441,6 +484,22 @@ export async function crawlSite(
     }
 
     if (!succeeded && lastFailure) failures.push(lastFailure);
+
+    // CRAWL-RESUME-1: emitted AFTER the URL is marked visited and after any
+    // discovery it produced is queued, so a snapshot is always a coherent
+    // "everything up to here is done" — never one that would re-fetch the
+    // page just handled, or lose the links it found.
+    //
+    // Emitted for failures too: a page that failed terminally is finished
+    // with, and a resume that retried it would repeat the same failure.
+    if (options.onProgress) {
+      options.onProgress({
+        queue: [...queue],
+        visited: [...visited],
+        depths: Object.fromEntries(depthOf),
+        collected: pages.length + notModified.length,
+      });
+    }
 
     if ((options.politenessDelayMs ?? 0) > 0 && queue.length > 0) {
       await sleep(options.politenessDelayMs!);
