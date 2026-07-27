@@ -21,15 +21,16 @@ Where each capability from the origin codebase (Fallow, `lib/ingestion/*`) stand
 | ICS/feed discovery | `fetch/feed-discovery.ts` | 14 | Unchanged besides UA/DNS injection |
 | Pagination discovery | `extract/pagination-discovery.ts` | 13 | Unchanged |
 | Extraction recipes (REPLAY half) | `extract/extraction-recipe.ts` | 5 | `applyRecipe` + `parseStoredRecipe` only — see below |
+| Browser render rung | `fetch/browser-render.ts` | 12 | Placed in the OWN lane, not vendor: the endpoint is infrastructure the consumer runs. Env vars replaced by `config.browserRender`; `logUsage` replaced by the `onUsage` callback |
+| Cheap-change probe | `fetch/cheap-change-probe.ts` | (via lane) | ETag/Last-Modified/body-hash fingerprint so an unchanged page costs nothing. Its DB writeback (`mergeSourceCheapChangeSignals`) is replaced by the `onSignals` callback |
 
-**177 tests, typecheck clean, builds to dist, verified against live sites** (example.com, iana.org).
+**189 tests, typecheck clean, builds to dist, verified against live sites** (example.com, iana.org).
 
 ## Not yet migrated
 
 | Capability | Origin file | Why it is harder |
 |---|---|---|
-| Multi-page crawl orchestrator | `secure-crawlee-runner.ts` (515 ln) | Coupled to Fallow's source registry, extraction recipes, and `cheap-change-probe`. The single-page path is already here; this adds seeds, pagination and per-run budgeting |
-| Browser render rung | `secure-browser-runner.ts` (503 ln) | Imports Fallow's usage-tracking **and** its source registry (a DB read). Needs both replaced by injected callbacks first |
+| Multi-page crawl orchestrator | `secure-crawlee-runner.ts` (515 ln) | The last real piece. Single-page crawling, the render rung, pagination discovery and the cheap-change probe are all here now — what remains is the loop that drives them across seeds with per-run budgeting. Mostly assembly of parts that already exist |
 | Extraction recipes (LEARN half) | `extraction-recipe.ts` | **Stays in Fallow, permanently.** `learnRecipe` calls an LLM to propose selectors; `validateRecipeDrafts` gates them with event-domain rules (`parseDateText`, `looksLikeAddress`). A different consumer must learn against ITS own domain's validity rules. The replay half has moved |
 | Search providers | `lib/ai/research.ts` (Tavily/Serper) | Search is a different shape from crawling (query in, results out). Belongs in this package but as its own surface, not a crawl lane |
 

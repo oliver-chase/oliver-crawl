@@ -159,7 +159,7 @@ npm run build     # emit dist/
 
 ## Status
 
-Early but substantial. Done, tested (177 tests) and verified against live sites: the own lane, both guards, JSON-LD extraction, conditional GET, lane orchestration, robots.txt fetching/parsing, ICS-feed and pagination discovery, and recipe replay. Still to migrate: the multi-page crawl orchestrator and the browser-render rung — both coupled to the origin app's database, so they need the callback boundary finished first. See docs/MIGRATION.md.
+Early but substantial. Done, tested (189 tests) and verified against live sites: the own lane end to end (fetch, browser render, Jina), both guards, JSON-LD extraction, conditional GET and cheap-change probing, lane orchestration, robots.txt fetching/parsing, ICS-feed and pagination discovery, and recipe replay. One piece left: the multi-page crawl orchestrator, which is now mostly assembly of parts that already exist here. See docs/MIGRATION.md.
 
 ## License
 

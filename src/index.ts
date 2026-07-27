@@ -114,6 +114,10 @@ export {
 } from './fetch/feed-discovery.js';
 export type { FeedDiscoveryResult } from './fetch/feed-discovery.js';
 export { findNextPageUrl, discoverPaginatedUrls } from './extract/pagination-discovery.js';
+export { renderViaService, renderServiceFrom } from './fetch/browser-render.js';
+export type { RenderResult } from './fetch/browser-render.js';
+export { probeCheapChangeSignal, cheapSignalsMatch } from './fetch/cheap-change-probe.js';
+export type { CheapChangeSignal, CheapChangeSignalStore } from './fetch/cheap-change-probe.js';
 // Recipe REPLAY only — learning a recipe is domain-specific and stays in the
 // consuming app (see src/extract/extraction-recipe.ts's header).
 export { applyRecipe, parseStoredRecipe, MAX_RECIPE_FAILURES } from './extract/extraction-recipe.js';

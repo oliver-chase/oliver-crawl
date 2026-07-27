@@ -21,12 +21,16 @@
 //                    so an LLM downstream never sees unsanitised page content.
 //   6. Hash        — full-body and content-region digests, so the caller can
 //                    tell a real content change from a nav/footer tweak.
-//   7. Jina        — free, keyless last resort for pages the direct fetch
+//   7. Render      — OUR OWN browser service, for pages whose content only
+//                    exists after JavaScript runs. Optional: unconfigured
+//                    means the rung is skipped, not an error.
+//   8. Jina        — free, keyless last resort for pages the direct fetch
 //                    cannot reach (bot walls, JS-only, moved hosts).
 //
-// Rungs 1-6 cost nothing and need no credentials. Rung 7 is a free public
-// service. If this lane fails, the caller may fall through to the vendor lane
-// — but only if it asked for it.
+// Rungs 1-6 cost nothing and need no credentials. Rung 7 runs on
+// infrastructure you control (which is why it is in THIS lane and not the
+// vendor lane). Rung 8 is a free public service. If this lane fails, the
+// caller may fall through to the vendor lane — but only if it asked for it.
 
 import * as cheerio from 'cheerio';
 import {
@@ -36,6 +40,7 @@ import {
   assertHostResolvesToPublicAddress,
 } from '../../fetch/host-policy.js';
 import { fetchViaJina } from '../../fetch/jina-fetch.js';
+import { renderServiceFrom, renderViaService } from '../../fetch/browser-render.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
 import { computeContentRegionHash } from '../../extract/content-region-hash.js';
 import { extractInlineScriptContent, shouldRecoverFromScripts } from '../../extract/spa-content-extract.js';
@@ -120,12 +125,63 @@ export async function crawlWithOwnLane(
   }
 
   if (!page.text.trim()) {
-    // Served HTML had no readable text — commonly a JS shell. Jina renders.
+    // Served HTML had no readable text — a JS shell. Try our own render
+    // service first (infrastructure we control), then the free Jina rung.
+    const rendered = await renderFallback(url, config, options, started);
+    if (rendered) return rendered;
     return jinaFallback(target, url, config, options, started, 'No visible text in the served HTML');
   }
 
   emit(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
   return { ok: true, pages: [page] };
+}
+
+/**
+ * Render rung: our own browser service, for pages whose content only exists
+ * after JavaScript runs. Returns null when no service is configured (skip to
+ * the next rung) — a configured-but-broken service reports the failure rather
+ * than pretending the rung does not exist.
+ */
+async function renderFallback(
+  url: string,
+  config: ResolvedConfig,
+  options: CrawlOptions,
+  started: number,
+): Promise<CrawlResult | null> {
+  if (!renderServiceFrom(config)) return null;
+
+  try {
+    const rendered = await renderViaService(url, config);
+    if (!rendered) return null;
+
+    const page = await buildPage({
+      url: rendered.url,
+      html: rendered.html,
+      contentType: rendered.contentType,
+      etag: null,
+      lastModified: null,
+      baseHost: new URL(url).hostname,
+      maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
+      rung: 'browser-render',
+      includeHtml: false,
+    });
+
+    if (page === 'quarantined') {
+      emit(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
+      return { ok: false, reason: 'quarantined', detail: 'Rendered content tripped the prompt-injection guard.', lane: 'own' };
+    }
+
+    // A render that still yields nothing is not a success — let the caller
+    // fall through to Jina rather than returning an empty page.
+    if (!page.text.trim()) return null;
+
+    emit(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started });
+    return { ok: true, pages: [page] };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    emit(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    return null; // broken render service must not end the crawl — Jina may still work
+  }
 }
 
 /** Free, keyless last resort — see fetch/jina-fetch.ts for why it clears

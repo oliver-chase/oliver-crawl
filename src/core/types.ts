@@ -152,6 +152,22 @@ export type CrawlConfig = {
   checkBudget?: BudgetCheck;
   /** Override DNS resolution (tests, or a DoH resolver on edge runtimes). */
   dnsLookup?: DnsLookupFn;
+  /**
+   * Self-hosted browser-rendering service for JS-only pages. Part of the OWN
+   * lane, not the vendor lane, because it is YOUR infrastructure: point it at
+   * a browserless container you run and it costs no per-call vendor fee.
+   * Absent = the rung is skipped and the crawl falls through to Jina, exactly
+   * as if it were never configured.
+   */
+  browserRender?: { url: string; token?: string };
+  /**
+   * Persist cheap-change signals (ETag / Last-Modified / body hash) so the
+   * NEXT crawl can skip a page that has not changed. This package holds no
+   * database, so the consumer stores them however it likes and hands them
+   * back via CrawlOptions.priorSignals. Absent = signals are computed and
+   * discarded, which is correct-but-wasteful rather than wrong.
+   */
+  onSignals?: (targetId: string, signals: Record<string, unknown>) => void | Promise<void>;
   /** Default caps, overridable per request. */
   defaults?: Required<Pick<CrawlOptions, 'maxTextChars' | 'timeoutMs' | 'maxPages'>>;
 };
