@@ -110,3 +110,86 @@ describe('does not corrupt the surrounding crawl', () => {
     expect(md('<body></body>')).toBe('');
   });
 });
+
+describe('PARITY-READABILITY-1 — div-soup pages without semantic tags', () => {
+  test('the prose cluster beats the link farm', () => {
+    // No <main>, no <article> — the shape readability scoring exists for.
+    const out = md(`<body>
+      <div id="wrap">
+        <div id="sidebar">
+          <p><a href="/a">Concerts</a> <a href="/b">Tickets</a> <a href="/c">Parking</a> <a href="/d">About us page</a></p>
+          <p><a href="/e">Newsletter signup</a> <a href="/f">Follow us on socials</a> <a href="/g">Merch store</a></p>
+        </div>
+        <div id="content">
+          <p>The summer concert series returns to the riverside stage this July with a full slate of touring acts.</p>
+          <p>Doors open at six each Friday evening, music starts at seven, and admission is free for all ages.</p>
+        </div>
+      </div>
+    </body>`);
+
+    expect(out).toContain('summer concert series');
+    expect(out).toContain('Doors open at six');
+    expect(out).not.toContain('Newsletter signup');
+  });
+
+  test('a semantic tag still wins over scoring', () => {
+    // Author intent outranks our heuristic, always.
+    const out = md(`<body>
+      <div><p>Long unrelated prose in a div that would score very well on its own merits here.</p>
+      <p>More long unrelated prose that keeps this division scoring competitively high overall.</p></div>
+      <main><p>The real content.</p></main>
+    </body>`);
+    expect(out).toBe('The real content.');
+  });
+
+  test('no clear winner falls back to the whole body', () => {
+    // Text spread evenly across parents = no main region to claim. Losing
+    // content on a wrong guess is worse than including everything.
+    const out = md(`<body>
+      <div><p>First section of prose, long enough to score as a real paragraph of content.</p></div>
+      <div><p>Second section of prose, long enough to score as a real paragraph of content.</p></div>
+      <div><p>Third section of prose, long enough to score as a real paragraph of content.</p></div>
+    </body>`);
+    expect(out).toContain('First section');
+    expect(out).toContain('Third section');
+  });
+
+  test('too little signal falls back to the whole body', () => {
+    const out = md('<body><div><p>Only one real paragraph of content lives anywhere on this page.</p></div><div><span>stray</span></div></body>');
+    expect(out).toContain('Only one real paragraph');
+    expect(out).toContain('stray');
+  });
+});
+
+describe('READABILITY-CHROME-1 — scoring must ignore page furniture', () => {
+  test('a prose-heavy sidebar never wins the vote', () => {
+    // The aside carries MORE prose than the content div. Scoring that ignores
+    // chrome hands back the sidebar as the page's main content.
+    const out = md(`<body>
+      <aside>
+        <p>Our venue has served the riverside district since nineteen seventy two, hosting weddings and civic functions throughout the year.</p>
+        <p>Sign up to the mailing list for occasional updates about upcoming shows, volunteer opportunities and seasonal closures.</p>
+      </aside>
+      <div id="content">
+        <p>The summer concert series runs every Friday evening in July.</p>
+      </div>
+    </body>`);
+
+    expect(out).toContain('summer concert series');
+    expect(out).not.toContain('nineteen seventy two');
+    expect(out).not.toContain('mailing list');
+  });
+
+  test('a prose-heavy nav never wins the vote', () => {
+    const out = md(`<body>
+      <nav>
+        <p>Browse concerts, browse theatre, browse comedy, browse family shows and browse seasonal events here.</p>
+        <p>Accessibility information, parking information, ticketing information and contact information all live here.</p>
+      </nav>
+      <div><p>Doors open at six on Friday.</p></div>
+    </body>`);
+
+    expect(out).toContain('Doors open at six');
+    expect(out).not.toContain('Browse concerts');
+  });
+});

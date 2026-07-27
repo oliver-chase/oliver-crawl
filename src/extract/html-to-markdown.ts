@@ -51,19 +51,88 @@ function collapse(text: string): string {
 }
 
 /**
- * The main-content root: the first `<main>` or `<article>` when the page has
- * one (the tightest, most reliable scope), else `<body>` with chrome removed.
+ * The main-content root, in order of confidence:
  *
- * Mirrors extract/content-region-hash.ts's decision so the markdown and the
- * change hash describe the SAME region — if they disagreed, a page could
- * report unchanged while its markdown moved.
+ *   1. The first `<main>` or `<article>` — the author told us, believe them.
+ *   2. PARITY-READABILITY-1 (2026-07-27): on div-soup pages that never use
+ *      semantic tags, score the content the Readability way — paragraphs
+ *      vote for their parent — and take the winning cluster.
+ *   3. `<body>`, when nothing scores — chrome stripping is then all we have.
+ *
+ * On the change hash: extract/content-region-hash.ts stays on its regex
+ * region (semantic-or-body), so on div-soup pages the hash covers a SUPERSET
+ * of the markdown scope. The divergence is deliberate and safe in exactly
+ * one direction — the hash may report "changed" when the markdown region
+ * did not move (a wasted re-extraction), never "unchanged" when it did
+ * (silently stale data).
  */
 export function selectMainRegion($: CheerioAPI): Cheerio<AnyNode> {
   for (const tag of ['main', 'article']) {
     const found = $(tag).first();
     if (found.length > 0) return found as Cheerio<AnyNode>;
   }
+  const scored = scoreContentParent($);
+  if (scored) return scored;
   return $('body') as Cheerio<AnyNode>;
+}
+
+/**
+ * Readability's core move, simplified: paragraphs vote for their parent.
+ *
+ * Every text-bearing `<p>` adds its non-link text length to its parent's
+ * score, discounted by link density — a paragraph that is mostly links is a
+ * menu wearing a <p> tag, and gets almost no vote. The parent with the most
+ * votes is where the prose lives; link farms, sidebars and footer nav score
+ * near zero because their text IS their links.
+ *
+ * Guardrails, because a wrong pick here silently loses content:
+ *   - a winner must hold a meaningful share (>= 40%) of the page's total
+ *     paragraph mass — a page whose text is spread thin has no clear main
+ *     region, and body-with-chrome-stripped is the honest answer;
+ *   - fewer than 2 scoring paragraphs is no signal at all.
+ */
+function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
+  const scores = new Map<AnyNode, number>();
+  let totalMass = 0;
+  let scoringParagraphs = 0;
+
+  $('p').each((_, p) => {
+    const $p = $(p);
+    // READABILITY-CHROME-1 (2026-07-27, found in review): a paragraph inside
+    // nav/header/footer/aside is furniture and must not vote. Without this a
+    // prose-heavy sidebar outscores a short real article and is returned AS
+    // the main region — and because the winner is then a DESCENDANT of the
+    // chrome element, the later chrome strip cannot undo it (it removes
+    // chrome inside the scope, not the scope's own ancestors).
+    if ($p.closest(CHROME_SELECTOR).length > 0) return;
+
+    const text = $p.text().trim();
+    if (text.length < 25) return; // too short to be prose
+
+    const linkText = $p.find('a').text().trim();
+    const linkDensity = text.length > 0 ? linkText.length / text.length : 1;
+    const vote = text.length * (1 - linkDensity);
+    if (vote <= 0) return;
+
+    scoringParagraphs++;
+    totalMass += vote;
+    const parent = $p.parent().get(0);
+    if (parent) scores.set(parent, (scores.get(parent) ?? 0) + vote);
+  });
+
+  if (scoringParagraphs < 2 || totalMass === 0) return null;
+
+  let best: AnyNode | null = null;
+  let bestScore = 0;
+  for (const [node, score] of scores) {
+    if (score > bestScore) {
+      best = node;
+      bestScore = score;
+    }
+  }
+
+  if (!best || bestScore / totalMass < 0.4) return null;
+  return $(best) as Cheerio<AnyNode>;
 }
 
 /**

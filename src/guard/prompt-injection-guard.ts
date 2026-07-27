@@ -175,41 +175,6 @@ export function detectPromptInjectionSignals(input: string): PromptInjectionSign
   return collectSignals(input);
 }
 
-/**
- * The `source_error` curation-task shape every quarantine path (image
- * upload, CSV import, and any future ingestion route) should insert when
- * `detectPromptInjectionSignals` flags something — one place so the shape
- * review-queue.tsx renders (task_type/priority/promptInjectionSignals/
- * rawText) can't drift between call sites. `extraPayload` carries whatever
- * is specific to that source (e.g. image upload's storagePath/imageUrl).
- */
-export function buildQuarantineTask(input: {
-  entityType: string;
-  entityId: string;
-  title: string;
-  detail: string;
-  source: string;
-  signals: PromptInjectionSignal[];
-  rawText: string;
-  extraPayload?: Record<string, unknown>;
-}) {
-  return {
-    task_type: 'source_error' as const,
-    priority: 'high' as const,
-    status: 'open' as const,
-    entity_type: input.entityType,
-    entity_id: input.entityId,
-    task_payload: {
-      title: input.title,
-      detail: input.detail,
-      source: input.source,
-      promptInjectionSignals: input.signals,
-      rawText: input.rawText,
-      ...input.extraPayload,
-    },
-  };
-}
-
 export function sanitizeCrawledText(input: string, maxChars = 20000): SanitizedCrawlText {
   const originalLength = input.length;
   const signals = collectSignals(input);

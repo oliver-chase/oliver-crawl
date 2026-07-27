@@ -105,10 +105,14 @@ const RUNGS: Record<string, VendorRung> = {
 /**
  * Scrape one URL through the vendor lane, trying configured rungs in order.
  *
- * Note what this does NOT do, deliberately: it applies no same-site or SSRF
- * checks of its own, because the request is made by the VENDOR from the
- * vendor's own infrastructure — our network is never the one connecting. The
- * caller is still expected to have vetted the URL (crawl() does).
+ * Note what this does NOT do, deliberately: it applies no DNS/SSRF check of
+ * its own, because the request is made by the VENDOR from the vendor's own
+ * infrastructure — our network is never the one connecting.
+ *
+ * Same-site, eligibility and robots ARE enforced, lane-independently, by
+ * crawl() (VENDOR-POLICY-1) — governance is a property of the crawl, not of
+ * which network makes the request. Callers invoking this function directly
+ * bypass that gate and take on the vetting themselves.
  */
 export async function crawlWithVendorLane(
   url: string,

@@ -27,6 +27,7 @@
 import { resolveConfig, availableVendorRungs, configFromEnv, DEFAULT_USER_AGENT } from './core/config.js';
 import { crawlWithOwnLane } from './lanes/own/index.js';
 import { crawlWithVendorLane } from './lanes/vendor/index.js';
+import { approveCrawlPolicy } from './lanes/own/index.js';
 import { search, availableSearchProviders } from './search/index.js';
 import { readPageCache, writePageCache } from './core/page-cache.js';
 import { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
@@ -70,6 +71,26 @@ export function createCrawler(config: CrawlConfig): Crawler {
       // Default: own lane only. A caller must opt IN to spending money.
       const lanes: LaneName[] = options.lanes?.length ? options.lanes : ['own'];
       const ttl = resolved.cacheTtlMs ?? 0;
+
+      // VENDOR-POLICY-1: policy holds for EVERY lane. Without this, a
+      // vendor-only crawl ran unvetted — no same-site rule, no robots check —
+      // and a paid vendor fetched what our own guard would have refused.
+      // Cheap to repeat for the own lane (robots is cached per host, the
+      // asserts are pure); the own lane still adds its DNS/SSRF check, which
+      // only matters when OUR socket connects.
+      //
+      // CACHE-POLICY-1 (2026-07-27, found in review): this runs BEFORE the
+      // cache read, and the order is load-bearing. The page cache is keyed on
+      // (url, lanes) and NOT on the target, so serving a hit first let a
+      // second target read a page it was never allowed to fetch — an
+      // off-domain URL, an inactive source, a robots-disallowed path. Policy
+      // is a property of the ASKING target; the cache only knows the URL.
+      try {
+        await approveCrawlPolicy(target, url, resolved);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return { ok: false, reason: 'blocked', detail };
+      }
 
       // A repeat of the same URL in the cache window costs nothing. Only
       // successful non-304 results are ever stored — see core/page-cache.ts.

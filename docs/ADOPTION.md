@@ -121,4 +121,4 @@ console.assert(health.ok, 'crawl smoke test failed');
 
 - **Node 20+ for the full feature set.** On workerd/edge, local render is skipped (no browser) and DNS resolution falls back to DNS-over-HTTPS automatically — everything else works.
 - **The own lane needs no secrets.** A repo can adopt the free lane with zero configuration beyond a User-Agent.
-- **Pin the version** (`"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#v0.1.0"`) so a package change never silently alters your crawl behaviour.
+- **Pin the version** (`"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#v0.2.0"`) so a package change never silently alters your crawl behaviour.
