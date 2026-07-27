@@ -115,7 +115,7 @@ export async function crawlWithOwnLane(
     baseHost: requestUrl.hostname,
     maxTextChars,
     rung: 'fetch',
-    includeHtml: false,
+    includeHtml: options.includeHtml ?? false,
   });
 
   if (page === 'quarantined') {
@@ -163,7 +163,7 @@ async function renderFallback(
       baseHost: new URL(url).hostname,
       maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
       rung: 'browser-render',
-      includeHtml: false,
+      includeHtml: options.includeHtml ?? false,
     });
 
     if (page === 'quarantined') {

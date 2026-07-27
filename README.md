@@ -66,6 +66,25 @@ const result = await crawler.crawl(target, url, { lanes: ['own', 'vendor'] });
 
 Tries free first; escalates to a paid vendor only if the free lane can't reach the page. A **policy** refusal (off-domain, quarantined) never escalates — paying to route around your own guard is not a fallback.
 
+### Crawling a whole site
+
+```ts
+import { createCrawler, crawlSite } from '@oliver/crawl-core';
+
+const run = await crawlSite(crawler, target, {
+  seeds: ['https://venue.example.com/events'],
+  followPagination: true,
+  maxPages: 5,
+});
+
+run.pages;        // everything fetched and parsed
+run.notModified;  // URLs that answered 304 — unchanged, and NOT failures
+run.failures;     // per-URL, so one bad page never sinks the run
+run.truncated;    // true if it stopped at maxPages rather than running out
+```
+
+Sequential by design (one request at a time): hammering a small site in parallel is what gets a crawler blocked. Already-visited URLs are never re-fetched, so a "next page" link that loops back to page 1 terminates instead of spinning.
+
 ### Conditional GET — the cheapest crawl is the one that doesn't happen
 
 ```ts
@@ -159,7 +178,7 @@ npm run build     # emit dist/
 
 ## Status
 
-Early but substantial. Done, tested (189 tests) and verified against live sites: the own lane end to end (fetch, browser render, Jina), both guards, JSON-LD extraction, conditional GET and cheap-change probing, lane orchestration, robots.txt fetching/parsing, ICS-feed and pagination discovery, and recipe replay. One piece left: the multi-page crawl orchestrator, which is now mostly assembly of parts that already exist here. See docs/MIGRATION.md.
+The crawler is feature-complete for single-page and multi-page crawling: 204 tests, typecheck clean, built to dist, and verified against live sites (including a real multi-page run). Both lanes, both guards, the full own-lane rung ladder (fetch, browser render, Jina), JSON-LD extraction, conditional GET, cheap-change probing, robots.txt, ICS-feed and pagination discovery, recipe replay, and the multi-page orchestrator are all done. Outstanding: search providers (a different shape from crawling — query in, results out) and consumer adoption. See docs/MIGRATION.md.
 
 ## License
 

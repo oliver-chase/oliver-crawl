@@ -74,6 +74,10 @@ export function createCrawler(config: CrawlConfig): Crawler {
 }
 
 export { configFromEnv, resolveConfig, availableVendorRungs, DEFAULT_USER_AGENT };
+// Multi-page orchestration: drives crawl() across a target's seeds, with a
+// page budget, retry policy, dedup and optional pagination following.
+export { crawlSite } from './crawl-site.js';
+export type { SiteCrawlOptions, SiteCrawlResult, SiteCrawlFailure } from './crawl-site.js';
 export { DEFAULT_VENDOR_RUNG_ORDER } from './core/config.js';
 export type { ResolvedConfig } from './core/config.js';
 
