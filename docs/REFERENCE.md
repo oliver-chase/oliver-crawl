@@ -10,9 +10,9 @@ Most scraping libraries give you "URL in, text out". This one also answers *shou
 
 ---
 
-## Why two lanes
+## Why two paths
 
-| | Lane 1: `own` | Lane 2: `vendor` |
+| | Free path: `own` | Paid path: `vendor` |
 |---|---|---|
 | **Cost** | Free | Per call, billed by the vendor |
 | **Keys needed** | None | One per vendor |
@@ -20,9 +20,9 @@ Most scraping libraries give you "URL in, text out". This one also answers *shou
 | **Handles** | HTML, JSON-LD, SPA payloads, conditional GET | JS-heavy pages, hard bot walls |
 | **Default?** | Yes | No — opt in explicitly |
 
-The own lane handles the large majority of real pages. The vendor lane exists for the cases it genuinely can't serve — a page that only exists after JavaScript runs, or an origin that blocks direct crawling outright.
+The free path handles the large majority of real pages. The paid path covers what it genuinely cannot reach: an origin behind a commercial anti-bot service, where the differentiator is a residential proxy pool that cannot be replicated for free.
 
-**Nothing costs money unless you ask.** `lanes` defaults to `['own']`. A missing vendor key disables that rung and nothing else.
+**Nothing bills unless a call asks it to.** `lanes` defaults to `['own']`, and a missing vendor key disables that rung alone rather than failing the crawl.
 
 ---
 

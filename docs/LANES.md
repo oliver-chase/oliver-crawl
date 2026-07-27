@@ -1,12 +1,12 @@
-# The two lanes
+# The two fetch paths
 
-Every crawl in this package goes through one or both of two lanes. The split is the package's core design decision, so it gets its own page.
+Every crawl takes one of two paths, or both in sequence. The split is the library's central design decision, which is why it has its own page.
 
-## Lane 1: `own` — our crawler
+## The free path (`own`)
 
-Runs on **your** infrastructure with **no API keys and no per-call cost**. This is the default lane, and the goal is that it serves the overwhelming majority of real pages so the paid lane almost never runs.
+Runs on your infrastructure, needs no API key, and costs nothing per call. It is the default, and it is meant to serve the large majority of real pages so the paid path rarely runs at all.
 
-Its rung ladder, in order — each rung only runs when the ones above it couldn't finish the job:
+It is a ladder of rungs. Each runs only when the ones above it could not finish the job:
 
 | # | Rung | Cost | What it does |
 |---|------|------|--------------|
@@ -17,7 +17,7 @@ Its rung ladder, in order — each rung only runs when the ones above it couldn'
 | 5 | Guard | free | Prompt-injection sanitising **before** text is returned |
 | 6 | Hash | free | Full-body + content-region digests for change detection |
 | 7 | Local render | free | Local headless Chromium (`localRender: true` + `npx playwright install chromium`), for JS-only pages |
-| 8 | Remote render | yours | Your own render service (`browserRender` config) — for serverless deployments that can't run a browser |
+| 8 | Remote render | yours | Your own render service (`browserRender`), for deployments that cannot run a browser |
 | 9 | Jina Reader | free | Keyless public service; clears bot walls and JS shells the direct fetch can't |
 
 ### When rungs 7–9 engage
@@ -34,17 +34,19 @@ The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lane
 
 One rung is skipped conditionally: **a target carrying `headers` (credentials) never reaches rung 9.** Jina is a public third-party service that fetches the URL itself, so sending it a members-only URL would disclose that URL and its query string to a party you never agreed to share it with — and it would fail regardless, because Jina has none of your credentials. Rungs 7 and 8 still run: those are your own infrastructure.
 
-## Lane 2: `vendor` — third-party APIs
+## The paid path (`vendor`)
 
-Firecrawl and Apify behind one interface. **Off by default** — a caller opts in per crawl with `lanes: ['own', 'vendor']`. Exists for the residue: pages the entire own ladder genuinely cannot read.
+Firecrawl and Apify behind one interface, disabled unless a call passes `lanes: ['own', 'vendor']`. It exists for the pages the free ladder genuinely cannot read — typically those behind commercial anti-bot services, where the differentiator is a residential proxy pool that cannot be replicated for free.
 
 - A missing key disables that rung only; no keys at all reports `no_lane_available` instead of throwing.
 - Every paid call is gated on your `checkBudget()` first.
 - Vendor output goes through the same prompt-injection guard as our own fetches.
 
-## The rule that connects them
+## The rule connecting them
 
-**A policy refusal never escalates.** If the own lane refuses a URL as `blocked` or `quarantined`, the crawl ends — it does not fall through to a vendor. Paying a third party to fetch what your own guard refused is buying a way around your own security.
+**A policy refusal never escalates.** When the free path refuses a URL as `blocked` or `quarantined`, the crawl ends there. It does not fall through to a vendor.
+
+The reason is worth stating plainly: paying a third party to retrieve what your own security guard just refused is purchasing a way around your own controls. A transport failure is a reason to try harder. A policy decision is not.
 
 ## Deciding what to crawl
 
@@ -92,6 +94,8 @@ Two hashes are stored per page, and the comparison picks the right one:
 
 Both need the same loop: store `result.validators`, pass them back as `priorValidators`.
 
-## Search is not a lane
+## Search is not one of these paths
 
-`crawler.search()` is a separate surface (query in, URLs out) with its own providers (Serper, Tavily — both paid, tried in that order because Serper is ~5x cheaper per call). It shares config, budgeting and usage reporting with the lanes, and nothing else. See the README's Search section.
+`crawler.search()` is a separate surface: a query goes in, URLs come out. Its providers are Serper and Tavily, both paid, tried in that order because Serper costs roughly a fifth as much per call.
+
+It shares configuration, budgeting and usage reporting with the fetch paths and nothing else. Notably, results are then crawled through the free path by default — searching does not commit you to paying twice.

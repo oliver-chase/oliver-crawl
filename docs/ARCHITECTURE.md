@@ -14,7 +14,7 @@ flowchart TB
     subgraph PKG["oliver-crawl"]
         API["createCrawler()<br/>crawl · crawlSite · search"]
 
-        subgraph L1["LANE 1 — own · free"]
+        subgraph L1["FREE PATH — own"]
             POL["policy<br/>SSRF · robots · same-site"]
             FETCH["fetch<br/>conditional GET · redirects"]
             PARSE["parse<br/>text · JSON-LD · links"]
@@ -23,7 +23,7 @@ flowchart TB
             JINA["Jina Reader<br/>free fallback"]
         end
 
-        subgraph L2["LANE 2 — vendor · paid · opt-in"]
+        subgraph L2["PAID PATH — vendor · opt-in"]
             FC["Firecrawl"]
             AP["Apify"]
         end
@@ -59,7 +59,7 @@ flowchart TB
     style PKG fill:#f5f5f5,stroke:#616161
 ```
 
-Green is free and needs no credentials. Orange costs money and is off unless asked for.
+Green needs no credentials and costs nothing. Orange bills per call and stays off unless a call asks for it.
 
 ## One page, start to finish
 

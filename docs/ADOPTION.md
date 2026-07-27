@@ -1,60 +1,64 @@
 # Adopting oliver-crawl in a new project
 
-> Already have a working crawler and real data to protect? Read
-> **[EXISTING-PROJECTS.md](EXISTING-PROJECTS.md)** instead — swapping into a
-> live system has failure modes this page does not cover.
+> Already running a crawler against real data? Read
+> **[EXISTING-PROJECTS.md](EXISTING-PROJECTS.md)** instead. Replacing a live
+> system has failure modes this page does not cover.
 
-The goal: any of your repos can crawl with a few lines, reuse the same guards and lane logic, and never reimplement providers again. This is the how.
+Integration is one adapter function and a set of callbacks. The library holds no database and knows nothing about your schema, so there is no framework to adopt and nothing to migrate.
 
 ## 1. Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl
+npm install github:oliver-chase/oliver-crawl#<tag>
 ```
 
-ESM-only, Node 20+. If your repo is CommonJS, import it from an ESM entry point or use dynamic `import()`.
+Pin a tag, never a branch, and never with `^`. Take the newest from `git tag -l` in the package repo. A floating dependency means a change here can alter your crawl behaviour without you doing anything, which is the failure pinning exists to prevent.
 
-## 2. The one adapter you write
+ESM-only, Node 20+. A CommonJS repo can import it from an ESM entry point or use dynamic `import()`.
 
-The package deliberately does **not** know your database. You give it a `CrawlTarget` (5 fields) and it hands back results; you persist what you want. That adapter is the whole integration.
+## 2. The adapter
+
+The library takes a `CrawlTarget` — five fields — and returns results. Your own record is almost certainly richer than that. Do not change it; map it:
 
 ```ts
 import { createCrawler, crawlSite, type CrawlTarget } from '@oliver/crawl-core';
 
-// Your record -> the package's minimal shape. This is the only glue.
 function toCrawlTarget(row: MySourceRow): CrawlTarget {
   return {
     baseUrl: row.url,
     name: row.name,
-    robotsPolicy: row.robots ?? 'unknown', // 'unknown' fails closed
+    robotsPolicy: row.robots ?? 'unknown', // 'unknown' refuses to crawl
     active: row.enabled,
   };
 }
 ```
 
-## 3. Wire the callbacks to your systems
+`robotsPolicy: 'unknown'` fails closed and will not crawl. If your column is nullable, either backfill it or set `autoRobots: true` and let the crawler resolve it. This is the single most common cause of "everything is suddenly blocked".
 
-Everything the package would otherwise need a database for is an injected function. Give it yours:
+## 3. The callbacks
+
+Anything the library would need a database for is an injected function instead:
 
 ```ts
 const crawler = createCrawler({
   userAgent: 'MyApp/1.0 (+https://myapp.example/bot)',
 
-  // Your metrics/usage table — called once per external call.
+  // Called once per external call. Free rungs report cost 0.
   onUsage: (e) => db.usage.insert({ lane: e.lane, rung: e.rung, cost: e.costUsd, ok: e.ok, ms: e.latencyMs }),
 
-  // Your daily budget — vetoes paid calls. Own-lane rungs are free and never ask.
+  // Vetoes paid calls. Never consulted for the free path, which cannot spend.
   checkBudget: () => todaySpend() < DAILY_CAP,
 
-  // Vendor keys, if you want the paid lane at all. Omit for free-only.
+  // Only if you want paid fallback at all. Omit for a free-only setup.
   vendor: { firecrawl: process.env.FIRECRAWL_API_KEY },
 
-  // Free JS rendering on machines that can run a browser.
   localRender: process.env.NODE_ENV !== 'production',
 });
 ```
 
-Or, the shortcut for the common case — read keys from the environment:
+Include a contact URL in the `userAgent`. A site operator seeing unexplained traffic has no way to ask about it and will block instead; the library warns once if the string carries no contact.
+
+To read keys from the environment instead:
 
 ```ts
 import { createCrawler, configFromEnv } from '@oliver/crawl-core';
@@ -63,62 +67,60 @@ const crawler = createCrawler(configFromEnv({ userAgent: 'MyApp/1.0 (+https://my
 
 ## 4. Crawl
 
-Single page:
+One page:
 
 ```ts
 const r = await crawler.crawl(toCrawlTarget(row), row.url);
-if (r.ok && !r.notModified) useText(r.pages[0]!.text);
+if (r.ok && !r.notModified) useContent(r.pages[0]!.markdown);
 ```
 
-Whole site, with re-crawl efficiency:
+A site, with the re-crawl loop wired:
 
 ```ts
 const run = await crawlSite(crawler, toCrawlTarget(row), {
   seeds: row.seedUrls,
   followPagination: true,
   maxPages: 20,
-  // Feed back what you stored last time -> unchanged pages cost a free 304.
   priorValidators: row.storedValidators,
-  // Persist this run's fresh validators for next time.
+  priorLastmod: row.storedLastmod,
   onSignals: (id, validators) => db.sources.saveValidators(id, validators),
   targetId: row.id,
 });
 ```
 
-## 5. The re-crawl efficiency loop (the point of scheduled crawling)
+## 5. The re-crawl loop
 
-This is what makes repeated crawls cheap:
+Scheduled crawling is only affordable if unchanged pages stop costing anything. That requires a round trip through your storage, and it does not happen by itself:
 
-1. First crawl returns `result.validators` — ETag / Last-Modified per URL.
-2. You store them against the source.
-3. Next scheduled run, pass them as `priorValidators`.
-4. Unchanged pages answer **304** — the crawl fetches nothing, parses nothing, costs nothing, and reports them under `notModified`.
+1. A crawl returns `run.validators` (ETag and Last-Modified per URL) and `run.lastmod` (from the sitemap).
+2. You store both against the source.
+3. The next run passes them back as `priorValidators` and `priorLastmod`.
+4. Pages the sitemap reports unchanged are never requested. Pages the server reports unchanged answer 304 and are never downloaded. Both are reported separately from failures.
 
-A site checked hourly that changes weekly then costs one real fetch per week and 167 free 304s. That is the free re-crawl goal, and it needs the store-and-replay loop above wired — it does not happen on its own.
+A weekly-changing site polled hourly settles at roughly one real fetch per week against 167 free checks.
 
-## 6. Discovering what to crawl (free)
-
-Instead of hardcoding seed paths:
+## 6. Finding pages without hardcoding paths
 
 ```ts
-import { discoverSitemapUrls } from '@oliver/crawl-core';
+import { mapSite } from '@oliver/crawl-core';
 
-const found = await discoverSitemapUrls(target, { userAgent: crawler-ua, maxUrls: 100 });
-const run = await crawlSite(crawler, target, { seeds: found.urls });
+const map = await mapSite(crawler, target, { maxUrls: 100 });
+const run = await crawlSite(crawler, target, { seeds: map.urls });
 ```
 
-## 7. Verify it works
+`mapSite` reads the sitemap, the homepage's links, and any feeds the homepage declares — one page body fetched in total. `map.feeds` is worth checking first: a site's own data feed is usually more accurate and more stable than the page rendering it.
+
+## 7. Smoke test
 
 ```ts
 const health = await crawler.crawl(
   { baseUrl: 'https://example.com', robotsPolicy: 'allow', active: true },
   'https://example.com/',
 );
-console.assert(health.ok, 'crawl smoke test failed');
+console.assert(health.ok, `crawl smoke test failed: ${health.ok ? '' : health.detail}`);
 ```
 
 ## Runtime notes
 
-- **Node 20+ for the full feature set.** On workerd/edge, local render is skipped (no browser) and DNS resolution falls back to DNS-over-HTTPS automatically — everything else works.
-- **The own lane needs no secrets.** A repo can adopt the free lane with zero configuration beyond a User-Agent.
-- **Pin a tag**, never a branch — `"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#<tag>"` with no `^`, so a package change can never silently alter your crawl behaviour. Use the newest tag from `git tag -l` in the package repo; this page deliberately does not name one, because a hardcoded version in prose goes stale the next time anything ships.
+- **Node 20+** for the full feature set. On workerd and edge runtimes, local rendering is unavailable and DNS resolution falls back to DNS-over-HTTPS automatically. Everything else is identical.
+- **The free path needs no secrets.** A repo can adopt it with nothing configured but a User-Agent.
