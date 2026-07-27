@@ -21,7 +21,7 @@ const r = await crawler.crawl(
 console.log(r.ok ? 'works here' : r.detail);
 ```
 
-If that fails, the answer is in [Environment gotchas](#environment-gotchas) below — solve it now, not after you've rewritten call sites.
+If that fails, [Environment gotchas](#environment-gotchas) below covers the likely causes. Resolve it before rewriting any call sites.
 
 ---
 
@@ -263,3 +263,7 @@ Setting `headers` also **disables the Jina fallback rung for that target**. Jina
 ### Learning extraction recipes — yours
 
 The package can *replay* a stored selector recipe (`applyRecipe`). Judging whether a recipe is any good requires your domain's validity rules — did that parse as a price, is that a plausible SKU — so learning stays with you.
+
+---
+
+**See also:** [README](../README.md) · [ADOPTION](ADOPTION.md) — starting fresh instead · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved out of Fallow · [BACKLOG](BACKLOG.md) — known gaps

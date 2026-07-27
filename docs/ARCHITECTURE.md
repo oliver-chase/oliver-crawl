@@ -129,8 +129,8 @@ Breadth-first: pages a site links from its homepage are the ones it considers im
 | **No database in the package** | Your app owns persistence. State leaves through `onUsage` / `checkBudget` / `onSignals` callbacks, so Fallow can write Postgres, another repo a spreadsheet, a fork nothing at all. |
 | **No env reads in core** | Config is passed explicitly (`configFromEnv()` is opt-in sugar), so two differently-configured crawlers can exist in one process. |
 | **Domain extraction is yours** | You get text, markdown, JSON-LD and links. The mapping from a page to your own records is defined by your schema; any version shipped here would be wrong for every consumer that did not share it. |
-| **Lanes are separate** | Free and paid must be distinguishable at a glance, and the default must never spend money. |
-| **Policy refusals never escalate** | Paying a vendor to fetch what your own guard refused is buying a way around your own security. |
+| **The two paths are separate** | A reader must be able to tell which code can bill them, and the default must never spend money. |
+| **Policy refusals never escalate** | Paying a vendor to fetch what your own guard refused would buy a way around your own controls. |
 
 ## Making repeat crawls cheap
 
@@ -203,3 +203,7 @@ src/
     vendor/index.ts     Firecrawl, Apify
   search/index.ts       Serper, Tavily
 ```
+
+---
+
+**See also:** [README](../README.md) · [LANES](LANES.md) — the rung ladder in order · [REFERENCE](REFERENCE.md) — every option and return field · [MIGRATION](MIGRATION.md) — where the code came from · [BACKLOG](BACKLOG.md) — known gaps

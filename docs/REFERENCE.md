@@ -427,3 +427,7 @@ Feature-complete and hardened: typecheck clean (strict, `noUncheckedIndexedAcces
 ## License
 
 MIT
+
+---
+
+**See also:** [README](../README.md) · [ADOPTION](ADOPTION.md) · [LANES](LANES.md) · [ARCHITECTURE](ARCHITECTURE.md) · [BACKLOG](BACKLOG.md) — known gaps

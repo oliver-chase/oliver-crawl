@@ -124,3 +124,7 @@ console.assert(health.ok, `crawl smoke test failed: ${health.ok ? '' : health.de
 
 - **Node 20+** for the full feature set. On workerd and edge runtimes, local rendering is unavailable and DNS resolution falls back to DNS-over-HTTPS automatically. Everything else is identical.
 - **The free path needs no secrets.** A repo can adopt it with nothing configured but a User-Agent.
+
+---
+
+**See also:** [README](../README.md) · [EXISTING-PROJECTS](EXISTING-PROJECTS.md) — adding this to a live system · [REFERENCE](REFERENCE.md) — every option and return field · [LANES](LANES.md) — how the free path works · [BACKLOG](BACKLOG.md) — known gaps

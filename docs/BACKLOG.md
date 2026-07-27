@@ -4,12 +4,22 @@
 > its work ships — no archived or DONE sections. `git log --follow docs/BACKLOG.md`
 > for what came before.
 
-Opened 2026-07-27 from a full security / QA / functionality audit of the
-package against Fallow, the repo it was extracted from. Fallow has ~78
-ingestion modules; roughly 20 were migrated. Everything below is a capability
-that exists there (or should exist here) and does **not** exist here yet.
+**No open specs.** Everything opened by the 2026-07-27 audit has shipped; the
+tracker below records what each entry was and how it was resolved.
 
-Each entry is a **spec, not a build**. Nothing below has been implemented.
+That is a statement about this list, not about the library. Two things remain
+true and are recorded here because they are the next real decisions, not
+because they are queued work:
+
+- **No consumer has adopted this yet.** Fallow and tesknota still run their own
+  crawling code. `scripts/parity-check.mjs` exists to gate that swap: run it and
+  the consumer's existing extractor over the same URLs, and explain every
+  disagreement before changing anything. A silent extraction difference across
+  every source does not read as a bug — it reads as the data getting worse.
+- **Residential proxies and general web search stay paid.** Both were assessed
+  and neither is free-achievable. See the parity table.
+
+New work belongs here as a spec before it is built.
 
 ---
 
@@ -46,12 +56,18 @@ free search rung.
 
 ---
 
-## Where we can beat the vendors, not just match them
+## Where this beats the vendors rather than matching them
 
-The vendors optimise **crawl** cost. Their API is stateless and per-call, so
-they structurally cannot do any of the below. We run in-process and hold state
-across runs, and the consumer's real bill is the LLM extraction AFTER the
-crawl — so this is where the leverage is.
+A per-call vendor API is stateless, so it cannot carry knowledge from one page
+to the next or from one run to the next. Running in-process can. Four shipped
+capabilities come from that difference, and none has a vendor equivalent:
+
+| Capability | What it exploits |
+|---|---|
+| Sitemap `lastmod` skipping | One request reports which of a site's pages changed; a per-page API must ask per page |
+| Per-host rung memory | A host that always rejects the plain fetch is remembered, so the wasted request stops after the first page |
+| Content diff | Both versions are held here, so a consumer can re-extract the delta instead of the page |
+| Structured-data signal | Reports whether a model is needed at all, which a paid extraction API has no incentive to answer |
 
 ---
 
@@ -80,3 +96,7 @@ crawl — so this is where the leverage is.
 | 2026-07-27 | shipped | Crawl-delay honoured (ROBOTS-DELAY-1) + WHITE-LABEL-2 FallowBot strings removed from output. Structured-data signal shipped (JSONLD-SIGNAL-1). |
 | 2026-07-27 | beat-the-vendors | Four specs opened for things a stateless per-call API structurally cannot do: BETTER-LASTMOD-1, BETTER-RUNGMEMORY-1, BETTER-DIFF-1, BETTER-SOFT404-1. |
 | 2026-07-27 | vendor parity | Reframed around displacing the paid APIs, not just matching Fallow. Markdown + onlyMainContent SHIPPED. PARITY-MAP-1 and PARITY-ACTIONS-1 opened. Recorded that proxies/stealth and general web search are genuinely not free-achievable. |
+
+---
+
+**See also:** [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) · [LANES](LANES.md) · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved here and what did not
