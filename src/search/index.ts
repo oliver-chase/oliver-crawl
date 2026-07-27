@@ -21,11 +21,21 @@
 import type { ResolvedConfig } from '../core/config.js';
 import { emitUsage } from '../core/usage.js';
 import { isSafeHttpUrl } from '../core/url-safety.js';
+import { sanitizeCrawledText } from '../guard/prompt-injection-guard.js';
 
 export type SearchResult = {
   title: string;
   snippet: string;
   url: string;
+  /**
+   * True when the provider's title/snippet contained prompt-injection signals
+   * and was withheld. The `url` is still returned and still safe to crawl —
+   * only the provider-supplied prose was dropped.
+   *
+   * Worth surfacing rather than hiding: a result whose own meta description
+   * is an injection payload is a strong hint about the page behind it.
+   */
+  injectionFiltered?: boolean;
 };
 
 export type SearchOutcome =
@@ -62,9 +72,28 @@ type SearchProvider = {
   run: (query: string, maxResults: number, config: ResolvedConfig) => Promise<SearchResult[]>;
 };
 
-/** Drop duplicate URLs and anything that is not a safe public http(s) URL —
- *  results feed prompts and UIs, so a `javascript:` href from a provider must
- *  never survive to a caller. */
+/**
+ * Normalise provider output across the trust boundary.
+ *
+ * A search provider is UNTRUSTED in two separate ways, and both have to be
+ * handled here because this is the only place every provider's output passes
+ * through:
+ *
+ *   1. The `url` may not be a safe public http(s) URL. A `javascript:` href
+ *      reaching a caller's UI is an XSS; a private-network URL reaching the
+ *      fetcher is an SSRF.
+ *   2. SEARCH-INJECTION-1 (2026-07-27, found in audit): `title` and `snippet`
+ *      are attacker-influenceable prose — a snippet is usually just the target
+ *      page's own meta description. Crawled page text has always gone through
+ *      the injection guard, but these did not, so the identical payload was
+ *      blocked when we fetched the page and waved through when a search engine
+ *      quoted it. These strings are documented as feeding prompts, which makes
+ *      that the shorter path to the model, not the longer one.
+ *
+ * A tripped snippet drops the prose but KEEPS the url: the url is separately
+ * validated and still useful, and throwing away a real result because its meta
+ * description was hostile would cost accuracy for no security gain.
+ */
 function normalizeResults(raw: Array<{ title?: string; snippet?: string; url?: string }>, maxResults: number): SearchResult[] {
   const seen = new Set<string>();
   const out: SearchResult[] = [];
@@ -72,11 +101,18 @@ function normalizeResults(raw: Array<{ title?: string; snippet?: string; url?: s
     const url = item.url || '';
     if (!url || seen.has(url) || !isSafeHttpUrl(url)) continue;
     seen.add(url);
-    out.push({
-      title: item.title || '',
-      snippet: (item.snippet || '').slice(0, MAX_SNIPPET_CHARS),
-      url,
-    });
+
+    const title = item.title || '';
+    const snippet = (item.snippet || '').slice(0, MAX_SNIPPET_CHARS);
+    // Guarded together: an injection split across the two fields would pass a
+    // check that only ever saw them apart.
+    const checked = sanitizeCrawledText(`${title}\n${snippet}`, MAX_SNIPPET_CHARS * 2);
+
+    out.push(
+      checked.signals.length > 0
+        ? { title: '', snippet: '', url, injectionFiltered: true }
+        : { title, snippet, url },
+    );
     if (out.length >= maxResults) break;
   }
   return out;

@@ -146,7 +146,7 @@ It also obeys `Retry-After` when an origin says to back off, and `maxDurationMs`
 
 ```ts
 const found = await crawler.search('rochester summer concert series');
-if (found.ok) found.results; // [{ title, snippet, url }]
+if (found.ok) found.results; // [{ title, snippet, url, injectionFiltered? }]
 
 // Only pages on one site:
 await crawler.search('parking', { site: 'venue.example.com' });
