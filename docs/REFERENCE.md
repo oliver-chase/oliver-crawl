@@ -10,9 +10,9 @@ Most scraping libraries give you "URL in, text out". This one also answers *shou
 
 ---
 
-## Why two lanes
+## Why two paths
 
-| | Lane 1: `own` | Lane 2: `vendor` |
+| | Free path: `own` | Paid path: `vendor` |
 |---|---|---|
 | **Cost** | Free | Per call, billed by the vendor |
 | **Keys needed** | None | One per vendor |
@@ -20,9 +20,9 @@ Most scraping libraries give you "URL in, text out". This one also answers *shou
 | **Handles** | HTML, JSON-LD, SPA payloads, conditional GET | JS-heavy pages, hard bot walls |
 | **Default?** | Yes | No — opt in explicitly |
 
-The own lane handles the large majority of real pages. The vendor lane exists for the cases it genuinely can't serve — a page that only exists after JavaScript runs, or an origin that blocks direct crawling outright.
+The free path handles the large majority of real pages. The paid path covers what it genuinely cannot reach: an origin behind a commercial anti-bot service, where the differentiator is a residential proxy pool that cannot be replicated for free.
 
-**Nothing costs money unless you ask.** `lanes` defaults to `['own']`. A missing vendor key disables that rung and nothing else.
+**Nothing bills unless a call asks it to.** `lanes` defaults to `['own']`, and a missing vendor key disables that rung alone rather than failing the crawl.
 
 ---
 
@@ -40,8 +40,8 @@ import { createCrawler, configFromEnv } from '@oliver/crawl-core';
 const crawler = createCrawler(configFromEnv({ userAgent: 'MyBot/1.0 (+https://mysite.com/bot)' }));
 
 const result = await crawler.crawl(
-  { baseUrl: 'https://venue.example.com', robotsPolicy: 'allow' },
-  'https://venue.example.com/events',
+  { baseUrl: 'https://example.com', robotsPolicy: 'allow' },
+  'https://example.com/catalog',
 );
 
 if (result.ok && !result.notModified) {
@@ -76,7 +76,7 @@ Tries free first; escalates to a paid vendor only if the free lane can't reach t
 import { createCrawler, crawlSite } from '@oliver/crawl-core';
 
 const run = await crawlSite(crawler, target, {
-  seeds: ['https://venue.example.com/events'],
+  seeds: ['https://example.com/catalog'],
   followPagination: true,
   maxPages: 5,
 });
@@ -205,7 +205,7 @@ The own lane reads more than HTML. `page.contentKind` tells you what you got:
 | `text` | text/plain | empty |
 
 Non-HTML kinds arrive verbatim in `page.text`. **Parsing them is yours** —
-turning an ICS feed into events, or CSV into rows, is domain logic. Branch on
+the shape a feed or CSV should become is defined by your schema. Branch on
 `contentKind` rather than sniffing `contentType`, which varies by server.
 
 This matters because [feed discovery](#discovering-what-to-crawl-free) hunts
@@ -243,11 +243,13 @@ the internet. Note a **403 is transient**: it is a bot wall far more often
 than a permanent refusal, and treating it as structural would retire sources
 that work on the next run.
 
-**`likelyEmptyState`** flags "No events scheduled at this time", parked
-domains and soft-404s — valid 200s that cost a full model call to learn
-nothing. Advisory only: the page is still returned in full, because an
-off-season venue really *is* "no events scheduled", and that may be a fact you
-want to record rather than discard.
+**`likelyEmptyState`** flags pages that loaded successfully and say nothing —
+"no results", "coming soon", parked domains, soft-404s. These return HTTP 200
+and cost a full model call to learn nothing.
+
+It is advisory and the page is still returned in full, because an empty state
+is often a true fact worth recording. A supplier listing with no stock this
+month genuinely has no stock this month; that is data, not an error.
 
 **`extractorVersion`** lets an extraction improvement reach pages you already
 stored. Keep it beside the page; when it falls behind `EXTRACTOR_VERSION`,
@@ -273,7 +275,7 @@ no HTML to convert — those rungs already deliver prose in `text`. Fall back to
 Query in, URLs out — a different surface from crawling, and always paid.
 
 ```ts
-const found = await crawler.search('rochester ny summer concert series', { maxResults: 5 });
+const found = await crawler.search('industrial flow meter suppliers', { maxResults: 5 });
 
 if (found.ok) {
   found.results;   // [{ title, snippet, url, injectionFiltered? }]
@@ -378,7 +380,7 @@ Checking a URL's literal hostname is not enough. An attacker who controls DNS fo
 - private, loopback, link-local, CGNAT, benchmarking and multicast ranges all refused
 - bare-integer hosts (`2130706433` == `127.0.0.1`) refused rather than decoded
 
-Covered by 46 tests.
+Covered by the host-policy suite — see the [README](../README.md#status) for current counts.
 
 ---
 
@@ -392,7 +394,7 @@ npm run build     # emit dist/
 
 ## Status
 
-Feature-complete and hardened: 317 tests, typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [ADOPTION.md](ADOPTION.md) to use it in a repo, [LANES.md](LANES.md) for the lane model.
+Feature-complete and hardened: typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Test and live-check counts live in the [README's Status section](../README.md#status). Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [ADOPTION.md](ADOPTION.md) to use it in a repo, [LANES.md](LANES.md) for the lane model.
 
 ## License
 
