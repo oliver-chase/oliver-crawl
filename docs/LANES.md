@@ -32,6 +32,8 @@ All three take the same path, in the same order, and rung 7 is tried before rung
 
 The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lanes/own/index.ts`) so the order can't drift between the failure paths as rungs are added. `tests/lanes/lane-exhaustion.test.ts` asserts it, including that a vendor is never called while a free rung could still have worked.
 
+One rung is skipped conditionally: **a target carrying `headers` (credentials) never reaches rung 9.** Jina is a public third-party service that fetches the URL itself, so sending it a members-only URL would disclose that URL and its query string to a party you never agreed to share it with — and it would fail regardless, because Jina has none of your credentials. Rungs 7 and 8 still run: those are your own infrastructure.
+
 ## Lane 2: `vendor` — third-party APIs
 
 Firecrawl and Apify behind one interface. **Off by default** — a caller opts in per crawl with `lanes: ['own', 'vendor']`. Exists for the residue: pages the entire own ladder genuinely cannot read.

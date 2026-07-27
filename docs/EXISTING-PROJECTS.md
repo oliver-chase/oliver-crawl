@@ -192,6 +192,8 @@ crawler.crawl(
 
 Sent only to that target's own host — the same-site rule means a redirect cannot walk your token to another origin.
 
+Setting `headers` also **disables the Jina fallback rung for that target**. Jina is a public service that fetches the URL on your behalf, so a members-only URL would be disclosed to a third party, and the fetch would fail anyway without your token. Local and remote rendering still run, because those are your own infrastructure. If a credentialed page is JS-rendered, configure `localRender` or `browserRender` — the Jina rung is not available to catch it.
+
 ### Learning extraction recipes — yours
 
 The package can *replay* a stored selector recipe (`applyRecipe`). Deciding whether a recipe is any good requires your domain's validity rules ("did the dates parse", "is that a real venue name"), so learning stays with you.

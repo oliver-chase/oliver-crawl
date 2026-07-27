@@ -275,3 +275,78 @@ describe('a quarantine is observable no matter which rung caught it', () => {
     expect(firecrawlCalled).toBe(false);
   });
 });
+
+describe('a credentialed target never reaches the public proxy rung', () => {
+  // JINA-CREDENTIAL-1: Jina is a third-party service that fetches the URL
+  // itself. Handing it a members-only URL discloses that URL (and its query
+  // string) to a party the caller never agreed to share it with, and cannot
+  // succeed anyway because Jina has none of the credentials.
+  const credentialed: CrawlTarget = {
+    baseUrl: 'https://partner.example.com',
+    robotsPolicy: 'allow',
+    active: true,
+    headers: { authorization: 'Bearer secret-token-value' },
+  };
+
+  test('the URL is never sent to Jina', async () => {
+    const seen: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      seen.push(String(input));
+      return new Response('Forbidden', { status: 403 });
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns });
+    const result = await crawler.crawl(credentialed, 'https://partner.example.com/members/calendar?token=abc');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
+    expect(result.reason).toBe('unreachable');
+    expect(result.detail).toContain('credentials');
+    expect(seen.some((u) => u.includes('r.jina.ai'))).toBe(false);
+    // and the secret itself certainly never left for a third party
+    expect(seen.some((u) => u.includes('secret-token-value'))).toBe(false);
+  });
+
+  test('the caller-owned render rung is still allowed to run', async () => {
+    // Rendering happens on infrastructure the caller controls, so there is no
+    // disclosure — only the public proxy is off-limits.
+    let renderCalled = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('render.example.com')) {
+        renderCalled = true;
+        return new Response(
+          JSON.stringify({ html: '<html><body><main><p>Members-only calendar contents rendered here.</p></main></body></html>' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('Forbidden', { status: 403 });
+    }) as typeof fetch;
+
+    const crawler = createCrawler({
+      userAgent: 'T/1',
+      dnsLookup: publicDns,
+      browserRender: { url: 'https://render.example.com' },
+    });
+    const result = await crawler.crawl(credentialed, 'https://partner.example.com/members/calendar');
+
+    expect(renderCalled).toBe(true);
+    expect(result.ok).toBe(true);
+  });
+
+  test('an uncredentialed target still uses Jina normally', async () => {
+    let jinaCalled = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('r.jina.ai')) {
+        jinaCalled = true;
+        return new Response(JINA_BODY, { status: 200 });
+      }
+      return new Response('Forbidden', { status: 403 });
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns });
+    const result = await crawler.crawl(target, 'https://venue.example.com/x');
+
+    expect(jinaCalled).toBe(true);
+    expect(result.ok).toBe(true);
+  });
+});

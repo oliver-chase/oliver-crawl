@@ -195,7 +195,7 @@ export async function crawlWithOwnLane(
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // Direct fetch failed — exhaust every remaining FREE rung before giving
     // up (and long before anything paid is considered).
-    return freeFallbackLadder(url, config, options, started, detail);
+    return freeFallbackLadder(url, config, options, started, detail, hasCredentials(target));
   }
 
   // How long the origin took is the input to adaptive pacing.
@@ -220,7 +220,7 @@ export async function crawlWithOwnLane(
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // A 403/429/503 is where a real browser most often succeeds — render
     // rungs come BEFORE Jina here (LANE-EXHAUST-1).
-    const fallback = await freeFallbackLadder(url, config, options, started, detail);
+    const fallback = await freeFallbackLadder(url, config, options, started, detail, hasCredentials(target));
     if (!fallback.ok && retryAfterMs) return { ...fallback, retryAfterMs };
     return fallback;
   }
@@ -255,7 +255,7 @@ export async function crawlWithOwnLane(
 
   if (!page.text.trim()) {
     // Served HTML had no readable text — a JS shell. Same free ladder.
-    return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML');
+    return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target));
   }
 
   emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
@@ -287,10 +287,38 @@ async function freeFallbackLadder(
   options: CrawlOptions,
   started: number,
   priorDetail: string,
+  credentialed: boolean,
 ): Promise<CrawlResult> {
   const rendered = await renderFallback(url, config, options, started);
   if (rendered) return rendered;
+
+  // JINA-CREDENTIAL-1 (2026-07-27, found in audit): the Jina rung is a PUBLIC
+  // third-party proxy — we hand it a URL and it fetches the page itself. For a
+  // target the caller gave credentials for (a members-only calendar, a partner
+  // feed), that is all downside:
+  //
+  //   - the private URL, including anything in its query string, is disclosed
+  //     to a third party the caller never agreed to share it with;
+  //   - the fetch cannot succeed anyway, because Jina does not have and must
+  //     never be given those credentials.
+  //
+  // So a credentialed target stops at the rungs we run ourselves. The render
+  // rungs above are fine — those are the caller's own infrastructure.
+  if (credentialed) {
+    return {
+      ok: false,
+      reason: 'unreachable',
+      detail: `${priorDetail} (Jina rung skipped: this target carries credentials and its URL must not be sent to a third-party proxy.)`,
+      lane: 'own',
+    };
+  }
+
   return jinaFallback(url, config, options, started, priorDetail);
+}
+
+/** Does this target carry caller-supplied request headers (i.e. credentials)? */
+function hasCredentials(target: CrawlTarget): boolean {
+  return Object.keys(target.headers ?? {}).length > 0;
 }
 
 /**
