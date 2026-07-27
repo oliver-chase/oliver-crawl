@@ -13,7 +13,7 @@ The second is cost. In most crawling pipelines the fetch is cheap and the langua
 ## Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl#v0.9.0
+npm install github:oliver-chase/oliver-crawl#v0.9.1
 ```
 
 ```ts
