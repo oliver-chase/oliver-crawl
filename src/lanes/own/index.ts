@@ -40,6 +40,7 @@ import { htmlToMarkdown } from '../../extract/html-to-markdown.js';
 import { summarizeStructuredData } from '../../extract/structured-summary.js';
 import { findContentImages } from '../../extract/content-images.js';
 import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js';
+import { extractPdfText } from '../../fetch/pdf-extract.js';
 import { looksLikeEmptyState } from '../../core/soft-404.js';
 import { EXTRACTOR_VERSION } from '../../core/extractor-version.js';
 import { forgetWinningRung, shouldSkipDirectFetch } from '../../core/rung-memory.js';
@@ -362,6 +363,54 @@ export async function crawlWithOwnLane(
     return { ok: false, reason: 'empty', detail, lane: 'own' };
   }
   const contentKind = refineKindByUrl(kindRaw, response.url || requestUrl.toString());
+
+  // CRAWL-PDF-1: a PDF is bytes, not text — decoding it as a string first
+  // would corrupt it, so it is read and parsed before the text path.
+  if (contentKind === 'pdf') {
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    const extracted = await extractPdfText(buffer);
+
+    if (!extracted.ok) {
+      emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: extracted.detail });
+      return { ok: false, reason: 'empty', detail: extracted.detail, lane: 'own' };
+    }
+
+    const sanitizedPdf = sanitizeCrawledText(extracted.text, maxTextChars);
+    if (sanitizedPdf.signals.length > 0) {
+      const detail = 'Prompt-injection signals in PDF content.';
+      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+    }
+
+    emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+    return {
+      ok: true,
+      pages: [
+        {
+          url: response.url || requestUrl.toString(),
+          text: sanitizedPdf.text,
+          markdown: '',
+          contentKind: 'pdf',
+          likelyEmptyState: looksLikeEmptyState(sanitizedPdf.text),
+          candidateContentImages: [],
+          extractorVersion: EXTRACTOR_VERSION,
+          structuredData: summarizeStructuredData([]),
+          title: null,
+          contentType,
+          bodySha256: await sha256Hex(sanitizedPdf.text),
+          contentRegionSha256: '',
+          textSha256: await sha256Hex(sanitizedPdf.text),
+          httpEtag: response.headers.get('etag'),
+          httpLastModified: response.headers.get('last-modified'),
+          jsonLd: [],
+          outboundHosts: [],
+          links: [],
+          lane: 'own',
+          rung: 'fetch',
+        },
+      ],
+    };
+  }
 
   const html = await readBodyCapped(response, config.limits.maxBodyBytes);
 

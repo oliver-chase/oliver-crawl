@@ -222,6 +222,8 @@ export type { DetailLinkMatch, DetailKeywords } from './extract/detail-link-pick
 export type { StructuredSummary } from './extract/structured-summary.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
 export { classifyContentType, refineKindByUrl } from './core/content-kind.js';
+export { extractPdfText } from './fetch/pdf-extract.js';
+export type { PdfExtractResult } from './fetch/pdf-extract.js';
 export { classifyFailure } from './core/failure-class.js';
 export type { FailureClass } from './core/failure-class.js';
 export { looksLikeEmptyState } from './core/soft-404.js';

@@ -54,6 +54,16 @@ describe('failure classification', () => {
     expect(classifyFailure('empty', 'No visible text in the served HTML')).toBe('transient');
   });
 
+  test('a missing optional parser is structural — it needs an install, not a wait', () => {
+    expect(
+      classifyFailure('empty', 'PDF support needs the optional `unpdf` package. Run `npm install unpdf` to enable it.'),
+    ).toBe('structural');
+  });
+
+  test('a PDF with no text layer is structural — it needs a vision model', () => {
+    expect(classifyFailure('empty', 'PDF has no text layer (likely scanned images)')).toBe('structural');
+  });
+
   test('a real crawl failure carries the class', async () => {
     const crawler = createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns });
     const result = await crawler.crawl({ ...target, active: false }, 'https://venue.example.com/x');

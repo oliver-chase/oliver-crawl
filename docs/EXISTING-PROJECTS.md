@@ -72,6 +72,16 @@ Expect disagreements. Most will be one of these, and all are informative:
 
 Only when you understand every disagreement should you switch.
 
+To get this library's side of the comparison in a diffable form:
+
+```bash
+node scripts/parity-check.mjs my-urls.txt --json > theirs.json
+```
+
+It reports counts and hashes per URL rather than page text, because a diff over
+counts is readable and a diff over full text is not. Point your existing
+extractor at the same list and compare.
+
 ---
 
 ## 3. Keep your own persistence — wire the callbacks

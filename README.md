@@ -11,7 +11,7 @@ This library addresses both. Requests are screened before they are made. Pages c
 ## Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl#v0.8.0
+npm install github:oliver-chase/oliver-crawl#v0.9.0
 ```
 
 ```ts
@@ -179,7 +179,7 @@ The library returns these files exactly as the server sent them, decoded but unm
 
 Retrieving them at all is the point. A site's own data file is usually more accurate and more stable than the page rendering it, and until recently this library refused to fetch one.
 
-Images, video, PDFs and binaries are still rejected. Running an HTML parser over a JPEG produces confident nonsense.
+Images, video and binaries are rejected — running an HTML parser over a JPEG produces confident nonsense. PDFs are read if you install the optional `unpdf` package; without it the library reports a failure naming the package rather than silently skipping the document.
 
 Where a page's substance sits inside an image rather than its text — a scanned menu, a poster, a specification sheet — `page.candidateContentImages` ranks the images worth examining. Identifying them is free and included. Reading them requires a vision model and is yours to run.
 
@@ -245,7 +245,7 @@ The library holds no database. Persistence, scheduling, and converting pages int
 
 ## Status
 
-495 tests across 36 files. Strict TypeScript, builds to `dist/`. A separate network suite (`npm run live`, 23 checks) exercises the library against real websites, and installation is verified as a genuine git dependency. Node 20+, and runs on edge and serverless runtimes, where local rendering is unavailable.
+509 tests across 38 files. Strict TypeScript, builds to `dist/`. A separate network suite (`npm run live`, 23 checks) exercises the library against real websites, and installation is verified as a genuine git dependency. Node 20+, and runs on edge and serverless runtimes, where local rendering is unavailable.
 
 ## License
 

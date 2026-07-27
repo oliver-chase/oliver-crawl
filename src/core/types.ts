@@ -220,7 +220,7 @@ export type PageLink = { url: string; text: string };
  * scraping a page — and until CRAWL-FEED-1 the fetch rung refused to read
  * them, so the best source we could find was the one we could not use.
  */
-export type ContentKind = 'html' | 'calendar' | 'csv' | 'json' | 'feed' | 'text';
+export type ContentKind = 'html' | 'calendar' | 'csv' | 'json' | 'feed' | 'text' | 'pdf';
 
 export type { BrowserAction } from '../fetch/local-render.js';
 
