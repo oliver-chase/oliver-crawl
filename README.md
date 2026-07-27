@@ -85,6 +85,20 @@ run.truncated;    // true if it stopped at maxPages rather than running out
 
 Sequential by design (one request at a time): hammering a small site in parallel is what gets a crawler blocked. Already-visited URLs are never re-fetched, so a "next page" link that loops back to page 1 terminates instead of spinning.
 
+### Cheap re-crawls (the point of scheduled crawling)
+
+`crawlSite` returns `result.validators` — an ETag/Last-Modified per URL. Store them, pass them back as `priorValidators` next run, and unchanged pages answer **304**: nothing fetched, nothing parsed, nothing charged, reported under `notModified`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire the loop with `onSignals` (push) or the return value (pull) — see [docs/ADOPTION.md](docs/ADOPTION.md).
+
+### Discovering what to crawl (free)
+
+```ts
+import { discoverSitemapUrls } from '@oliver/crawl-core';
+const found = await discoverSitemapUrls(target, { userAgent: 'MyBot/1.0', maxUrls: 100 });
+const run = await crawlSite(crawler, target, { seeds: found.urls });
+```
+
+Reads `/sitemap.xml` (following index files one level), filtered to same-site https URLs — a sitemap is origin-controlled content and gets no more trust than a page's own links.
+
 ### Search
 
 Query in, URLs out — a different surface from crawling, and always paid.
@@ -166,15 +180,17 @@ These are why it's reusable across projects rather than welded to one:
 
 ## What the own lane actually does
 
-1. **Policy** — eligibility, same-site, SSRF/DNS-rebinding. Refusals cost no network call.
-2. **Conditional GET** — a 304 ends the crawl for free.
-3. **Fetch** — real UA; redirects followed manually and **re-validated per hop** (a redirect is attacker-controlled input).
+1. **Policy** — eligibility, robots posture, same-site, SSRF/DNS-rebinding. Refusals cost no network call.
+2. **Conditional GET** — sends `If-None-Match`/`If-Modified-Since` from stored validators; a 304 ends the crawl for free.
+3. **Fetch** — real UA; redirects followed manually and **re-validated per hop** (a redirect is attacker-controlled input); body capped at 2 MB.
 4. **Parse** — visible text, title, JSON-LD, same-site links, outbound hosts; SPA recovery from inline script payloads when the served HTML is a JS shell.
 5. **Guard** — prompt-injection sanitising before anything is returned.
 6. **Hash** — full-body *and* content-region digests, so a nav/footer tweak doesn't read as a content change.
-7. **Jina Reader** — free, keyless last resort for bot-walled or JS-only pages.
+7. **Local render** — free local headless Chromium (`localRender: true` + `npx playwright install chromium`) for JS-only pages.
+8. **Remote render** — your own render service (`browserRender`), for deployments that can't run a browser.
+9. **Jina Reader** — free, keyless last resort for bot-walled or JS-only pages.
 
-Rungs 1-6 need no credentials and cost nothing.
+Rungs 1-7 need no credentials and cost nothing. See [docs/LANES.md](docs/LANES.md).
 
 ### The SSRF guard
 
@@ -200,7 +216,7 @@ npm run build     # emit dist/
 
 ## Status
 
-The crawler is feature-complete for single-page and multi-page crawling: 204 tests, typecheck clean, built to dist, and verified against live sites (including a real multi-page run). Both lanes, both guards, the full own-lane rung ladder (fetch, browser render, Jina), JSON-LD extraction, conditional GET, cheap-change probing, robots.txt, ICS-feed and pagination discovery, recipe replay, and the multi-page orchestrator are all done. Outstanding: consumer adoption (nothing has been deleted from the origin repo yet, so this remains additive and revertible). See docs/MIGRATION.md.
+Feature-complete and hardened for single-page and multi-page crawling: 235 tests, typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites. Both lanes, the full free-first rung ladder (fetch → local render → remote render → Jina), JSON-LD, conditional GET with a working re-crawl loop, cheap-change probing, robots.txt, sitemap + feed + pagination discovery, recipe replay, the multi-page orchestrator, and web search. See [docs/ADOPTION.md](docs/ADOPTION.md) to use it in a repo, [docs/LANES.md](docs/LANES.md) for the lane model, [docs/MIGRATION.md](docs/MIGRATION.md) for provenance.
 
 ## License
 

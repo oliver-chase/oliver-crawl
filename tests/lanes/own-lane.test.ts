@@ -279,3 +279,73 @@ describe('lane selection', () => {
     expect(result.detail).toMatch(/budget/i);
   });
 });
+
+describe('conditional GET — validators are actually sent (CRAWL-VALIDATE-1)', () => {
+  // The original bug: options accepted etag/lastModified and the 304 branch
+  // existed, but no If-None-Match / If-Modified-Since ever went on the wire —
+  // the 304 test passed only because its stub returned 304 unconditionally.
+  // This asserts the REQUEST, which is the half that was dead.
+  test('sends If-None-Match and If-Modified-Since from options', async () => {
+    let seen: Record<string, string> = {};
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seen = Object.fromEntries(
+        Object.entries((init?.headers ?? {}) as Record<string, string>).map(([k, v]) => [k.toLowerCase(), v]),
+      );
+      return new Response(null, { status: 304 });
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns });
+    const result = await crawler.crawl(target, 'https://venue.example.com/events', {
+      etag: 'W/"abc"',
+      lastModified: 'Wed, 01 Jan 2025 00:00:00 GMT',
+    });
+
+    expect(seen['if-none-match']).toBe('W/"abc"');
+    expect(seen['if-modified-since']).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
+    expect(result).toMatchObject({ ok: true, notModified: true });
+  });
+
+  test('sends no conditional headers when no validators are given', async () => {
+    let seen: Record<string, string> = {};
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seen = Object.fromEntries(
+        Object.entries((init?.headers ?? {}) as Record<string, string>).map(([k, v]) => [k.toLowerCase(), v]),
+      );
+      return htmlResponse('<html><body><p>Fresh fetch content.</p></body></html>');
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns });
+    await crawler.crawl(target, 'https://venue.example.com/events');
+
+    expect(seen['if-none-match']).toBeUndefined();
+    expect(seen['if-modified-since']).toBeUndefined();
+  });
+});
+
+describe('body size cap (CRAWL-HARDEN-1)', () => {
+  test('a huge body is truncated, not buffered whole — crawl still succeeds', async () => {
+    // 5 MB body vs the 2 MB cap. Real content up front so the readable
+    // prefix still extracts. Filler is realistic prose, NOT one repeated
+    // character — a first version used 'x'.repeat(5M) and the prompt-
+    // injection guard correctly quarantined it as anomalous content, which
+    // was the guard working, not the cap failing.
+    const filler = '<p>Every Friday evening the riverside market hosts local vendors and live music for the whole town.</p>';
+    const huge =
+      '<html><head><title>Big</title></head><body><main><p>Real event content first.</p></main>' +
+      filler.repeat(50_000) + '</body></html>';
+    globalThis.fetch = (async () =>
+      new Response(huge, { status: 200, headers: { 'content-type': 'text/html' } })) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns });
+    const result = await crawler.crawl(target, 'https://venue.example.com/events');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.notModified) throw new Error('expected pages');
+    expect(result.pages[0]!.text).toContain('Real event content first.');
+    // The page object must not be carrying multi-megabyte text. The
+    // sanitiser appends a '\n[TRUNCATED]' marker after its slice (so a
+    // consumer can SEE the page was cut), hence cap + marker, not cap exact.
+    expect(result.pages[0]!.text.length).toBeLessThanOrEqual(12000 + '\n[TRUNCATED]'.length);
+    expect(result.pages[0]!.text.endsWith('[TRUNCATED]')).toBe(true);
+  });
+});

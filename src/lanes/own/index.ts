@@ -21,15 +21,18 @@
 //                    so an LLM downstream never sees unsanitised page content.
 //   6. Hash        — full-body and content-region digests, so the caller can
 //                    tell a real content change from a nav/footer tweak.
-//   7. Render      — OUR OWN browser service, for pages whose content only
-//                    exists after JavaScript runs. Optional: unconfigured
-//                    means the rung is skipped, not an error.
-//   8. Jina        — free, keyless last resort for pages the direct fetch
+//   7. Local render — FREE local headless Chromium (config.localRender),
+//                    for pages whose content only exists after JavaScript
+//                    runs. Needs `npx playwright install chromium` once on
+//                    the machine; absent, it degrades silently.
+//   8. Remote render — YOUR render service (config.browserRender), for
+//                    environments that cannot run a browser themselves.
+//   9. Jina        — free, keyless last resort for pages the direct fetch
 //                    cannot reach (bot walls, JS-only, moved hosts).
 //
-// Rungs 1-6 cost nothing and need no credentials. Rung 7 runs on
+// Rungs 1-7 cost nothing and need no credentials. Rung 8 runs on
 // infrastructure you control (which is why it is in THIS lane and not the
-// vendor lane). Rung 8 is a free public service. If this lane fails, the
+// vendor lane). Rung 9 is a free public service. If this lane fails, the
 // caller may fall through to the vendor lane — but only if it asked for it.
 
 import * as cheerio from 'cheerio';
@@ -41,6 +44,7 @@ import {
 } from '../../fetch/host-policy.js';
 import { fetchViaJina } from '../../fetch/jina-fetch.js';
 import { renderServiceFrom, renderViaService } from '../../fetch/browser-render.js';
+import { renderViaLocalChromium } from '../../fetch/local-render.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
 import { computeContentRegionHash } from '../../extract/content-region-hash.js';
 import { extractInlineScriptContent, shouldRecoverFromScripts } from '../../extract/spa-content-extract.js';
@@ -50,6 +54,52 @@ import type { CrawlOptions, CrawlPage, CrawlResult, CrawlTarget, PageLink } from
 
 const MAX_OUTBOUND_HOSTS = 25;
 const MAX_LINKS = 200;
+
+// CRAWL-HARDEN-1: hard cap on bytes read from any origin. Without one, a
+// hostile or misconfigured origin streaming an endless (or multi-hundred-MB)
+// body ties up memory until the process dies — response.text() reads
+// EVERYTHING before returning. 2 MB is far above any real event/listing page
+// and far below anything that could hurt; the sanitiser's char cap protects
+// the LLM, this protects the crawler itself.
+const MAX_BODY_BYTES = 2_000_000;
+
+/** Read a response body up to `maxBytes`, truncating (not failing) beyond it —
+ *  the readable prefix of a huge page is still worth extracting from. */
+async function readBodyCapped(response: Response, maxBytes: number): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    // Runtime without streaming bodies — fall back, but refuse an announced
+    // oversize rather than buffering it.
+    const announced = Number(response.headers.get('content-length') || 0);
+    if (announced > maxBytes) throw new Error(`Response too large: content-length ${announced} > ${maxBytes}`);
+    return response.text();
+  }
+
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    while (received < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        received += value.byteLength;
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+
+  const merged = new Uint8Array(Math.min(received, maxBytes));
+  let offset = 0;
+  for (const chunk of chunks) {
+    const room = merged.byteLength - offset;
+    if (room <= 0) break;
+    merged.set(room >= chunk.byteLength ? chunk : chunk.subarray(0, room), offset);
+    offset += Math.min(chunk.byteLength, room);
+  }
+  return new TextDecoder().decode(merged);
+}
 
 /** Crawl a single URL with the own lane. */
 export async function crawlWithOwnLane(
@@ -74,10 +124,14 @@ export async function crawlWithOwnLane(
     return { ok: false, reason: 'blocked', detail, lane: 'own' };
   }
 
-  // 2-4. Direct fetch.
+  // 2-4. Direct fetch, conditional when the caller has validators from a
+  // previous crawl of this URL.
   let response: Response;
   try {
-    response = await fetchFollowingSafeRedirects(requestUrl, config, timeoutMs);
+    response = await fetchFollowingSafeRedirects(requestUrl, config, timeoutMs, {
+      etag: options.etag,
+      lastModified: options.lastModified,
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     emit(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
@@ -105,7 +159,7 @@ export async function crawlWithOwnLane(
     return { ok: false, reason: 'empty', detail, lane: 'own' };
   }
 
-  const html = await response.text();
+  const html = await readBodyCapped(response, MAX_BODY_BYTES);
   const page = await buildPage({
     url: response.url || requestUrl.toString(),
     html,
@@ -148,6 +202,33 @@ async function renderFallback(
   options: CrawlOptions,
   started: number,
 ): Promise<CrawlResult | null> {
+  // FREE rung first: local Chromium (config.localRender). Costs nothing on
+  // a machine that has it; silently absent everywhere else. Only then the
+  // remote render service.
+  const localHtml = await renderViaLocalChromium(url, config.localRender === true);
+  if (localHtml) {
+    const localPage = await buildPage({
+      url,
+      html: localHtml,
+      contentType: 'text/html',
+      etag: null,
+      lastModified: null,
+      baseHost: new URL(url).hostname,
+      maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
+      rung: 'local-render',
+      includeHtml: options.includeHtml ?? false,
+    });
+    if (localPage === 'quarantined') {
+      emit(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
+      return { ok: false, reason: 'quarantined', detail: 'Locally rendered content tripped the prompt-injection guard.', lane: 'own' };
+    }
+    if (localPage.text.trim()) {
+      emit(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+      return { ok: true, pages: [localPage] };
+    }
+    // Rendered but still empty — fall through to the remote service.
+  }
+
   if (!renderServiceFrom(config)) return null;
 
   try {
@@ -245,11 +326,24 @@ async function fetchFollowingSafeRedirects(
   url: URL,
   config: ResolvedConfig,
   timeoutMs: number,
+  validators: { etag?: string | null; lastModified?: string | null } = {},
   maxHops = 5,
 ): Promise<Response> {
   let current = url;
   const baseHost = url.hostname;
   const basePort = url.port || '';
+
+  // CRAWL-VALIDATE-1 (2026-07-27, found in self-audit): the FIRST version of
+  // this accepted etag/lastModified in CrawlOptions, documented the free-304
+  // path in the lane header, had the 304 branch in the caller — and never
+  // sent If-None-Match / If-Modified-Since on the wire. The 304 test passed
+  // only because its stub returned 304 unconditionally, so the whole
+  // "cheapest crawl is the one that doesn't happen" story was dead code
+  // against a real origin. Headers are sent on every hop: harmless on a
+  // redirect (redirects don't 304), correct on the final resource.
+  const conditionalHeaders: Record<string, string> = {};
+  if (validators.etag) conditionalHeaders['if-none-match'] = validators.etag;
+  if (validators.lastModified) conditionalHeaders['if-modified-since'] = validators.lastModified;
 
   for (let hop = 0; hop <= maxHops; hop++) {
     const response = await fetch(current, {
@@ -257,6 +351,7 @@ async function fetchFollowingSafeRedirects(
       headers: {
         'user-agent': config.userAgent,
         accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
+        ...conditionalHeaders,
       },
       signal: AbortSignal.timeout(timeoutMs),
       cache: 'no-store',
@@ -289,11 +384,26 @@ async function buildPage(input: {
   rung: string;
   includeHtml: boolean;
 }): Promise<CrawlPage | 'quarantined'> {
+  // ONE parse (CRAWL-PERF-1, found in self-audit): the first version loaded
+  // the document once for text, then RELOADED it once per JSON-LD script tag
+  // inside the .each — N+1 full parses on a page with N structured-data
+  // blocks. JSON-LD is read from this same tree BEFORE the script tags are
+  // stripped for text extraction.
   const $ = cheerio.load(input.html);
-  $('script, style, noscript, template').remove();
+
+  const jsonLd: unknown[] = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    const raw = $(el).text();
+    try {
+      jsonLd.push(JSON.parse(raw));
+    } catch {
+      // Malformed JSON-LD is common in the wild — skip this block, keep the rest.
+    }
+  });
 
   const title = $('title').first().text().trim() || null;
 
+  $('script, style, noscript, template').remove();
   let visibleText = $('body').text().replace(/\s+/g, ' ').trim();
 
   // A JS shell serves no readable body but often ships its content as an
@@ -306,18 +416,6 @@ async function buildPage(input: {
   // Guard BEFORE returning: nothing downstream should ever see raw page text.
   const sanitized = sanitizeCrawledText(visibleText, input.maxTextChars);
   if (sanitized.signals.length > 0) return 'quarantined';
-
-  const jsonLd: unknown[] = [];
-  cheerio
-    .load(input.html)('script[type="application/ld+json"]')
-    .each((_, el) => {
-      const raw = cheerio.load(input.html)(el).text();
-      try {
-        jsonLd.push(JSON.parse(raw));
-      } catch {
-        // Malformed JSON-LD is common in the wild — skip this block, keep the rest.
-      }
-    });
 
   const links: PageLink[] = [];
   const outbound = new Set<string>();
