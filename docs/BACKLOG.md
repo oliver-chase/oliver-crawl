@@ -96,10 +96,22 @@ Those return `contentKind: 'text'` — no markdown, no JSON-LD, no links — so
 they lose the free extraction path and fall through to a model.
 `themishawaka.com`, `cfdrodeo.com`, `visitgolden.com`, `aspensnowmass.com`.
 
-> **Open, unverified:** enabling `localRender` should route those four through
-> the HTML path instead, restoring structured data and markdown. Playwright is
-> not installed in this repo, so that was NOT tested — it is a hypothesis to
-> check before wiring a consumer, not a finding.
+**The localRender hypothesis was tested and was half right.** With Chromium
+installed, two of the four (`visitgolden`, `aspensnowmass`) upgrade from the
+Jina rung to full HTML with markdown. The other two remain Jina-only.
+
+Testing it surfaced a worse defect than the one being investigated
+(LADDER-QUALITY-1, fixed). On `cfdrodeo.com` the render rung captured
+Cloudflare's "Why have I been blocked?" interstitial, and the ladder accepted
+it because rung acceptance only asked whether any text came back. A
+300-character security notice therefore beat the Jina rung, which retrieves
+the real page — the crawl reported SUCCESS while delivering the wall. After
+the fix that source returns 2,845 characters of real content instead of 747
+characters of block page.
+
+A consumer should enable `localRender`: it is free, it upgrades sources that
+would otherwise lose markdown and JSON-LD, and it never makes a source worse
+now that a rendered wall is treated as a rung failure.
 
 **One transient failure, not a dead source.** `visitgolden.com/events/...`
 returned 404 on the first run and 301 on the second. Worth remembering when
@@ -112,6 +124,7 @@ reading any single run: `failureClass: transient` exists for this.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | MARKDOWN-DATAURI-1 | FIXED. Markdown emitted base64 data-URI image srcs, tripping the injection guard's encoded-payload rule and quarantining ordinary pages. Found by the first live parity run, not by the test suite — introduced and caught the same day. |
+| 2026-07-27 | LADDER-QUALITY-1 | FIXED. A bot-wall interstitial served with HTTP 200 (or captured by a render rung) was accepted as page content, so a security notice outranked the rung holding the real page. Rung acceptance now rejects block pages and continues the ladder. Found only by running against live sites with localRender on; ablation-verified. |
 | 2026-07-27 | parity run 1 | 20/20 read after the fix. 12/20 need no model. 4/20 only reachable via Jina and therefore lose markdown + JSON-LD; localRender as a remedy is UNVERIFIED (playwright absent here). |
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
 | 2026-07-27 | CRAWL-PDF-1 | SHIPPED, spec removed. `unpdf` is an OPTIONAL peer, not a dependency: a parser is a large hostile-input surface, and putting it in every install for the minority who crawl PDFs is the wrong trade here. Same Function-constructor import seam as playwright. Missing parser reports a `structural` failure naming the package. Found a real gap doing it — a missing parser and a scanned PDF were both classed `transient` when neither is fixed by waiting. |

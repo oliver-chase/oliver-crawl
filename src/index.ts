@@ -227,6 +227,7 @@ export type { PdfExtractResult } from './fetch/pdf-extract.js';
 export { classifyFailure } from './core/failure-class.js';
 export type { FailureClass } from './core/failure-class.js';
 export { looksLikeEmptyState } from './core/soft-404.js';
+export { looksLikeBlockPage } from './core/block-page.js';
 export { EXTRACTOR_VERSION } from './core/extractor-version.js';
 export { createRungMemory, rememberWinningRung, recallWinningRung, forgetWinningRung, RUNG_MEMORY_TTL_MS } from './core/rung-memory.js';
 export type { RungMemory } from './core/rung-memory.js';
