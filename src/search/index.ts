@@ -199,7 +199,18 @@ export async function search(
     };
   }
 
-  let lastDetail = 'no provider returned results';
+  // SEARCH-DIAG-1 (2026-07-27, found in audit): every provider's outcome is
+  // kept, not just the last one.
+  //
+  // This started as a single `lastDetail` that each provider overwrote. With
+  // Serper and Tavily BOTH out of credits, the caller saw only "Tavily HTTP
+  // 432" — so the obvious move is to top up Tavily, re-run, and fail again,
+  // because Serper is tried first and is equally dead. The report named the
+  // one provider that was not the first thing to fix.
+  const failures: string[] = [];
+  // Did any provider actually answer? Distinguishes "your query has no
+  // matches" from "none of your providers are working".
+  let anyProviderAnswered = false;
 
   for (const name of usable) {
     const provider = PROVIDERS[name];
@@ -221,15 +232,25 @@ export async function search(
         return { ok: true, results, provider: name };
       }
 
-      lastDetail = `${name} returned no results`;
+      anyProviderAnswered = true;
+      failures.push(`${name}: returned no results`);
       emitUsage(config, { lane: 'vendor', rung: name, kind: 'search', ok: true, latencyMs });
     } catch (error) {
-      lastDetail = error instanceof Error ? error.message : String(error);
-      emitUsage(config, { lane: 'vendor', rung: name, kind: 'search', ok: false, latencyMs: Date.now() - started, error: lastDetail });
+      const detail = error instanceof Error ? error.message : String(error);
+      failures.push(`${name}: ${detail}`);
+      emitUsage(config, { lane: 'vendor', rung: name, kind: 'search', ok: false, latencyMs: Date.now() - started, error: detail });
       // Fall through to the next provider — one outage is not a dead end.
     }
   }
 
-  return { ok: false, reason: 'no_results', detail: lastDetail };
+  // SEARCH-DIAG-2: 'no_results' means the search ran and the query matched
+  // nothing — a normal, benign answer nobody should be paged for. When every
+  // provider ERRORED, nothing ran, and reporting that as 'no_results' hides an
+  // outage behind the one reason a caller is most likely to shrug at.
+  return {
+    ok: false,
+    reason: anyProviderAnswered ? 'no_results' : 'error',
+    detail: failures.join('; ') || 'no provider returned results',
+  };
 }
 

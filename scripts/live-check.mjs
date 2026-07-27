@@ -29,7 +29,22 @@ const crawler = createCrawler({
 
 let passed = 0;
 let failed = 0;
+let skipped = 0;
 const failures = [];
+
+/**
+ * A paid key that is out of credits is not a code regression, and neither is
+ * a third-party outage — the same reasoning that keeps this script out of
+ * `npm test`. Throw this to report SKIP instead of FAIL.
+ */
+class Unavailable extends Error {}
+
+/** Provider quota/auth responses, which say nothing about our code. */
+function skipIfProviderUnavailable(detail) {
+  if (/HTTP (400|401|402|403|429|432)/.test(detail)) {
+    throw new Unavailable(detail);
+  }
+}
 
 async function check(name, fn) {
   process.stdout.write(`  ${name} ... `);
@@ -38,6 +53,11 @@ async function check(name, fn) {
     console.log(`PASS${detail ? ` (${detail})` : ''}`);
     passed++;
   } catch (error) {
+    if (error instanceof Unavailable) {
+      console.log(`SKIP (${error.message})`);
+      skipped++;
+      return;
+    }
     console.log('FAIL');
     failed++;
     failures.push(`${name}: ${error.message}`);
@@ -203,6 +223,7 @@ if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
 
   await check('web search returns usable results', async () => {
     const found = await searchCrawler.search('rfc editor internet standards', { maxResults: 3 });
+    if (!found.ok) skipIfProviderUnavailable(found.detail);
     assert(found.ok, `${found.reason}: ${found.detail}`);
     assert(found.results.length > 0, 'no results');
     assert(found.results.every((r) => r.url.startsWith('http')), 'an unsafe URL survived filtering');
@@ -211,6 +232,7 @@ if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
 
   await check('site: restriction narrows to one domain', async () => {
     const found = await searchCrawler.search('standards', { site: 'rfc-editor.org', maxResults: 3 });
+    if (!found.ok) skipIfProviderUnavailable(found.detail);
     assert(found.ok, `${found.reason}: ${found.detail}`);
     assert(found.results.some((r) => r.url.includes('rfc-editor.org')), 'site: restriction had no effect');
     return `${found.results.length} results`;
@@ -218,6 +240,7 @@ if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
 
   await check('searchAndCrawl reads the pages it finds', async () => {
     const found = await searchAndCrawl(searchCrawler, 'rfc editor', { maxResults: 2 });
+    if (!found.ok) skipIfProviderUnavailable(found.detail);
     assert(found.ok, `${found.reason}: ${found.detail}`);
     return `${found.pages.length} read, ${found.skipped.length} skipped`;
   });
@@ -226,7 +249,8 @@ if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
 }
 
 console.log(`\n${'-'.repeat(52)}`);
-console.log(`${passed} passed, ${failed} failed`);
+console.log(`${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}`);
+if (skipped) console.log('(skips are unavailable third parties — exhausted keys or outages, not code)');
 if (failures.length) {
   console.log('\nFailures:');
   for (const f of failures) console.log(`  - ${f}`);

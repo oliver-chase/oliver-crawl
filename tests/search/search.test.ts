@@ -266,12 +266,46 @@ describe('search — provider fallback', () => {
     expect(result.provider).toBe('tavily');
   });
 
-  test('all providers failing reports no_results with the last detail', async () => {
+  // SEARCH-DIAG-2: every provider erroring is an OUTAGE, not an empty result
+  // set. Reporting it as 'no_results' hides it behind the one reason a caller
+  // is most likely to shrug at.
+  test('all providers erroring reports error, not no_results', async () => {
     globalThis.fetch = (async () => new Response('down', { status: 503 })) as typeof fetch;
     const config = resolveConfig({ userAgent: 'T/1', vendor: { serper: 'serper-key-long', tavily: 'tavily-key-long' } });
     const result = await search('q', config);
-    expect(result).toMatchObject({ ok: false, reason: 'no_results' });
+    expect(result).toMatchObject({ ok: false, reason: 'error' });
     if (result.ok) throw new Error('expected failure');
     expect(result.detail).toMatch(/503/);
+  });
+
+  // SEARCH-DIAG-1: the real incident this came from — Serper and Tavily were
+  // BOTH out of credits, and the report named only Tavily, which is not the
+  // first thing to fix because Serper is tried first.
+  test('names every provider that failed, not just the last', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('serper')) {
+        return new Response(JSON.stringify({ message: 'Not enough credits' }), { status: 400 });
+      }
+      return new Response(JSON.stringify({ detail: 'plan usage limit' }), { status: 432 });
+    }) as typeof fetch;
+
+    const config = resolveConfig({ userAgent: 'T/1', vendor: { serper: 'serper-key-long', tavily: 'tavily-key-long' } });
+    const result = await search('q', config);
+    if (result.ok) throw new Error('expected failure');
+
+    expect(result.reason).toBe('error');
+    expect(result.detail).toContain('serper');
+    expect(result.detail).toContain('tavily');
+    expect(result.detail).toMatch(/400/);
+    expect(result.detail).toMatch(/432/);
+  });
+
+  // A provider that genuinely answered with zero matches is NOT an outage.
+  test('a provider answering with zero matches still reports no_results', async () => {
+    globalThis.fetch = (async () => serperBody([])) as typeof fetch;
+    const config = resolveConfig({ userAgent: 'T/1', vendor: { serper: 'serper-key-long' } });
+    const result = await search('q', config);
+    expect(result).toMatchObject({ ok: false, reason: 'no_results' });
   });
 });
