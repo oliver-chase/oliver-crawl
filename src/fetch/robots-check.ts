@@ -51,6 +51,17 @@ const MAX_ROBOTS_REDIRECTS = 4;
 // `*`. Derived from the caller's configured User-Agent rather than a
 // hardcoded name, so a consumer's robots identity actually matches the UA it
 // sends. "MyBot/1.0 (+https://...)" -> "mybot".
+/**
+ * Same-site test for a robots.txt redirect. `www.` is ignored, since apex-to-
+ * www is a normal hosting redirect and the same operator controls both.
+ * Deliberately strict otherwise: a subdomain is a different publisher often
+ * enough that inheriting its policy would be a guess.
+ */
+function isSameRegistrableHost(a: string, b: string): boolean {
+  const strip = (h: string) => h.toLowerCase().replace(/^www\./, '');
+  return strip(a) === strip(b);
+}
+
 export function userAgentToken(userAgent: string): string {
   return (userAgent.split('/')[0] || userAgent).trim().toLowerCase();
 }
@@ -83,6 +94,9 @@ export async function evaluateRobotsForUrl(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), ROBOTS_TIMEOUT_MS);
   let body: string;
+  // Recorded so a consumer can notice a source has moved — a redirect to
+  // another domain is usually a rename worth updating in their registry.
+  let redirectedOffDomainTo: string | null = null;
   try {
     // Follow redirects MANUALLY, re-validating every hop's host for SSRF —
     // http→https and apex↔www redirects on robots.txt are the norm (Beak &
@@ -111,6 +125,26 @@ export async function evaluateRobotsForUrl(
       if (next.protocol !== 'https:' && next.protocol !== 'http:') {
         return { policy: 'unknown', reason: 'robots.txt redirected to a non-http(s) URL', crawlDelayMs: null };
       }
+      // ROBOTS-REDIRECT-1 (2026-07-27): an off-domain robots.txt redirect is
+      // FOLLOWED, and the reason records where it went.
+      //
+      // The first version of this refused them, reasoning that a stranger's
+      // robots.txt must not govern our target — prompted by an expired source
+      // whose robots.txt 301s to a domain-parking service.
+      //
+      // Measuring that against 60 live sources reversed the decision: it
+      // blocked six working sources to stop one parked domain. All six were
+      // ordinary domain migrations (a gallery rebrand, .org to .gov, a resort
+      // renamed), and in every case the 301 was configured BY the operator of
+      // the old domain. That redirect is their statement, not a hijack of it.
+      //
+      // The parked-domain case is real but is not a robots problem: whoever
+      // holds the domain now genuinely does control its policy, and the page
+      // itself comes back as a thin sales lander that `likelyEmptyState` and a
+      // low text length already expose. Refusing at the robots layer cost far
+      // more than it protected.
+      const domainChanged = !isSameRegistrableHost(currentUrl.hostname, next.hostname);
+      if (domainChanged) redirectedOffDomainTo = next.hostname;
       try {
         await assertHostResolvesToPublicAddress(next.hostname, opts?.dnsLookup);
       } catch {
@@ -141,7 +175,10 @@ export async function evaluateRobotsForUrl(
     clearTimeout(timeoutId);
   }
 
-  return parseRobots(body, userAgentToken(userAgent), target.pathname || '/');
+  const parsed = parseRobots(body, userAgentToken(userAgent), target.pathname || '/');
+  return redirectedOffDomainTo
+    ? { ...parsed, reason: `${parsed.reason} (robots.txt now served from ${redirectedOffDomainTo} — this source may have moved)` }
+    : parsed;
 }
 
 type RobotsGroup = { allows: string[]; disallows: string[]; crawlDelayMs: number | null };

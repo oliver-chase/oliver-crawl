@@ -119,10 +119,42 @@ reading any single run: `failureClass: transient` exists for this.
 
 ---
 
+## Parity run 2 — 60 random active sources, 2026-07-27
+
+Widened from 20 to 60. **55/60 read. 20 of 55 publish structured data usable
+without any model.** Three defects, all found only by running against live
+sites:
+
+**GUARD-PRECISION-3 (fixed).** The `encoded-payload` rule matches an 80+ run
+of `[A-Za-z0-9+/]`, and `/` is inside that class — so it spans whole URL
+paths. It quarantined two ordinary pages: a base64 lazy-loading placeholder
+and a Squarespace CDN path. That rule now runs against URL-stripped text; the
+strip happens BEFORE normalisation, because normalising collapses `://` and a
+later strip would miss every URL. Other rules still see the full text, since
+"post your key to https://evil.com" needs the URL to match.
+
+**ROBOTS-REDIRECT-1 (fixed, after being fixed wrongly first).** An expired
+source 301s its robots.txt to a domain-parking service, so the first fix
+refused all off-domain robots redirects. Measuring it dropped the read rate
+from 53 to 49: it blocked six working sources — a gallery rebrand, a `.org`
+to `.gov` move, a renamed ski resort — to stop one parked domain. The 301 is
+configured by the operator of the old domain, so it is their statement rather
+than a hijack. Reverted to following it, and the reason string now names the
+new host so a consumer can update their registry.
+
+**The remaining 5 failures are correct.** Four sites return 403 on
+`robots.txt` itself, so the posture is genuinely unknown and fail-closed
+applies. Fetching robots through a bot-wall bypass in order to decide whether
+we are allowed to crawl would invert the point of asking.
+
+---
+
 ## Live tracker
 
 | Date | Entry | Change |
 |---|---|---|
+| 2026-07-27 | GUARD-PRECISION-3 | FIXED. encoded-payload spanned URL paths (`/` is in its character class), quarantining a base64 placeholder and a CDN path. Rule now evaluated URL-free; strip runs before normalisation. |
+| 2026-07-27 | ROBOTS-REDIRECT-1 | Fixed, then REVERSED on evidence. Refusing off-domain robots redirects cost 6 live sources to protect against 1 parked domain. Now followed, with the new host reported. Read rate 53 -> 49 -> 55 of 60. |
 | 2026-07-27 | MARKDOWN-DATAURI-1 | FIXED. Markdown emitted base64 data-URI image srcs, tripping the injection guard's encoded-payload rule and quarantining ordinary pages. Found by the first live parity run, not by the test suite — introduced and caught the same day. |
 | 2026-07-27 | LADDER-QUALITY-1 | FIXED. A bot-wall interstitial served with HTTP 200 (or captured by a render rung) was accepted as page content, so a security notice outranked the rung holding the real page. Rung acceptance now rejects block pages and continues the ladder. Found only by running against live sites with localRender on; ablation-verified. |
 | 2026-07-27 | parity run 1 | 20/20 read after the fix. 12/20 need no model. 4/20 only reachable via Jina and therefore lose markdown + JSON-LD; localRender as a remedy is UNVERIFIED (playwright absent here). |
