@@ -30,7 +30,9 @@ Measured against what the paid APIs actually do:
 | Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
 | PDF parsing | **CRAWL-FEED-1** below (same content-type gap) | Yes |
 | Screenshots | not planned — no consumer needs it yet | Yes |
-| Residential proxies / stealth | **not achievable free** — lane 2 keeps this | No |
+| Consistent polite-client headers (free half of stealth) | **shipped** 2026-07-27 — accept-language + full accept; sec-ch-ua deliberately excluded (a half-consistent browser disguise is a stronger tell than none) | Yes |
+| Readability-class content scoring for div-soup pages | **shipped** 2026-07-27 | Yes |
+| Residential proxies | **not achievable free** — lane 2 keeps this | No |
 | General web search (Serper/Tavily) | **not achievable free** — see note | No |
 | Apify actor marketplace | not a capability gap; a different ops model | n/a |
 
@@ -150,6 +152,19 @@ on the crawl options, executed by the local-render rung only.
 Cap the count and total duration, allow no navigation to another origin, and
 never let an action come from crawled page content — that would be a
 prompt-injection path straight into a browser we control.
+
+---
+
+## CRAWL-RESUME-1 — a killed crawlSite loses everything
+
+`crawlSite`'s queue/visited/results live in memory only. A 500-page crawl
+killed at page 400 restarts from zero. Crawlee persists its request queue to
+disk for exactly this reason; Firecrawl runs async jobs you can re-poll.
+
+**Spec.** Smallest honest version: `onProgress(state)` callback emitting
+`{ queue, visited, collected }` snapshots, and `crawlSite` accepting a
+`resumeFrom` of the same shape. No storage in the package — the consumer
+persists it, same contract as validators. (Do NOT build a job system here.)
 
 ---
 
@@ -334,6 +349,10 @@ package has the context to judge it correctly.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | PARITY-HEADERS-1 + PARITY-READABILITY-1 | SHIPPED, specs removed per policy. Headers: accept-language + richer accept on the direct-fetch rung; accept-encoding left runtime-owned on purpose. Readability: paragraphs-vote-for-parent scoring as the no-semantic-tag fallback, 40% mass guardrail, ablation-verified. v0.2.0 tagged; update flow documented in EXISTING-PROJECTS.md. |
+| 2026-07-27 | VENDOR-POLICY-1 | SHIPPED same day as found: crawl() now runs eligibility+robots+same-site lane-independently; vendor-only crawls were previously entirely unvetted. Ablation-verified (4 tests red without gate). |
+| 2026-07-27 | cleanup | DELETED buildQuarantineTask + tests (remove-don't-archive): Fallow's curation-task shape, zero consumers here, belongs in Fallow at wiring time. |
+| 2026-07-27 | external-tools honesty | Firecrawl/ScrapeGraphAI/Crawlee audited at API/architecture level, NOT full source. Their free techniques we lack are now specs: PARITY-READABILITY-1, PARITY-HEADERS-1, CRAWL-RESUME-1. |
 | 2026-07-27 | shipped | Crawl-delay honoured (ROBOTS-DELAY-1) + WHITE-LABEL-2 FallowBot strings removed from output. Structured-data signal shipped (JSONLD-SIGNAL-1). |
 | 2026-07-27 | beat-the-vendors | Four specs opened for things a stateless per-call API structurally cannot do: BETTER-LASTMOD-1, BETTER-RUNGMEMORY-1, BETTER-DIFF-1, BETTER-SOFT404-1. |
 | 2026-07-27 | vendor parity | Reframed around displacing the paid APIs, not just matching Fallow. Markdown + onlyMainContent SHIPPED. PARITY-MAP-1 and PARITY-ACTIONS-1 opened. Recorded that proxies/stealth and general web search are genuinely not free-achievable. |

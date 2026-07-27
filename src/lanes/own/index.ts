@@ -202,6 +202,41 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<str
   return decodeBody(merged, contentType);
 }
 
+/**
+ * VENDOR-POLICY-1 (2026-07-27, found in audit): the lane-independent policy
+ * gate — eligibility, robots posture (resolved for real under autoRobots),
+ * and the same-site rule.
+ *
+ * Extracted from the own lane because the vendor lane's doc comment promised
+ * "the caller is still expected to have vetted the URL (crawl() does)" while
+ * crawl() only vetted INSIDE the own lane. `lanes: ['vendor']` therefore ran
+ * with no vetting at all: no same-site check, no robots check, nothing —
+ * paying Firecrawl to fetch a URL our own lane would have refused to touch.
+ * Governance is a property of the CRAWL, not of which network makes the
+ * request.
+ *
+ * Deliberately excludes the DNS-resolves-public check: that guards OUR
+ * machine's socket against SSRF, and in the vendor lane our machine never
+ * connects to the target. The vendor's network is the vendor's problem;
+ * which URLs we are willing to crawl at all is ours.
+ *
+ * Throws on refusal; callers convert to a `blocked` result.
+ */
+export async function approveCrawlPolicy(
+  target: CrawlTarget,
+  url: string,
+  config: ResolvedConfig,
+): Promise<{ requestUrl: URL; effectiveTarget: CrawlTarget }> {
+  let effectiveTarget = target;
+  if (config.autoRobots && (target.robotsPolicy ?? 'unknown') === 'unknown') {
+    const policy = await resolveRobotsPolicy(target.baseUrl, config);
+    effectiveTarget = { ...target, robotsPolicy: policy };
+  }
+  assertTargetEligible(effectiveTarget);
+  const requestUrl = assertRequestUrlAllowed(effectiveTarget, url);
+  return { requestUrl, effectiveTarget };
+}
+
 /** Crawl a single URL with the own lane. */
 export async function crawlWithOwnLane(
   target: CrawlTarget,
@@ -213,17 +248,13 @@ export async function crawlWithOwnLane(
   const timeoutMs = options.timeoutMs ?? config.defaults.timeoutMs;
   const started = Date.now();
 
-  // 1. Policy — every refusal here happens before any content fetch.
+  // 1. Policy — every refusal here happens before any content fetch. The
+  // shared gate (also run lane-independently by crawl()) plus the own-lane-
+  // only DNS check, which protects the socket THIS process is about to open.
   let requestUrl: URL;
   try {
-    // CRAWL-ROBOTS-1: resolve an unknown posture for real, when asked to.
-    let effectiveTarget = target;
-    if (config.autoRobots && (target.robotsPolicy ?? 'unknown') === 'unknown') {
-      const policy = await resolveRobotsPolicy(target.baseUrl, config);
-      effectiveTarget = { ...target, robotsPolicy: policy };
-    }
-    assertTargetEligible(effectiveTarget);
-    requestUrl = assertRequestUrlAllowed(effectiveTarget, url);
+    const approved = await approveCrawlPolicy(target, url, config);
+    requestUrl = approved.requestUrl;
     await assertHostResolvesToPublicAddress(requestUrl.hostname, config.dnsLookup);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -579,7 +610,22 @@ async function fetchFollowingSafeRedirects(
       redirect: 'manual',
       headers: {
         'user-agent': config.userAgent,
-        accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
+        // PARITY-HEADERS-1: a plausible, internally-consistent header set.
+        // A missing accept-language is one of the oldest bot tells there is —
+        // every real browser sends one — and naive WAF rules key on exactly
+        // that. Raising the direct-fetch rung's pass rate is what keeps
+        // crawls off the render rung; free is only free while the cheap rung
+        // usually wins.
+        //
+        // Deliberately NOT sent: sec-ch-ua and friends. Those claim "I am
+        // Chrome N on platform X", which is a lie next to an honest bot UA —
+        // and a *half*-consistent browser disguise is a stronger tell than no
+        // disguise. We claim only things true of any polite HTTP client.
+        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
+        'accept-language': 'en-US,en;q=0.9',
+        // accept-encoding stays runtime-owned (see RESERVED_HEADERS): the
+        // runtime only auto-decompresses encodings IT negotiated, and
+        // claiming one it can't handle would corrupt every body silently.
         // Caller-supplied credentials for this target. Safe to keep across
         // hops because every hop is re-validated same-site (a redirect off
         // this host throws before we would send anything).

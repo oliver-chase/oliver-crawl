@@ -114,8 +114,53 @@ Order matters. Go least-risky first:
 Once your suite passes against the package:
 
 - Remove your old scraper and its provider clients **in a separate commit** from the one that adopted the package.
-- Pin the version: `"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#v0.1.0"` — no `^`, so a package change can never silently alter your crawl behaviour.
+- Pin the version: `"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#v0.2.0"` — no `^`, so a package change can never silently alter your crawl behaviour.
 - Keep your old tests. Point them at the new code. **They are the evidence the swap preserved behaviour** — that is more valuable than the implementation they were written against.
+
+---
+
+## How updates reach your repos (deliberately not automatic)
+
+This package is a **pinned dependency, not a fork**. One codebase; every
+consumer pins a tag:
+
+```json
+"@oliver/crawl-core": "github:oliver-chase/oliver-crawl#v0.2.0"
+```
+
+Editing oliver-crawl changes **nothing** in any consumer until that consumer
+bumps its pin. That is the feature: an unpinned dependency means a package
+change silently alters crawl behaviour across every repo at once, which is
+exactly the failure pinning exists to prevent.
+
+The flow, end to end:
+
+1. **In oliver-crawl:** land the change, `npm run check` green, tag —
+   `git tag v0.2.1 && git push origin v0.2.1`.
+2. **In each consumer, when ready:** bump the pin in package.json,
+   `npm install`, run THAT repo's suite. The suite is what proves the update
+   is safe for that repo — each consumer adopts on its own schedule.
+3. **Rollback is the same move backwards:** re-pin the previous tag.
+
+Working on both at once (developing a package change against a real
+consumer): `npm link` in oliver-crawl, `npm link @oliver/crawl-core` in the
+consumer — live coupling until you unlink. Never ship the link.
+
+## Adopting a narrow slice (you don't have to take everything)
+
+The package is one import, but adoption doesn't have to be all-or-nothing. A
+repo whose only crawl surface is, say, link-resolution plus search-enrichment
+can replace exactly that and touch nothing else:
+
+```ts
+// One narrow call site swapped, the rest of the app untouched.
+const found = await searchAndCrawl(crawler, `${name} details`, { maxResults: 2 });
+```
+
+The comparison discipline in step 2 above still applies to the slice you
+swap. Everything you did not swap keeps running as it always has — there is
+no framework to buy into, no init, no global state shared with the rest of
+your app beyond the per-host politeness throttle.
 
 ---
 
@@ -131,7 +176,7 @@ const { createCrawler } = await import('@oliver/crawl-core');
 
 **Your bundler complains about `playwright`.** It shouldn't — the import is deliberately written so bundler tracers cannot see it. If something still tries to resolve it, mark `playwright` external. It is not a dependency of this package.
 
-**The package installs but imports fail.** Make sure you installed a tagged version (`#v0.1.0`). The build runs on install via `prepare`; if your CI uses `--ignore-scripts`, that step is skipped and there is no `dist/`.
+**The package installs but imports fail.** Make sure you installed a tagged version (`#v0.2.0`). The build runs on install via `prepare`; if your CI uses `--ignore-scripts`, that step is skipped and there is no `dist/`.
 
 **Everything suddenly reports `blocked`.** Almost always fail-closed robots — see the warning in step 1.
 
