@@ -85,6 +85,23 @@ run.truncated;    // true if it stopped at maxPages rather than running out
 
 Sequential by design (one request at a time): hammering a small site in parallel is what gets a crawler blocked. Already-visited URLs are never re-fetched, so a "next page" link that loops back to page 1 terminates instead of spinning.
 
+### Search
+
+Query in, URLs out — a different surface from crawling, and always paid.
+
+```ts
+const found = await crawler.search('rochester ny summer concert series', { maxResults: 5 });
+
+if (found.ok) {
+  found.results;   // [{ title, snippet, url }]
+  found.provider;  // which one answered
+} else {
+  found.reason;    // 'no_provider_configured' | 'no_results' | 'budget_refused' | 'error'
+}
+```
+
+Returns an outcome rather than a bare array on purpose: an empty array cannot tell you whether the web had nothing, your key was missing, or your budget said no. Serper is tried before Tavily by default (roughly 5x cheaper per call for the same job). Provider results are filtered through the same URL-safety check as extracted links, so a `javascript:` or private-host result never reaches you.
+
 ### Conditional GET — the cheapest crawl is the one that doesn't happen
 
 ```ts
@@ -120,6 +137,11 @@ OLIVER_CRAWL_FIRECRAWL_KEY=...   # or FIRECRAWL_API_KEY
 OLIVER_CRAWL_APIFY_TOKEN=...     # or APIFY_API_TOKEN
 
 OLIVER_CRAWL_VENDOR_ORDER=firecrawl,apify
+
+# Search providers (their own surface, separate from the scrape rungs)
+OLIVER_CRAWL_TAVILY_KEY=...      # or TAVILY_API_KEY
+OLIVER_CRAWL_SERPER_KEY=...      # or SERPER_API_KEY
+OLIVER_CRAWL_SEARCH_ORDER=serper,tavily
 ```
 
 The bare vendor names (`FIRECRAWL_API_KEY`) are accepted as fallbacks, so adopting this package doesn't mean renaming env vars that already work.
@@ -178,7 +200,7 @@ npm run build     # emit dist/
 
 ## Status
 
-The crawler is feature-complete for single-page and multi-page crawling: 204 tests, typecheck clean, built to dist, and verified against live sites (including a real multi-page run). Both lanes, both guards, the full own-lane rung ladder (fetch, browser render, Jina), JSON-LD extraction, conditional GET, cheap-change probing, robots.txt, ICS-feed and pagination discovery, recipe replay, and the multi-page orchestrator are all done. Outstanding: search providers (a different shape from crawling — query in, results out) and consumer adoption. See docs/MIGRATION.md.
+The crawler is feature-complete for single-page and multi-page crawling: 204 tests, typecheck clean, built to dist, and verified against live sites (including a real multi-page run). Both lanes, both guards, the full own-lane rung ladder (fetch, browser render, Jina), JSON-LD extraction, conditional GET, cheap-change probing, robots.txt, ICS-feed and pagination discovery, recipe replay, and the multi-page orchestrator are all done. Outstanding: consumer adoption (nothing has been deleted from the origin repo yet, so this remains additive and revertible). See docs/MIGRATION.md.
 
 ## License
 

@@ -150,6 +150,11 @@ export type CrawlConfig = {
   vendor?: VendorKeys;
   /** Order to try vendor rungs in when the vendor lane runs. */
   vendorRungOrder?: string[];
+  /** Order to try SEARCH providers in. Separate from vendorRungOrder because
+   *  search and scraping are different surfaces with different providers —
+   *  Serper searches but cannot scrape; Firecrawl scrapes but is not the
+   *  search rung here. */
+  searchProviderOrder?: string[];
   /** Emitted per external call. Never awaited for correctness — a slow or
    *  throwing sink must not break a crawl. */
   onUsage?: (event: UsageEvent) => void;
