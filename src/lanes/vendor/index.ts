@@ -20,6 +20,7 @@
 import { availableVendorRungs } from '../../core/config.js';
 import { emitUsage } from '../../core/usage.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
+import { summarizeStructuredData } from '../../extract/structured-summary.js';
 import { sha256Hex } from '../../core/hash.js';
 import type { ResolvedConfig } from '../../core/config.js';
 import type { CrawlOptions, CrawlResult } from '../../core/types.js';
@@ -173,6 +174,8 @@ export async function crawlWithVendorLane(
             // onlyMainContent, Apify likewise), so the delivered text already
             // is markdown — same value, not a second conversion.
             markdown: sanitized.text,
+            // Vendors return rendered markdown, not the page's script tags.
+            structuredData: summarizeStructuredData([]),
             title: result.title,
             contentType: 'text/markdown',
             bodySha256: await sha256Hex(result.text),

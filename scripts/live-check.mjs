@@ -235,6 +235,20 @@ await check('markdown drops page chrome', async () => {
   return `${markdown.length} chars, chrome-scoped`;
 });
 
+await check('structured-data summary reflects a real page', async () => {
+  // JSONLD-SIGNAL-1: the field a caller uses to decide whether to pay for an
+  // LLM at all, so it has to be right on real markup, not just fixtures.
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/');
+  assert(r.ok, r.detail);
+  const s = r.pages[0].structuredData;
+  assert(Array.isArray(s.types) && Array.isArray(s.contentTypes), 'summary shape wrong');
+  assert(typeof s.hasContentData === 'boolean', 'hasContentData missing');
+  assert(s.nodeCount >= 0, 'nodeCount missing');
+  // hasContentData must agree with contentTypes — a caller branches on it.
+  assert(s.hasContentData === s.contentTypes.length > 0, 'hasContentData disagrees with contentTypes');
+  return `${s.nodeCount} nodes, content=${s.hasContentData}, types=[${s.types.join(',')}]`;
+});
+
 console.log('\nSearch (skipped without a key)');
 if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
   const searchCrawler = createCrawler({

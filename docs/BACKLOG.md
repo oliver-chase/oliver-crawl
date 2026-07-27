@@ -21,6 +21,8 @@ Measured against what the paid APIs actually do:
 | Vendor capability | Status here | Free-achievable? |
 |---|---|---|
 | Markdown output, `onlyMainContent` | **shipped** 2026-07-27 | Yes |
+| `Crawl-delay` compliance | **shipped** 2026-07-27 | Yes |
+| "Do I even need an LLM?" signal | **shipped** 2026-07-27 — vendors do NOT offer this | Yes |
 | Whole-site crawl, depth/limits | shipped | Yes |
 | Change tracking / caching | shipped (conditional GET + region hash) — arguably better than Firecrawl's `maxAge` | Yes |
 | JS rendering | shipped (local Chromium + own service) | Yes |
@@ -38,6 +40,81 @@ security-conscious surface its least reliable one. The right move is to reduce
 DEPENDENCE on search — `/map`, sitemap and feed discovery answer "what pages
 does this site have" without asking a search engine at all — not to fake a
 free search rung.
+
+---
+
+## Where we can beat the vendors, not just match them
+
+The vendors optimise **crawl** cost. Their API is stateless and per-call, so
+they structurally cannot do any of the below. We run in-process and hold state
+across runs, and the consumer's real bill is the LLM extraction AFTER the
+crawl — so this is where the leverage is.
+
+---
+
+## BETTER-LASTMOD-1 — site-wide change detection in one request
+
+Sitemaps carry `<lastmod>` per URL. `fetch/sitemap-discovery.ts` fetches them
+and throws that field away.
+
+Conditional GET is one request per page to learn nothing changed. `lastmod` is
+**one request for all 500 pages**. For a scheduled re-crawl that is the
+difference between 500 round-trips and one, and no vendor offers it.
+
+**Spec.** Capture `lastmod` in `SitemapDiscoveryResult`; accept a
+`priorLastmod` map in `crawlSite` and skip any URL whose value has not moved.
+
+**Watch out:** `lastmod` is origin-supplied and frequently lies — plenty of
+CMSs stamp every URL with today's date. It may only ever be used to SKIP work,
+never to assert a page did change, and a caller must be able to turn it off.
+Pair it with the existing hash check rather than replacing that.
+
+---
+
+## BETTER-RUNGMEMORY-1 — remember which rung works for a host
+
+Every crawl walks the ladder from the top. A host that always 403s the direct
+fetch and always succeeds on render costs a guaranteed wasted request, every
+page, forever.
+
+**Spec.** Record the rung that succeeded per host and start there next time,
+with the full ladder still available beneath it. Re-probe from the top
+periodically so a site that stops blocking is not pinned to the expensive rung.
+
+Strictly a latency and success-rate win, needs no new dependency, and a
+stateless per-call vendor API cannot do it by construction.
+
+---
+
+## BETTER-DIFF-1 — report WHAT changed, not just THAT it changed
+
+`unchanged` is a boolean. A consumer whose page gained one event re-extracts
+the entire page — and pays for the whole thing to learn one row moved.
+
+We hold both the previous validators and the new content. Handing over the
+delta would cut re-extraction cost sharply, and re-extraction is the dominant
+line item.
+
+**Spec.** Optional `priorText`/`priorMarkdown` in, `changedRegions` out (added
+and removed blocks). Markdown makes this far more tractable than flat text did,
+since block boundaries are now explicit.
+
+---
+
+## BETTER-SOFT404-1 — don't pay to extract a page that says nothing
+
+"No events scheduled at this time" is a perfectly valid 200 that costs a full
+model call to learn nothing. So are parked domains, soft-404s, and "page under
+construction".
+
+**Spec.** A free heuristic — very low content length after main-region
+scoping, boilerplate empty-state phrases, a title that matches a known 404
+shape — surfaced as `CrawlPage.likelyEmptyState: boolean`. Advisory only:
+never refuse to return the page, just let a caller skip paying for it.
+
+**Watch out:** a real venue page in the off-season genuinely IS "no events
+scheduled", and that is a true fact a consumer may want to record rather than
+discard. This must inform the caller, never filter for them.
 
 ---
 
@@ -257,4 +334,6 @@ package has the context to judge it correctly.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | shipped | Crawl-delay honoured (ROBOTS-DELAY-1) + WHITE-LABEL-2 FallowBot strings removed from output. Structured-data signal shipped (JSONLD-SIGNAL-1). |
+| 2026-07-27 | beat-the-vendors | Four specs opened for things a stateless per-call API structurally cannot do: BETTER-LASTMOD-1, BETTER-RUNGMEMORY-1, BETTER-DIFF-1, BETTER-SOFT404-1. |
 | 2026-07-27 | vendor parity | Reframed around displacing the paid APIs, not just matching Fallow. Markdown + onlyMainContent SHIPPED. PARITY-MAP-1 and PARITY-ACTIONS-1 opened. Recorded that proxies/stealth and general web search are genuinely not free-achievable. |
