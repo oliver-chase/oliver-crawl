@@ -118,7 +118,36 @@ const crawler = createCrawler({ userAgent: 'MyBot/1.0', autoRobots: true });
 
 Without this, the crawler trusts the `robotsPolicy` you set on each target (and fails closed on `'unknown'`). With it, an unknown posture is resolved by actually fetching and parsing robots.txt — **cached per host**, so it costs one request per host, not per page. An explicit posture you set is never overridden.
 
-### Feeding an LLM: use `markdown`, not `text`
+### Non-HTML documents (feeds, calendars, CSV, JSON)
+
+The own lane reads more than HTML. `page.contentKind` tells you what you got:
+
+| `contentKind` | From | `markdown` / `links` / `jsonLd` |
+|---|---|---|
+| `html` | text/html, xhtml | populated |
+| `calendar` | text/calendar (`.ics`) | empty |
+| `csv` | text/csv | empty |
+| `json` | application/json, `+json` | empty |
+| `feed` | RSS, Atom, generic XML | empty |
+| `text` | text/plain | empty |
+
+Non-HTML kinds arrive verbatim in `page.text`. **Parsing them is yours** —
+turning an ICS feed into events, or CSV into rows, is domain logic. Branch on
+`contentKind` rather than sniffing `contentType`, which varies by server.
+
+This matters because [feed discovery](#discovering-what-to-crawl-free) hunts
+for ICS feeds precisely because they are more accurate and more stable than
+scraping a page. Now the feed it finds can actually be fetched.
+
+Images, video, PDFs and binaries are still refused (`reason: 'empty'`) —
+HTML-parsing a JPEG produces confident nonsense. The injection guard runs on
+every kind: a calendar feed is untrusted remote text like any page.
+
+Only `text` and `textSha256` are meaningful on non-HTML kinds; `markdown` and
+`contentRegionSha256` are empty rather than faked, so a rung or kind change
+can never look like a content change.
+
+## Feeding an LLM: use `markdown`, not `text`
 
 `page.markdown` is the main content region as Markdown — headings, lists,
 tables and links preserved, nav/header/footer/sidebar removed. `page.text` is

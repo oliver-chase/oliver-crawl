@@ -174,6 +174,7 @@ export { computeContentRegionHash } from './extract/content-region-hash.js';
 export { summarizeStructuredData } from './extract/structured-summary.js';
 export type { StructuredSummary } from './extract/structured-summary.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
+export { classifyContentType, refineKindByUrl } from './core/content-kind.js';
 export { urlDedupKey, sameUrlResource } from './core/url-dedup-key.js';
 export { evaluateRobotsForUrl, parseRobots, userAgentToken, MAX_HONORED_CRAWL_DELAY_MS } from './fetch/robots-check.js';
 export { publishedCrawlDelayMs } from './lanes/own/index.js';

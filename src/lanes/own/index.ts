@@ -38,6 +38,7 @@
 import * as cheerio from 'cheerio';
 import { htmlToMarkdown } from '../../extract/html-to-markdown.js';
 import { summarizeStructuredData } from '../../extract/structured-summary.js';
+import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js';
 import {
   assertRedirectUrlAllowedForHost,
   assertRequestUrlAllowed,
@@ -324,13 +325,65 @@ export async function crawlWithOwnLane(
   }
 
   const contentType = response.headers.get('content-type') || '';
-  if (!/text\/html|application\/xhtml|text\/plain/i.test(contentType)) {
+  const kindRaw = classifyContentType(contentType);
+  if (!kindRaw) {
+    // Still refused: images, video, PDFs, binaries. HTML-parsing a JPEG
+    // produces confident nonsense, and a PDF needs a real parser.
     const detail = `Unsupported content-type: ${contentType || 'unknown'}`;
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return { ok: false, reason: 'empty', detail, lane: 'own' };
   }
+  const contentKind = refineKindByUrl(kindRaw, response.url || requestUrl.toString());
 
   const html = await readBodyCapped(response, config.limits.maxBodyBytes);
+
+  // CRAWL-FEED-1: a data document (ICS, CSV, JSON, RSS/Atom) is delivered
+  // verbatim. Parsing it into events or rows is domain logic and belongs to
+  // the caller — but the raw body has to REACH them, which it previously
+  // never did. It still goes through the injection guard: a calendar feed is
+  // untrusted remote text exactly like a page is.
+  if (contentKind !== 'html') {
+    const sanitizedData = sanitizeCrawledText(html, maxTextChars);
+    if (sanitizedData.signals.length > 0) {
+      const detail = `Prompt-injection signals in ${contentKind} content.`;
+      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+    }
+    if (!sanitizedData.text.trim()) {
+      const detail = `Empty ${contentKind} document`;
+      emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return { ok: false, reason: 'empty', detail, lane: 'own' };
+    }
+
+    emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+    return {
+      ok: true,
+      pages: [
+        {
+          url: response.url || requestUrl.toString(),
+          text: sanitizedData.text,
+          // No HTML, so no markdown, links, JSON-LD or structural hash to
+          // derive. Empty rather than faked — same honesty rule as
+          // contentRegionSha256 on the text-only rungs (CRAWL-HASH-1).
+          markdown: '',
+          contentKind,
+          structuredData: summarizeStructuredData([]),
+          title: null,
+          contentType,
+          bodySha256: await sha256Hex(html),
+          contentRegionSha256: '',
+          textSha256: await sha256Hex(sanitizedData.text),
+          httpEtag: response.headers.get('etag'),
+          httpLastModified: response.headers.get('last-modified'),
+          jsonLd: [],
+          outboundHosts: [],
+          links: [],
+          lane: 'own',
+          rung: 'fetch',
+        },
+      ],
+    };
+  }
   const page = await buildPage({
     url: response.url || requestUrl.toString(),
     html,
@@ -536,6 +589,7 @@ async function jinaFallback(
           // No HTML to convert on a text-only rung. Empty rather than
           // pretending, same rule as contentRegionSha256 (CRAWL-HASH-1).
           markdown: '',
+          contentKind: 'text',
           // Jina returns prose, not the page's script tags — no JSON-LD to
           // summarise. Reported honestly as "none found", which correctly
           // tells a caller a model is their only option on this rung.
@@ -733,6 +787,7 @@ async function buildPage(input: {
     url: input.url,
     text: sanitized.text,
     markdown: sanitizedMarkdown.text,
+    contentKind: 'html',
     structuredData: summarizeStructuredData(jsonLd),
     title,
     ...(input.includeHtml ? { html: input.html } : {}),

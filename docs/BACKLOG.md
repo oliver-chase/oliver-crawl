@@ -28,7 +28,8 @@ Measured against what the paid APIs actually do:
 | JS rendering | shipped (local Chromium + own service) | Yes |
 | `/map` — fast whole-domain URL discovery | **PARITY-MAP-1** below | Yes |
 | Browser actions (click "load more", scroll, wait) | **PARITY-ACTIONS-1** below | Yes — Chromium is already there |
-| PDF parsing | **CRAWL-FEED-1** below (same content-type gap) | Yes |
+| Feeds / calendars / CSV / JSON as first-class documents | **shipped** 2026-07-27 (CRAWL-FEED-1) | Yes |
+| PDF parsing | **CRAWL-PDF-1** below | Yes |
 | Screenshots | not planned — no consumer needs it yet | Yes |
 | Consistent polite-client headers (free half of stealth) | **shipped** 2026-07-27 — accept-language + full accept; sec-ch-ua deliberately excluded (a half-consistent browser disguise is a stronger tell than none) | Yes |
 | Readability-class content scoring for div-soup pages | **shipped** 2026-07-27 | Yes |
@@ -168,37 +169,17 @@ persists it, same contract as validators. (Do NOT build a job system here.)
 
 ---
 
-## CRAWL-FEED-1 — the package can discover a feed it cannot read
+## CRAWL-PDF-1 — PDFs are still refused
 
-**Priority: highest. This is a half-capability, not a missing feature.**
+Split out of CRAWL-FEED-1, which shipped everything text-shaped. PDFs remain
+refused because they need a real parser, not a wider content-type gate — many
+venues publish season schedules as a single PDF.
 
-`fetch/feed-discovery.ts` finds ICS calendar feeds — its own header argues they
-are "MORE accurate and more stable" than scraping the HTML, which is the whole
-reason it exists. But the fetch rung accepts only:
-
-```
-/text\/html|application\/xhtml|text\/plain/i     src/lanes/own/index.ts:271
-```
-
-`text/calendar` is refused as `reason: 'empty'`. So the package will happily
-tell a caller "here is the ICS feed for this site" and then be unable to fetch
-it. The most accurate data source we can find is the one we cannot read.
-
-Same gap for `text/csv` (Fallow has `lib/ingestion/csv-parser.ts`, an RFC4180
-parser with quoted-comma and embedded-newline handling) and for JSON feeds.
-
-**Spec.** Widen accepted content-types and return the body as a typed payload
-rather than forcing everything through HTML parsing:
-
-- add `text/calendar`, `text/csv`, `application/json`, `application/rss+xml`,
-  `application/atom+xml`
-- add `CrawlPage.contentKind: 'html' | 'calendar' | 'csv' | 'json' | 'feed'`
-- parsing ICS into events stays with the CALLER (domain logic), but the raw
-  decoded body must reach them — today it does not
-- the injection guard still runs: a feed is untrusted text like any other
-
-**Watch out:** widening content-types must not widen what the SSRF and
-same-site guards allow. This is a body-handling change only.
+**Spec.** Accept `application/pdf`, extract the text layer, deliver as
+`contentKind: 'pdf'`. Needs a dependency (`unpdf` or similar, ESM + no native
+build); audit it for the same ReDoS/injection concerns as everything else
+here. A scanned PDF has no text layer and should report `empty` honestly
+rather than returning a blank page — that case belongs to CRAWL-VISION-1.
 
 ---
 
@@ -349,6 +330,9 @@ package has the context to judge it correctly.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | CRAWL-FEED-1 | SHIPPED, spec removed. contentKind on CrawlPage; ICS/CSV/JSON/RSS/Atom/XML delivered verbatim; images+binaries still refused; guard runs on every kind. PDF split out as CRAWL-PDF-1. |
+| 2026-07-27 | review fixes | CACHE-POLICY-1 (cache read ran before the policy gate; cache is keyed on url+lanes, not target — a second target could read a page it was never allowed to fetch) and READABILITY-CHROME-1 (scoring ran before chrome removal, so a prose-heavy aside/nav could win and the later strip could not undo it). Both ablation-verified red first. |
+| 2026-07-27 | process | `npm run check` had been exiting 1 since the buildQuarantineTask cleanup left an orphan test file with no suite; masked by grepping the "Tests" line, which shows passing count and hides a failed SUITE. Read the exit code. |
 | 2026-07-27 | PARITY-HEADERS-1 + PARITY-READABILITY-1 | SHIPPED, specs removed per policy. Headers: accept-language + richer accept on the direct-fetch rung; accept-encoding left runtime-owned on purpose. Readability: paragraphs-vote-for-parent scoring as the no-semantic-tag fallback, 40% mass guardrail, ablation-verified. v0.2.0 tagged; update flow documented in EXISTING-PROJECTS.md. |
 | 2026-07-27 | VENDOR-POLICY-1 | SHIPPED same day as found: crawl() now runs eligibility+robots+same-site lane-independently; vendor-only crawls were previously entirely unvetted. Ablation-verified (4 tests red without gate). |
 | 2026-07-27 | cleanup | DELETED buildQuarantineTask + tests (remove-don't-archive): Fallow's curation-task shape, zero consumers here, belongs in Fallow at wiring time. |

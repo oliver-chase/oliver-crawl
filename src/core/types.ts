@@ -113,6 +113,18 @@ export type CrawlPage = {
    * as the fallback.
    */
   markdown: string;
+  /**
+   * What KIND of document this is (CRAWL-FEED-1).
+   *
+   * `'html'` is the common case and everything else is a data document
+   * delivered verbatim in `text` — parsing an ICS feed into events, or a CSV
+   * into rows, is domain logic and stays with the caller. Branch on this
+   * rather than sniffing `contentType`, which varies by server.
+   *
+   * Non-HTML kinds have no `markdown`, `links`, `jsonLd` or
+   * `contentRegionSha256`: there is no HTML to derive them from.
+   */
+  contentKind: ContentKind;
   title: string | null;
   /** Raw HTML, only when the caller asked for it (`includeHtml`). Callers
    *  that feed an LLM should use `text` — it has been through the guard. */
@@ -165,6 +177,16 @@ export type CrawlPage = {
 };
 
 export type PageLink = { url: string; text: string };
+
+/**
+ * Document kinds the own lane will fetch.
+ *
+ * `'calendar'` (ICS) matters most: feed-discovery.ts hunts for these and
+ * argues in its own header that they are more accurate and more stable than
+ * scraping a page — and until CRAWL-FEED-1 the fetch rung refused to read
+ * them, so the best source we could find was the one we could not use.
+ */
+export type ContentKind = 'html' | 'calendar' | 'csv' | 'json' | 'feed' | 'text';
 
 export type { StructuredSummary } from '../extract/structured-summary.js';
 
