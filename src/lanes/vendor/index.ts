@@ -178,6 +178,7 @@ export async function crawlWithVendorLane(
             // onlyMainContent, Apify likewise), so the delivered text already
             // is markdown — same value, not a second conversion.
             markdown: sanitized.text,
+            contentKind: 'html',
             // Vendors return rendered markdown, not the page's script tags.
             structuredData: summarizeStructuredData([]),
             title: result.title,

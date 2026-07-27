@@ -90,12 +90,17 @@ await check('follows a real redirect', async () => {
   return r.pages[0].url;
 });
 
-await check('non-HTML content-type is refused, not mis-parsed', async () => {
-  const r = await crawler.crawl(RFC, 'https://www.rfc-editor.org/rfc/rfc2616.txt');
-  // Either refused as unsupported, or read as text/plain — both correct;
-  // what must NOT happen is HTML-parsing a non-HTML document.
-  assert(r.ok || r.reason === 'empty', `unexpected: ${r.reason} ${r.detail}`);
-  return r.ok ? 'read as text' : 'refused as unsupported';
+await check('a binary content-type is refused, never mis-parsed', async () => {
+  // Since CRAWL-FEED-1 text-ish documents ARE read, so this asserts the half
+  // that must stay refused: HTML-parsing an image produces confident nonsense.
+  // A URL that really exists and really is an image (200 image/vnd.microsoft
+  // .icon), so this fails on the content-type gate — not on a 404, which
+  // would pass for the wrong reason and prove nothing.
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/favicon.ico');
+  assert(!r.ok, `an image URL was accepted: kind=${r.ok ? r.pages[0].contentKind : ''}`);
+  assert(r.reason === 'empty', `expected a content-type refusal, got ${r.reason}: ${r.detail}`);
+  assert(/Unsupported content-type/.test(r.detail), `wrong refusal: ${r.detail}`);
+  return r.detail.slice(0, 44);
 });
 
 console.log('\nSecurity guards');
@@ -164,6 +169,19 @@ await check('sitemap discovery on a real site', async () => {
   assert(found.urls.length > 0, `no sitemap URLs: ${found.reason}`);
   assert(found.urls.every((u) => u.includes('rfc-editor.org')), 'a non-same-site URL survived filtering');
   return `${found.urls.length} urls`;
+});
+
+await check('sitemap lastmod is captured from a real site', async () => {
+  // BETTER-LASTMOD-1: one request answers "which pages changed" for the whole
+  // site. Real sitemaps vary — many publish no lastmod at all — so this
+  // asserts the SHAPE is right and reports whether this origin publishes it.
+  const found = await discoverSitemapUrls(RFC, { userAgent: 'OliverCrawl-LiveCheck/0.1', maxUrls: 10, dnsLookup: dns });
+  assert(found.entries.length > 0, `no sitemap entries: ${found.reason}`);
+  assert(found.entries.length === found.urls.length, 'entries and urls disagree');
+  assert(found.entries.every((e) => typeof e.url === 'string'), 'entry missing url');
+  assert(found.entries.every((e) => e.lastmod === null || typeof e.lastmod === 'string'), 'bad lastmod type');
+  const withMod = found.entries.filter((e) => e.lastmod).length;
+  return `${found.entries.length} entries, ${withMod} with lastmod`;
 });
 
 await check('whole-site link following from ONE seed', async () => {
@@ -247,6 +265,20 @@ await check('structured-data summary reflects a real page', async () => {
   // hasContentData must agree with contentTypes — a caller branches on it.
   assert(s.hasContentData === s.contentTypes.length > 0, 'hasContentData disagrees with contentTypes');
   return `${s.nodeCount} nodes, content=${s.hasContentData}, types=[${s.types.join(',')}]`;
+});
+
+await check('a real non-HTML document is read, not refused', async () => {
+  // CRAWL-FEED-1: the fetch rung used to refuse anything but html/plain, so
+  // a discovered feed could never be fetched. rfc-editor serves .txt.
+  const r = await crawler.crawl(RFC, 'https://www.rfc-editor.org/rfc/rfc2616.txt');
+  assert(r.ok, `not ok: ${r.detail}`);
+  const p = r.pages[0];
+  assert(p.text.length > 500, `suspiciously short: ${p.text.length}`);
+  // A data document has no HTML-derived fields — empty, never faked.
+  assert(p.markdown === '', 'markdown should be empty on a non-HTML kind');
+  assert(p.contentRegionSha256 === '', 'structural hash should be empty');
+  assert(p.textSha256.length === 64, 'textSha256 must always be set');
+  return `kind=${p.contentKind}, ${p.text.length} chars`;
 });
 
 console.log('\nSearch (skipped without a key)');
