@@ -1,0 +1,46 @@
+{
+  "name": "@oliver/crawl-core",
+  "version": "0.1.0",
+  "description": "Governed web crawling: a self-hosted crawler lane with SSRF guards and prompt-injection sanitising, plus an optional vendor-API lane. Use either, or both.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oliver-chase/oliver-crawl.git"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./lane-own": {
+      "types": "./dist/lanes/own/index.d.ts",
+      "import": "./dist/lanes/own/index.js"
+    },
+    "./lane-vendor": {
+      "types": "./dist/lanes/vendor/index.d.ts",
+      "import": "./dist/lanes/vendor/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
