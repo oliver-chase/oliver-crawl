@@ -30,7 +30,7 @@ import { crawlWithVendorLane } from './lanes/vendor/index.js';
 import { search, availableSearchProviders } from './search/index.js';
 import { readPageCache, writePageCache } from './core/page-cache.js';
 import { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
-import type { SearchOutcome } from './search/index.js';
+import type { SearchOutcome, SearchOptions } from './search/index.js';
 import type { CrawlConfig, CrawlOptions, CrawlResult, CrawlTarget, LaneName } from './core/types.js';
 
 export type Crawler = {
@@ -38,7 +38,7 @@ export type Crawler = {
   crawl: (target: CrawlTarget, url: string, options?: CrawlOptions) => Promise<CrawlResult>;
   /** Search the web. A different surface from crawling — query in, URLs out —
    *  and always paid, so it reports WHY it came back empty. */
-  search: (query: string, options?: { maxResults?: number }) => Promise<SearchOutcome>;
+  search: (query: string, options?: SearchOptions) => Promise<SearchOutcome>;
   /** Which vendor rungs are usable with the current keys. Empty is normal
    *  and fine — it just means the own lane is the only one available. */
   vendorRungs: () => string[];
@@ -115,8 +115,12 @@ export { configFromEnv, resolveConfig, availableVendorRungs, DEFAULT_USER_AGENT 
 // Multi-page orchestration: drives crawl() across a target's seeds, with a
 // page budget, retry policy, dedup and optional pagination following.
 export { crawlSite } from './crawl-site.js';
+// Search then read what was found — with host policy re-applied per result,
+// because a search provider is an untrusted source of URLs.
+export { searchAndCrawl } from './search-and-crawl.js';
+export type { SearchAndCrawlOptions, SearchAndCrawlResult } from './search-and-crawl.js';
 export { search as searchWeb, availableSearchProviders, DEFAULT_SEARCH_PROVIDER_ORDER } from './search/index.js';
-export type { SearchResult, SearchOutcome } from './search/index.js';
+export type { SearchResult, SearchOutcome, SearchOptions } from './search/index.js';
 export type { SiteCrawlOptions, SiteCrawlResult, SiteCrawlFailure } from './crawl-site.js';
 export { DEFAULT_VENDOR_RUNG_ORDER } from './core/config.js';
 export type { ResolvedConfig } from './core/config.js';

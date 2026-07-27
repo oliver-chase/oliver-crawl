@@ -137,11 +137,61 @@ const { createCrawler } = await import('@oliver/crawl-core');
 
 ---
 
-## What this package will NOT do for you
+## What you have to wire yourself
 
-Being explicit, so you don't discover these mid-migration:
+None of these are things the package should do for you — but you do need to know they're your job, and roughly what the wiring looks like.
 
-- **It has no database, queue, or scheduler.** It crawls when you call it. Your existing scheduling stays yours.
-- **It does not extract your domain objects.** You get clean text, JSON-LD and links. Turning those into events/products/articles is your code — deliberately, because that logic is what makes your app yours.
-- **It does not learn extraction rules.** It can *replay* a stored selector recipe; deciding whether a recipe is any good needs your domain's validity rules.
-- **It will not bypass a paywall or a login.** No cookie jar, no auth. A page that requires a session is out of scope.
+### Scheduling — yours
+
+The package crawls when called. It has no scheduler, queue or cron. Whatever you already use stays:
+
+```ts
+// your existing cron / worker / queue consumer
+for (const row of await db.sources.due()) {
+  const run = await crawlSite(crawler, toCrawlTarget(row), {
+    priorValidators: row.validators,
+    onSignals: (id, v) => db.sources.saveValidators(id, v),
+    targetId: row.id,
+  });
+  await db.pages.upsert(run.pages);
+}
+```
+
+### Turning pages into YOUR objects — yours
+
+You get `text`, `jsonLd`, `links`, `title`. Turning those into events, products or articles is your code, deliberately: that logic is what makes your app yours, and a generic version of it would be wrong for everyone.
+
+Start with `jsonLd` before reaching for an LLM — many sites publish structured data describing themselves, and reading it is free and exact:
+
+```ts
+for (const node of page.jsonLd) {
+  if (node['@type'] === 'Event') myEvents.push(fromJsonLd(node)); // free, no LLM
+}
+if (myEvents.length === 0) myEvents = await myLlmExtract(page.text); // paid fallback
+```
+
+### Storing crawl state — yours, and the package hands you exactly what to store
+
+```ts
+run.validators;  // { [url]: { etag, lastModified, bodySha256, contentRegionSha256, textSha256 } }
+```
+
+Persist that blob against the source; pass it back as `priorValidators` next run. That single round-trip is what makes re-crawls nearly free.
+
+### Pages behind a login — yours to authorise, ours to fetch
+
+The package will not acquire, store or refresh credentials. It **will** send ones you already hold:
+
+```ts
+crawler.crawl(
+  { baseUrl: 'https://partner.example.com', robotsPolicy: 'allow',
+    headers: { authorization: `Bearer ${await myTokenStore.get()}` } },
+  'https://partner.example.com/members/calendar',
+);
+```
+
+Sent only to that target's own host — the same-site rule means a redirect cannot walk your token to another origin.
+
+### Learning extraction recipes — yours
+
+The package can *replay* a stored selector recipe (`applyRecipe`). Deciding whether a recipe is any good requires your domain's validity rules ("did the dates parse", "is that a real venue name"), so learning stays with you.

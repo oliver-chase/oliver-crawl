@@ -41,6 +41,22 @@ export type CrawlTarget = {
   active?: boolean;
   /** Optional extra same-site seed paths to crawl beyond baseUrl. */
   seeds?: string[];
+  /**
+   * Extra request headers for THIS target only — an API key, a bearer token,
+   * a session cookie for a members area you legitimately have access to.
+   *
+   * This is what makes "it cannot read anything behind a login" a limitation
+   * you can lift yourself rather than a wall. You supply credentials you
+   * already hold; the package never acquires, stores or refreshes them.
+   *
+   * Sent ONLY to this target's own host. The same-site rule already refuses
+   * off-domain URLs, so a redirect cannot walk your token to another origin —
+   * which is the mistake this feature would otherwise invite.
+   *
+   * Never set `host`, `content-length` or `user-agent` here; the crawler owns
+   * those and will ignore attempts to override them.
+   */
+  headers?: Record<string, string>;
 };
 
 /** Per-request options that don't belong to the target itself. */
@@ -129,7 +145,15 @@ export type PageLink = { url: string; text: string };
 export type CrawlResult =
   | { ok: true; pages: CrawlPage[]; notModified?: false }
   | { ok: true; pages: []; notModified: true }
-  | { ok: false; reason: CrawlFailureReason; detail: string; lane?: LaneName };
+  | {
+      ok: false;
+      reason: CrawlFailureReason;
+      detail: string;
+      lane?: LaneName;
+      /** Present when the origin answered 429/503 WITH a Retry-After header.
+       *  A retry loop that ignores this is the one that gets banned. */
+      retryAfterMs?: number;
+    };
 
 export type CrawlFailureReason =
   /** Refused before any network call: inactive, robots, policy, bad URL. */

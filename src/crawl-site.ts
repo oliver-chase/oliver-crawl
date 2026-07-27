@@ -336,9 +336,13 @@ export async function crawlSite(
       lastFailure = { url, reason: result.reason, detail: result.detail };
       // Retrying these produces the identical answer; spend the budget elsewhere.
       if (isTerminal(result.reason)) break;
-      // Back off before the retry — an origin that just failed usually needs
-      // a moment, and an immediate re-hit reads as hostile.
-      if (attempt < maxRetries) await sleep((options.retryBackoffMs ?? 500) * (attempt + 1));
+      if (attempt < maxRetries) {
+        // CRAWL-BACKOFF-1: when the origin SAID how long to wait (429/503 +
+        // Retry-After), wait that long. Our own schedule is a guess; theirs
+        // is an instruction, and ignoring it is what gets a crawler banned.
+        const ourBackoff = (options.retryBackoffMs ?? 500) * (attempt + 1);
+        await sleep(Math.max(result.retryAfterMs ?? 0, ourBackoff));
+      }
     }
 
     if (!succeeded && lastFailure) failures.push(lastFailure);

@@ -39,6 +39,23 @@ const MAX_SNIPPET_CHARS = 300;
 
 export const DEFAULT_SEARCH_PROVIDER_ORDER = ['serper', 'tavily'];
 
+export type SearchOptions = {
+  maxResults?: number;
+  /** Restrict results to one site. Accepts a bare host or a full URL. */
+  site?: string;
+};
+
+/** Accept 'example.com', 'https://example.com/x' or 'www.example.com' and
+ *  produce the bare host a `site:` operator expects. */
+function normaliseSiteOperand(site: string): string {
+  const trimmed = site.trim();
+  try {
+    return new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`).hostname;
+  } catch {
+    return trimmed;
+  }
+}
+
 type SearchProvider = {
   name: string;
   isConfigured: (config: ResolvedConfig) => boolean;
@@ -123,7 +140,7 @@ export function availableSearchProviders(config: ResolvedConfig): string[] {
 export async function search(
   query: string,
   config: ResolvedConfig,
-  options: { maxResults?: number } = {},
+  options: SearchOptions = {},
 ): Promise<SearchOutcome> {
   const maxResults = Math.max(1, options.maxResults ?? 3);
   const usable = availableSearchProviders(config);
@@ -131,6 +148,12 @@ export async function search(
   if (!query.trim()) {
     return { ok: false, reason: 'error', detail: 'Empty search query.' };
   }
+
+  // Both providers speak Google's `site:` operator. Restricting a query to a
+  // domain is the difference between "search the web about this venue" and
+  // "find pages ON this venue's site" — the second is what a crawler usually
+  // actually wants, and doing it by hand is easy to get subtly wrong.
+  const effectiveQuery = options.site ? `site:${normaliseSiteOperand(options.site)} ${query}`.trim() : query;
 
   if (usable.length === 0) {
     return {
@@ -154,7 +177,7 @@ export async function search(
 
     const started = Date.now();
     try {
-      const results = await provider.run(query, maxResults, config);
+      const results = await provider.run(effectiveQuery, maxResults, config);
       const latencyMs = Date.now() - started;
 
       if (results.length > 0) {

@@ -144,9 +144,24 @@ createCrawler({
 ```ts
 const found = await crawler.search('rochester summer concert series');
 if (found.ok) found.results; // [{ title, snippet, url }]
+
+// Only pages on one site:
+await crawler.search('parking', { site: 'venue.example.com' });
 ```
 
-Search always costs money (there is no free search API), so it needs a key and tells you plainly when it doesn't have one.
+Usually you don't want URLs — you want what's on them:
+
+```ts
+import { searchAndCrawl } from '@oliver/crawl-core';
+
+const found = await searchAndCrawl(crawler, 'summer concert series rochester');
+found.pages;    // the pages themselves, already read and cleaned
+found.skipped;  // results that couldn't be read, and why
+```
+
+Every search result is crawled through the **same guards as any other page** — a search provider is an untrusted source of URLs, and feeding them straight into a fetcher is how a search feature becomes a security hole.
+
+Search always costs money (there is no free search API), so it needs a key and says plainly when it doesn't have one.
 
 ---
 
@@ -193,7 +208,7 @@ createCrawler({
 
 ## Status
 
-262 tests, strict TypeScript, builds to `dist/`. Verified against live sites and as a real installed dependency. Node 20+; works on edge/serverless with local rendering skipped.
+276 tests, strict TypeScript, builds to `dist/`. Verified against live sites and as a real installed dependency. Node 20+; works on edge/serverless with local rendering skipped.
 
 ## License
 
