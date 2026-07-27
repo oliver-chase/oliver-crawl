@@ -14,7 +14,7 @@ Lane 1 handles the large majority of real pages. Lane 2 is there for the few it 
 ## Try it in 30 seconds
 
 ```bash
-npm install github:oliver-chase/oliver-crawl#v0.4.0
+npm install github:oliver-chase/oliver-crawl#v0.7.0
 ```
 
 ```ts
@@ -259,7 +259,7 @@ createCrawler({
 
 ## Status
 
-432 tests across 31 files, strict TypeScript, builds to `dist/`. A separate live-network suite (`npm run live`, 22 checks) runs the whole thing against real websites, and the package is verified as a genuinely installed dependency. Node 20+. Works on edge and serverless, with local rendering skipped there.
+478 tests across 35 files, strict TypeScript, builds to `dist/`. A separate live-network suite (`npm run live`, 23 checks) runs the whole thing against real websites, and the package is verified as a genuinely installed dependency. Node 20+. Works on edge and serverless, with local rendering skipped there.
 
 ## License
 
