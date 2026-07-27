@@ -55,21 +55,6 @@ crawl — so this is where the leverage is.
 
 ---
 
-## BETTER-RUNGMEMORY-1 — remember which rung works for a host
-
-Every crawl walks the ladder from the top. A host that always 403s the direct
-fetch and always succeeds on render costs a guaranteed wasted request, every
-page, forever.
-
-**Spec.** Record the rung that succeeded per host and start there next time,
-with the full ladder still available beneath it. Re-probe from the top
-periodically so a site that stops blocking is not pinned to the expensive rung.
-
-Strictly a latency and success-rate win, needs no new dependency, and a
-stateless per-call vendor API cannot do it by construction.
-
----
-
 ## BETTER-DIFF-1 — report WHAT changed, not just THAT it changed
 
 `unchanged` is a boolean. A consumer whose page gained one event re-extracts
@@ -216,6 +201,7 @@ exactly this procedure for consumers; the package has not run it on itself.
 | Date | Entry | Change |
 |---|---|---|
 | 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | BETTER-RUNGMEMORY-1 | SHIPPED, spec removed. Per-host winning rung, 30min TTL, recorded at one chokepoint in crawl(). Store is PER CRAWLER — first cut was module-level and broke 10 tests, same defect class as HOST-CACHE-SCOPE-1. Self-heals: a failed remembered rung is forgotten and the full ladder re-runs, else a rung outage would cost the page. `rungMemory: false` opts out. |
 | 2026-07-27 | PARITY-MAP-1 | SHIPPED, spec removed. mapSite(crawler, target) = sitemap + homepage links + declared feeds, ONE page body fetched. Feeds surfaced separately. Live: 25 urls off rfc-editor. Live gap: maxUrls filled from sitemap alone there, so the homepage-links path is fixture-covered only. |
 | 2026-07-27 | consumer signals | SHIPPED 4 specs, all removed: CRAWL-DEGRADE-1 (failureClass transient/structural, classified at one chokepoint in crawl()), BETTER-SOFT404-1 (likelyEmptyState, advisory only), CRAWL-CONTENTKIND-1 (extractorVersion stamp), CRAWL-UA-1 (warn once per UA with no contact, never throw). 22 new tests. |
 | 2026-07-27 | CRAWL-RESUME-1 | SHIPPED, spec removed. onProgress emits CrawlProgress{queue,visited,depths,collected}; resumeFrom restores it. No storage in the package. Ablation note: removing `visited` restore ALONE stays green because `depths` also blocks re-enqueue — the two overlap for dedup. Removing both turns 3 tests red. |

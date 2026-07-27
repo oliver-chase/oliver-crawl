@@ -365,6 +365,19 @@ export type CrawlConfig = {
    * they did not ask for. Failures and 304s are never cached.
    */
   cacheTtlMs?: number;
+  /**
+   * BETTER-RUNGMEMORY-1: remember which rung actually works per host, and
+   * start there next time instead of re-walking the ladder from the top.
+   *
+   * On by default. A host that always rejects the plain fetch otherwise costs
+   * a guaranteed wasted request on every page. Memory expires (30 min) and is
+   * only ever a STARTING POINT — the full ladder stays available, so a stale
+   * memory costs one extra request rather than a lost page.
+   *
+   * Set false for strictly reproducible per-call behaviour, e.g. in tests
+   * that assert an exact request sequence.
+   */
+  rungMemory?: boolean;
   limits?: {
     /** Max bytes read from any origin before truncating. Default 2 MB.
      *  Raise for genuinely huge listing pages; lower to harden further. */

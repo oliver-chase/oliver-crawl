@@ -30,6 +30,7 @@ import { crawlWithVendorLane } from './lanes/vendor/index.js';
 import type { SitemapEntry } from './fetch/sitemap-discovery.js';
 import { approveCrawlPolicy } from './lanes/own/index.js';
 import { classifyFailure } from './core/failure-class.js';
+import { rememberWinningRung } from './core/rung-memory.js';
 import { search, availableSearchProviders } from './search/index.js';
 import { readPageCache, writePageCache } from './core/page-cache.js';
 import { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
@@ -138,6 +139,20 @@ export function createCrawler(config: CrawlConfig): Crawler {
               : await crawlWithVendorLane(url, resolved, options);
 
           if (result.ok) {
+            // BETTER-RUNGMEMORY-1: recorded HERE, in one place, from the rung
+            // the page itself reports — rather than at each rung's success
+            // site, which would drift the moment a rung is added. Success
+            // only: remembering failures is the trap the robots cache had.
+            if (resolved.rungMemory !== false && !result.notModified) {
+              const page = result.pages[0];
+              if (page) {
+                try {
+                  rememberWinningRung(resolved.rungMemoryStore, new URL(url).hostname, page.rung);
+                } catch {
+                  // Unparseable URL — nothing to key a memory on.
+                }
+              }
+            }
             writePageCache(url, lanes, ttl, result);
             return result;
           }
@@ -205,6 +220,8 @@ export { classifyFailure } from './core/failure-class.js';
 export type { FailureClass } from './core/failure-class.js';
 export { looksLikeEmptyState } from './core/soft-404.js';
 export { EXTRACTOR_VERSION } from './core/extractor-version.js';
+export { createRungMemory, rememberWinningRung, recallWinningRung, forgetWinningRung, RUNG_MEMORY_TTL_MS } from './core/rung-memory.js';
+export type { RungMemory } from './core/rung-memory.js';
 export { urlDedupKey, sameUrlResource } from './core/url-dedup-key.js';
 export { evaluateRobotsForUrl, parseRobots, userAgentToken, MAX_HONORED_CRAWL_DELAY_MS } from './fetch/robots-check.js';
 export { publishedCrawlDelayMs } from './lanes/own/index.js';

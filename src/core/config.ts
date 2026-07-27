@@ -19,6 +19,7 @@
 // this package does not mean renaming working env vars.
 
 import { createDohLookup } from '../fetch/host-policy.js';
+import { createRungMemory, type RungMemory } from './rung-memory.js';
 import {
   DEFAULT_MAX_PAGES,
   DEFAULT_MAX_TEXT_CHARS,
@@ -28,6 +29,8 @@ import {
 } from './types.js';
 
 export type ResolvedConfig = CrawlConfig & {
+  /** Per-crawler rung memory (BETTER-RUNGMEMORY-1). Never shared. */
+  rungMemoryStore: RungMemory;
   defaults: Required<NonNullable<CrawlConfig['defaults']>>;
   vendorRungOrder: string[];
   limits: Required<NonNullable<CrawlConfig['limits']>>;
@@ -82,6 +85,8 @@ export function resolveConfig(config: CrawlConfig): ResolvedConfig {
   return {
     ...config,
     userAgent,
+    // Per-crawler, never shared — see core/rung-memory.ts.
+    rungMemoryStore: createRungMemory(),
     vendorRungOrder: config.vendorRungOrder ?? DEFAULT_VENDOR_RUNG_ORDER,
     defaults: {
       maxTextChars: config.defaults?.maxTextChars ?? DEFAULT_MAX_TEXT_CHARS,
