@@ -92,6 +92,21 @@ export type SiteCrawlOptions = CrawlOptions & {
    *  given. Free, and far more accurate than guessing paths — the site is
    *  telling you what it has. Falls back to baseUrl if there is no sitemap. */
   useSitemap?: boolean;
+  /**
+   * BETTER-LASTMOD-1: `{ [url]: lastmod }` kept from a previous run, from
+   * `SiteCrawlResult.lastmod`.
+   *
+   * With `useSitemap`, any sitemap entry whose `<lastmod>` still equals the
+   * stored value is skipped WITHOUT being fetched. One sitemap request then
+   * answers "which of these 500 pages changed" — conditional GET answers the
+   * same question in 500 requests, one per page.
+   *
+   * Used only to SKIP. `<lastmod>` is origin-supplied and frequently a lie
+   * (plenty of CMSs stamp every URL with today's date), so a CHANGED value
+   * proves nothing and simply lets the page through to the normal 304 and
+   * content-hash checks, which are trustworthy. Omit this to disable.
+   */
+  priorLastmod?: Record<string, string>;
 
   /** Persistence hook for this run's fresh validators — same data as
    *  `result.validators`, delivered as a callback for consumers that prefer
@@ -138,6 +153,13 @@ export type SiteCrawlResult = {
    *  consumer can skip re-extraction/re-LLM for these — the fetch was
    *  unavoidable, the expensive downstream work is not. */
   unchanged: string[];
+  /** `<lastmod>` per URL from this run's sitemap, for `priorLastmod` next
+   *  time. Empty when no sitemap was read or it published no lastmod. */
+  lastmod: Record<string, string>;
+  /** URLs skipped because their sitemap `<lastmod>` was unchanged — never
+   *  fetched at all. Not failures, and not `notModified` (no request was
+   *  made to be answered). */
+  skippedByLastmod: string[];
   startedAt: string;
   finishedAt: string;
 };
@@ -179,6 +201,8 @@ export async function crawlSite(
   const failures: SiteCrawlFailure[] = [];
   const validators: SiteCrawlResult['validators'] = {};
   const unchanged: string[] = [];
+  const lastmod: Record<string, string> = {};
+  const skippedByLastmod: string[] = [];
 
   const done = (truncated: boolean): SiteCrawlResult => {
     // Deliver fresh validators to the consumer's persistence hook, fire-and-
@@ -190,7 +214,18 @@ export async function crawlSite(
         // deliberately swallowed
       }
     }
-    return { pages, notModified, failures, truncated, validators, unchanged, startedAt, finishedAt: new Date().toISOString() };
+    return {
+      pages,
+      notModified,
+      failures,
+      truncated,
+      validators,
+      unchanged,
+      lastmod,
+      skippedByLastmod,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+    };
   };
 
   // Eligibility is a property of the TARGET, not of any one URL — check it
@@ -216,8 +251,28 @@ export async function crawlSite(
     // resolver as every other request — a discovery call that resolved DNS
     // differently from the crawl would be both inconsistent and, in tests,
     // an unstubbed network call.
-    const discovered = await crawler.discoverSeeds(target, maxPages);
-    if (discovered.length > 0) rawSeeds = discovered;
+    // Goes through the crawler so it uses the SAME User-Agent and DNS
+    // resolver as every other request — a discovery call that resolved DNS
+    // differently from the crawl would be both inconsistent and, in tests,
+    // an unstubbed network call.
+    const entries = await crawler.discoverSeedEntries(target, maxPages);
+
+    for (const entry of entries) {
+      if (entry.lastmod) lastmod[entry.url] = entry.lastmod;
+    }
+
+    // BETTER-LASTMOD-1: drop entries the sitemap says have not moved. The
+    // saving is the FETCH itself, so this has to happen before seeding.
+    const prior = options.priorLastmod;
+    const fresh = prior
+      ? entries.filter((entry) => {
+          const unmoved = Boolean(entry.lastmod) && prior[entry.url] === entry.lastmod;
+          if (unmoved) skippedByLastmod.push(entry.url);
+          return !unmoved;
+        })
+      : entries;
+
+    if (entries.length > 0) rawSeeds = fresh.map((entry) => entry.url);
   }
   rawSeeds = rawSeeds ?? [target.baseUrl];
   const queue: string[] = [];
