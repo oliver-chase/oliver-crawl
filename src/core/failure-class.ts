@@ -59,7 +59,17 @@ export function classifyFailure(reason: CrawlFailureReason, detail: string): Fai
     case 'empty':
       // An unsupported content-type will be unsupported forever; a page that
       // rendered nothing may well render something tomorrow.
-      return /Unsupported content-type/i.test(detail) || STRUCTURAL_STATUS.test(detail)
+      //
+      // Two more that look transient and are not:
+      //   - a missing optional parser (CRAWL-PDF-1). Retrying changes nothing
+      //     until someone installs the package, so it belongs with the
+      //     failures a human has to act on rather than the ones to wait out.
+      //   - a PDF with no text layer. A scanned document does not acquire one
+      //     by being fetched again; it needs a vision model.
+      return /Unsupported content-type/i.test(detail) ||
+        /needs the optional .* package/i.test(detail) ||
+        /no text layer/i.test(detail) ||
+        STRUCTURAL_STATUS.test(detail)
         ? 'structural'
         : 'transient';
 

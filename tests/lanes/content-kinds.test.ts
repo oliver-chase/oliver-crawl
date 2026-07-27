@@ -56,11 +56,12 @@ describe('classifyContentType', () => {
     ['application/atom+xml', 'feed'],
     ['text/xml', 'feed'],
     ['text/plain', 'text'],
+    ['application/pdf', 'pdf'],
   ])('%s -> %s', (header, expected) => {
     expect(classifyContentType(header)).toBe(expected);
   });
 
-  test.each(['image/jpeg', 'application/pdf', 'video/mp4', 'application/octet-stream', ''])(
+  test.each(['image/jpeg', 'video/mp4', 'application/octet-stream', ''])(
     'refuses %s',
     (header) => {
       // Still refused: HTML-parsing a JPEG produces confident nonsense.

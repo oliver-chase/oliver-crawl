@@ -15,9 +15,8 @@ import type { ContentKind } from './types.js';
 /**
  * Classify a Content-Type header.
  *
- * Returns null for anything we will not read — images, video, PDFs, binaries.
- * Refusing those is still correct: HTML-parsing a JPEG produces confident
- * nonsense, and a PDF needs a real parser (tracked separately).
+ * Returns null for anything we will not read — images, video, binaries.
+ * Refusing those is correct: HTML-parsing a JPEG produces confident nonsense.
  *
  * Matched before the `;charset=` parameter, and order matters: the XML feed
  * types are checked ahead of bare `application/xml` so an Atom feed is not
@@ -36,6 +35,9 @@ export function classifyContentType(contentType: string): ContentKind | null {
   // rather than refusing it, since the caller parses it either way.
   if (type === 'application/xml' || type === 'text/xml') return 'feed';
   if (type === 'text/plain') return 'text';
+  // CRAWL-PDF-1: read only when the optional parser is installed; the rung
+  // reports a clear structural failure naming the package otherwise.
+  if (type === 'application/pdf') return 'pdf';
 
   return null;
 }
