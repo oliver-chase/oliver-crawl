@@ -115,3 +115,103 @@ describe('a quarantine refusal carries what tripped it', () => {
     expect(result.quarantine!.signals.length).toBeGreaterThan(0);
   });
 });
+
+describe('every rung that can quarantine reports its evidence', () => {
+  // QA ablated all seven sites by replacing the payload with `undefined`. Only
+  // the body and title sites went red — the other five passed with the evidence
+  // stripped, so the prose asserted a property of all of them and one was
+  // tested. My own commit said "ablation turns the body case red", which was
+  // literally accurate and exactly described the problem.
+  //
+  // PDF and local-render are absent on purpose: PDF needs the optional `unpdf`
+  // peer, which is not installed here, and local-render needs a real browser at
+  // a real URL that the host guard refuses. Asserting a rung that never ran is
+  // the defect this suite exists to catch, so they stay uncovered and named
+  // rather than faked.
+
+  function expectEvidence(result: Awaited<ReturnType<ReturnType<typeof createCrawler>['crawl']>>, rung: string) {
+    expect(result.ok, `${rung}: expected a refusal`).toBe(false);
+    if (result.ok) return;
+    expect(result.reason, `${rung}: wrong refusal reason`).toBe('quarantined');
+    expect(result.quarantine, `${rung} returned a bare quarantine`).toBeDefined();
+    expect(result.quarantine!.signals.length, `${rung}: no signals`).toBeGreaterThan(0);
+    expect(result.quarantine!.text.length, `${rung}: no text to review`).toBeGreaterThan(0);
+  }
+
+  test('a non-HTML document (calendar) reports evidence', async () => {
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', `SUMMARY:${PAYLOAD}`, 'END:VCALENDAR'].join('\n');
+    globalThis.fetch = (async () =>
+      new Response(ics, { status: 200, headers: { 'content-type': 'text/calendar' } })) as typeof fetch;
+
+    const result = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
+      target, 'https://site.example.com/events.ics',
+    );
+    expectEvidence(result, 'non-HTML');
+  });
+
+  test('the browser-render rung reports evidence', async () => {
+    const rendered = `<html><head><title>Cal</title></head><body><main><p>${PAYLOAD}</p></main></body></html>`;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('render.example.com')) {
+        return new Response(JSON.stringify({ html: rendered }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('blocked', { status: 403 });
+    }) as typeof fetch;
+
+    const result = await createCrawler({
+      userAgent: 'T/1 (+https://t.example.com)',
+      dnsLookup: publicDns,
+      browserRender: { url: 'https://render.example.com' },
+    }).crawl(target, 'https://site.example.com/x');
+    expectEvidence(result, 'browser-render');
+  });
+
+  test('the archive rung reports evidence', async () => {
+    const archived = `<html><head><title>Cal</title></head><body><main><p>${PAYLOAD}</p></main></body></html>`;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/cdx/search/cdx')) {
+        return new Response(
+          JSON.stringify([['timestamp', 'original'], ['20260601120000', 'https://site.example.com/x']]),
+          { status: 200 },
+        );
+      }
+      if (url.includes('web.archive.org/web/')) {
+        return new Response(archived, { status: 200, headers: { 'content-type': 'text/html' } });
+      }
+      if (url.includes('r.jina.ai')) return new Response('', { status: 500 });
+      return new Response('blocked', { status: 403 });
+    }) as typeof fetch;
+
+    const result = await createCrawler({
+      userAgent: 'T/1 (+https://t.example.com)',
+      dnsLookup: publicDns,
+      useArchiveFallback: true,
+    }).crawl(target, 'https://site.example.com/x');
+    expectEvidence(result, 'archive');
+  });
+
+  test('the vendor lane reports evidence', async () => {
+    // A paid page that trips the guard is still a page a consumer must be able
+    // to review rather than silently drop.
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('api.firecrawl.dev')) {
+        return new Response(JSON.stringify({ data: { markdown: `## Events\n\n${PAYLOAD}` } }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('blocked', { status: 403 });
+    }) as typeof fetch;
+
+    const result = await createCrawler({
+      userAgent: 'T/1 (+https://t.example.com)',
+      dnsLookup: publicDns,
+      vendor: { firecrawl: 'fc-key-long-enough' },
+    }).crawl(target, 'https://site.example.com/x', { lanes: ['vendor'] });
+    expectEvidence(result, 'vendor');
+  });
+});
