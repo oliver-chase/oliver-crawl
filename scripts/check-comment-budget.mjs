@@ -71,7 +71,16 @@ const files = execFileSync('git', ['-C', ROOT, 'ls-files'], { encoding: 'utf8' }
  *  rather than extending it. */
 const TAG_LINE = /^[*#\s]*@\w+/;
 
-/** Unescaped backticks on a line. An odd count flips template-literal state. */
+/**
+ * Unescaped backticks on a line. An odd count flips template-literal state.
+ *
+ * Deliberately naive. Stripping quoted strings first looks more correct and measured
+ * WORSE: a regex literal such as /["'`]+/ pairs its two double quotes across a
+ * backtick, so the strip ate one and left an odd count. That opened a template region
+ * on a line that opens nothing, and one file lost 691 of its 1039 counted comment
+ * lines. Template state is therefore approximate, which is why the branch that
+ * consumes it stays fail-closed.
+ */
 const backticks = (line) => (line.match(/(?<!\\)`/g) || []).length;
 
 /** Longest run of consecutive PROSE comment lines. A blank line inside a block
@@ -127,9 +136,14 @@ function scan(text, hashStyle) {
 
     if (hashStyle) {
       const wasOpen = docQuote !== null;
-      const prose = pyLine(line, !seenCode || /:\s*$/.test(prevCode));
+      // A `#` comment is scanned for triple quotes only while one is already open.
+      // Otherwise a comment that MENTIONS a docstring delimiter opened a string
+      // region that swallowed the rest of the file, and every comment below it
+      // stopped being counted.
+      const isHash = !wasOpen && line.startsWith('#');
+      const prose = isHash ? false : pyLine(line, !seenCode || /:\s*$/.test(prevCode));
       if (prose && !wasOpen) close();
-      isComment = prose || (!wasOpen && line.startsWith('#') && !line.startsWith('#!'));
+      isComment = prose || (isHash && !line.startsWith('#!'));
       if (line && !isComment && docQuote === null && !wasOpen) prevCode = line;
       // A shebang or coding line is not code, and counting it as code put the
       // module docstring past its own position — the 44-line one below it went
@@ -143,10 +157,16 @@ function scan(text, hashStyle) {
       // `/*` case below: two comments about two things are not one narrative.
       if (line.includes('*/')) { inBlock = false; endsBlock = true; }
     } else if (inTemplate) {
-      // A template literal is data. `/*` inside one used to open a comment block
-      // that never closed, so every line to the end of the file counted as one
-      // comment -- 43 of them reported in a file that had none.
+      // Only a `/*` block start is suppressed inside a template. That is the case
+      // that did damage: an unterminated block opened there swallowed every line to
+      // the end of the file, 43 of them reported in a file with none.
+      //
+      // Line comments still count here, because template state is approximate and a
+      // spuriously-opened region would otherwise HIDE real comments — the failure
+      // that lets an essay through unseen. Over-counting a template line that looks
+      // like a comment is the safe direction.
       if (backticks(line) % 2 === 1) inTemplate = false;
+      isComment = line.startsWith('//') || line.startsWith('*');
     } else if (line.startsWith('/*')) {
       // A new /* ... */ block starts a fresh run. A section banner sitting above
       // a function's own JSDoc is two comments, not one essay, and merging them
