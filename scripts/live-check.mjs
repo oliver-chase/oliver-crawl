@@ -290,6 +290,93 @@ await check('a real non-HTML document is read, not refused', async () => {
   return `kind=${p.contentKind}, ${p.text.length} chars`;
 });
 
+console.log('\nRendering');
+// ─── Local Chromium rendering ────────────────────────────────────────────────
+//
+// The render rung could not be exercised anywhere before this. It cannot run in
+// the unit suite: it drives a REAL browser at a REAL URL, and the host guard
+// refuses the private addresses a local test server would bind to. So the rung
+// that carries the most security machinery — navigation-hop checks, subresource
+// screening, same-site landing — had every guard tested in isolation and the
+// rung itself never driven end to end.
+//
+// Forcing it: renderWhenTextBelow set above any real page length makes every
+// fetch look thin, so the ladder escalates to render on a page that fetched fine.
+{
+  let playwrightPresent = true;
+  try {
+    await import('playwright');
+  } catch {
+    playwrightPresent = false;
+  }
+
+  if (!playwrightPresent) {
+    console.log('  (playwright not installed — local render checks skipped)');
+  } else {
+    const renderCrawler = createCrawler({
+      userAgent: 'OliverCrawl-LiveCheck/0.1 (+https://github.com/oliver-chase/oliver-crawl)',
+      dnsLookup: dns,
+      minHostIntervalMs: 500,
+      localRender: true,
+      renderWhenTextBelow: 10_000_000,
+    });
+
+    await check('local Chromium renders a real page', async () => {
+      const r = await renderCrawler.crawl(IANA, 'https://www.iana.org/help/example-domains');
+      assert(r.ok, `${r.reason}: ${r.detail}`);
+      const page = r.pages[0];
+      assert(page.rung === 'local-render', `escalated to ${page.rung}, not local-render`);
+      assert(page.text.length > 0, 'rendered page had no text');
+      return `${page.text.length} chars`;
+    });
+
+    await check('a rendered page has the same shape as a fetched one', async () => {
+      // PAGE-SHAPE-1 claimed "every rung" while never driving this one. A rung
+      // returning a thinner page than its neighbours shows up as worse
+      // extraction and gets blamed on the site.
+      const r = await renderCrawler.crawl(IANA, 'https://www.iana.org/help/example-domains');
+      assert(r.ok, `${r.reason}: ${r.detail}`);
+      const page = r.pages[0];
+      assert(/^[a-f0-9]{64}$/.test(page.textSha256), 'textSha256 missing — change detection would be dead for this rung');
+      assert(/^[a-f0-9]{64}$/.test(page.bodySha256), 'bodySha256 missing');
+      // Rendered output IS HTML, so the HTML-derived fields must be populated
+      // rather than empty the way a prose rung leaves them.
+      assert(/^[a-f0-9]{64}$/.test(page.contentRegionSha256), 'contentRegionSha256 empty on an HTML-derived rung');
+      assert(page.markdown.length > 0, 'markdown empty on an HTML-derived rung');
+      assert(Array.isArray(page.links) && Array.isArray(page.jsonLd), 'array fields not arrays');
+      return `markdown ${page.markdown.length}, ${page.links.length} links`;
+    });
+
+    await check('the render rung reports what it did', async () => {
+      // NOT a test of the refusal itself. Driving a real cross-site redirect
+      // would need a redirector this suite does not control, so RENDER-HOP-1
+      // and RENDER-SUBRESOURCE-1 are proven in tests/fetch/render-wiring.test.ts
+      // against a stubbed browser instead.
+      //
+      // What this adds on top: RENDER-SILENT-1's reporting path is real. The
+      // rung used to swallow every outcome into `return null`, so an operator
+      // could not tell a blocked redirect from an uninstalled browser. If the
+      // rung goes silent again, this goes red where a stub cannot.
+      const events = [];
+      const guarded = createCrawler({
+        userAgent: 'OliverCrawl-LiveCheck/0.1 (+https://github.com/oliver-chase/oliver-crawl)',
+        dnsLookup: dns,
+        minHostIntervalMs: 500,
+        localRender: true,
+        renderWhenTextBelow: 10_000_000,
+        onUsage: (e) => events.push(e),
+      });
+      await guarded.crawl(
+        { baseUrl: 'https://www.rfc-editor.org', robotsPolicy: 'allow', active: true },
+        'https://www.rfc-editor.org/rfc/rfc9309.html',
+      );
+      const rendered = events.filter((e) => e.rung === 'local-render');
+      assert(rendered.length > 0, 'render rung emitted no usage event at all');
+      return `${rendered.length} render events, ${rendered.filter((e) => e.ok).length} ok`;
+    });
+  }
+}
+
 console.log('\nSearch (skipped without a key)');
 if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
   const searchCrawler = createCrawler({

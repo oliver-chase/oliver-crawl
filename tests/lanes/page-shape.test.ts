@@ -159,6 +159,13 @@ describe('every rung returns a complete page', () => {
     assertPageShape(r.pages[0]!, { rung: 'archive', lane: 'own', derivedFromHtml: true });
   });
 
+  // local-render and pdf are NOT covered here, and cannot be. Both need a real
+  // browser or a real optional peer driven at a real URL, and the host guard
+  // refuses the private addresses a local test server binds to. Asserting the
+  // shape of a rung that never ran is the exact failure this file exists to
+  // catch, so they are driven in `npm run live` instead. Removing them from
+  // there removes the only coverage they have.
+
   test('vendor', async () => {
     // The rung whose dropped field prompted this file.
     serve((url) =>
