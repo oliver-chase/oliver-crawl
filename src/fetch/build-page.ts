@@ -10,6 +10,26 @@
 // drift apart.
 
 import * as cheerio from 'cheerio';
+/**
+ * QUARANTINE-EVIDENCE-1: a refusal that carries what tripped it.
+ *
+ * This was a bare `'quarantined'` string, which told the caller the page was
+ * withheld and nothing else. A consumer that must never lose a page had no
+ * material to build a review task from, so the only thing it could do was drop
+ * it — silently, which is what quarantining exists to prevent.
+ */
+export type QuarantineEvidence = {
+  quarantined: true;
+  signals: PromptInjectionSignal[];
+  text: string;
+  title: string | null;
+};
+
+export function isQuarantined(value: unknown): value is QuarantineEvidence {
+  return typeof value === 'object' && value !== null && (value as QuarantineEvidence).quarantined === true;
+}
+
+import type { PromptInjectionSignal } from '../guard/prompt-injection-guard.js';
 import { htmlToMarkdown } from '../extract/html-to-markdown.js';
 import { summarizeStructuredData } from '../extract/structured-summary.js';
 import { findContentImages } from '../extract/content-images.js';
@@ -33,7 +53,7 @@ export async function buildPage(input: {
   includeHtml: boolean;
   maxLinks: number;
   maxOutboundHosts: number;
-}): Promise<CrawlPage | 'quarantined'> {
+}): Promise<CrawlPage | QuarantineEvidence> {
   // ONE parse (CRAWL-PERF-1, found in self-audit): the first version loaded
   // the document once for text, then RELOADED it once per JSON-LD script tag
   // inside the .each — N+1 full parses on a page with N structured-data
@@ -56,7 +76,10 @@ export async function buildPage(input: {
   // content — callers display it and feed it to models — so it gets the same
   // treatment as everything else the page supplies.
   const rawTitle = $('title').first().text().trim();
-  if (rawTitle && sanitizeCrawledText(rawTitle, input.maxTextChars).signals.length > 0) return 'quarantined';
+  const titleGuard = rawTitle ? sanitizeCrawledText(rawTitle, input.maxTextChars) : null;
+  if (titleGuard && titleGuard.signals.length > 0) {
+    return { quarantined: true, signals: titleGuard.signals, text: titleGuard.text, title: null };
+  }
   const title = rawTitle || null;
 
   // Built BEFORE the destructive strip below, and from a clone internally, so
@@ -75,13 +98,17 @@ export async function buildPage(input: {
 
   // Guard BEFORE returning: nothing downstream should ever see raw page text.
   const sanitized = sanitizeCrawledText(visibleText, input.maxTextChars);
-  if (sanitized.signals.length > 0) return 'quarantined';
+  if (sanitized.signals.length > 0) {
+    return { quarantined: true, signals: sanitized.signals, text: sanitized.text, title };
+  }
 
   // Markdown is untrusted page content exactly like the text is — an
   // injection payload inside a <table> cell is still an injection payload,
   // and this is the field callers are told to feed a model.
   const sanitizedMarkdown = sanitizeCrawledText(markdownRaw, input.maxTextChars);
-  if (sanitizedMarkdown.signals.length > 0) return 'quarantined';
+  if (sanitizedMarkdown.signals.length > 0) {
+    return { quarantined: true, signals: sanitizedMarkdown.signals, text: sanitizedMarkdown.text, title };
+  }
 
   const links: PageLink[] = [];
   const outbound = new Set<string>();

@@ -163,7 +163,16 @@ export async function crawlWithVendorLane(
       const sanitized = sanitizeCrawledText(result.text, maxTextChars);
       if (sanitized.signals.length > 0) {
         emitUsage(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
-        return { ok: false, reason: 'quarantined', detail: `Prompt-injection signals in ${rungName} content.`, lane: 'vendor' };
+        // QUARANTINE-EVIDENCE-1: same evidence the own lane returns. A paid
+        // page that trips the guard is still a page a consumer must be able to
+        // review rather than silently drop.
+        return {
+          ok: false,
+          reason: 'quarantined',
+          detail: `Prompt-injection signals in ${rungName} content.`,
+          lane: 'vendor',
+          quarantine: { signals: sanitized.signals, text: sanitized.text, title: null },
+        };
       }
 
       emitUsage(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: true, latencyMs: Date.now() - started });

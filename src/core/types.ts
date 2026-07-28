@@ -1,3 +1,4 @@
+import type { PromptInjectionSignal } from '../guard/prompt-injection-guard.js';
 import type { BrowserAction } from '../fetch/local-render.js';
 import type { ContentImage } from '../extract/content-images.js';
 import type { FailureClass } from './failure-class.js';
@@ -239,6 +240,25 @@ export type CrawlResult =
       reason: CrawlFailureReason;
       detail: string;
       lane?: LaneName;
+      /**
+       * QUARANTINE-EVIDENCE-1: what tripped the guard, and enough of the page
+       * to review it. Present only when `reason === 'quarantined'`.
+       *
+       * Without this a quarantine is indistinguishable from a fetch failure at
+       * the call site, so a consumer whose policy is "never lose a page" has
+       * nothing to build a review task from and drops it silently — the exact
+       * outcome quarantining exists to prevent. Fallow's review task needs the
+       * signals and the text to render at all.
+       *
+       * The text is SANITIZED, not raw: a reviewer needs to see what the page
+       * said, not to be handed a live payload. Redactions are already applied.
+       */
+      quarantine?: {
+        signals: PromptInjectionSignal[];
+        /** Sanitized page text, capped at the crawl's maxTextChars. */
+        text: string;
+        title: string | null;
+      };
       /** Present when the origin answered 429/503 WITH a Retry-After header.
        *  A retry loop that ignores this is the one that gets banned. */
       retryAfterMs?: number;

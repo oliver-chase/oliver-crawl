@@ -19,7 +19,7 @@ import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js
 import { extractPdfText } from '../../fetch/pdf-extract.js';
 import { forgetWinningRung, shouldSkipDirectFetch } from '../../core/rung-memory.js';
 import { looksLikeBlockPage } from '../../core/block-page.js';
-import { buildPage, buildTextPage } from '../../fetch/build-page.js';
+import { isQuarantined, buildPage, buildTextPage } from '../../fetch/build-page.js';
 import { parseRetryAfter, readBodyCapped, fetchFollowingSafeRedirects } from '../../fetch/http-mechanics.js';
 import { fetchViaWayback } from '../../fetch/wayback-fetch.js';
 import {
@@ -288,7 +288,10 @@ export async function crawlWithOwnLane(
     if (sanitizedPdf.signals.length > 0) {
       const detail = 'Prompt-injection signals in PDF content.';
       emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+      return {
+        ok: false, reason: 'quarantined', detail, lane: 'own',
+        quarantine: { signals: sanitizedPdf.signals, text: sanitizedPdf.text, title: null },
+      };
     }
 
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
@@ -321,7 +324,10 @@ export async function crawlWithOwnLane(
     if (sanitizedData.signals.length > 0) {
       const detail = `Prompt-injection signals in ${contentKind} content.`;
       emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+      return {
+        ok: false, reason: 'quarantined', detail, lane: 'own',
+        quarantine: { signals: sanitizedData.signals, text: sanitizedData.text, title: null },
+      };
     }
     if (!sanitizedData.text.trim()) {
       const detail = `Empty ${contentKind} document`;
@@ -361,10 +367,18 @@ export async function crawlWithOwnLane(
     maxOutboundHosts: config.limits.maxOutboundHosts,
   });
 
-  if (page === 'quarantined') {
+  if (isQuarantined(page)) {
     const detail = 'Content tripped the prompt-injection guard and was quarantined.';
     emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-    return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+    // QUARANTINE-EVIDENCE-1: hand back what tripped it, so a consumer that must
+    // never lose a page can raise a review task instead of dropping it.
+    return {
+      ok: false,
+      reason: 'quarantined',
+      detail,
+      lane: 'own',
+      quarantine: { signals: page.signals, text: page.text, title: page.title },
+    };
   }
 
   if (!page.text.trim()) {
@@ -451,10 +465,17 @@ async function archiveFallback(
     maxOutboundHosts: config.limits.maxOutboundHosts,
   });
 
-  if (page === 'quarantined') {
+  if (isQuarantined(page)) {
     const detail = 'Archived capture tripped the prompt-injection guard.';
     emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-    return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+    // QUARANTINE-EVIDENCE-1: the refusal carries what tripped it.
+    return {
+      ok: false,
+      reason: 'quarantined',
+      detail,
+      lane: 'own',
+      quarantine: { signals: page.signals, text: page.text, title: page.title },
+    };
   }
   if (!page.text.trim() || looksLikeBlockPage(page.text)) return null;
 
@@ -556,12 +577,19 @@ async function renderFallback(
       maxLinks: config.limits.maxLinksPerPage,
       maxOutboundHosts: config.limits.maxOutboundHosts,
     });
-    if (localPage === 'quarantined') {
+    if (isQuarantined(localPage)) {
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
       // QUARANTINE-TELEMETRY-1: every rung reports its own quarantine.
       const detail = 'Locally rendered content tripped the prompt-injection guard.';
       emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+      // QUARANTINE-EVIDENCE-1: the refusal carries what tripped it.
+      return {
+        ok: false,
+        reason: 'quarantined',
+        detail,
+        lane: 'own',
+        quarantine: { signals: localPage.signals, text: localPage.text, title: localPage.title },
+      };
     }
     // LADDER-QUALITY-1: a rendered bot-wall interstitial is a rung FAILURE,
     // not content. Accepting it here beat the Jina rung, which retrieves the
@@ -593,11 +621,18 @@ async function renderFallback(
       maxOutboundHosts: config.limits.maxOutboundHosts,
     });
 
-    if (page === 'quarantined') {
+    if (isQuarantined(page)) {
       emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
       const detail = 'Rendered content tripped the prompt-injection guard.';
       emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+      // QUARANTINE-EVIDENCE-1: the refusal carries what tripped it.
+      return {
+        ok: false,
+        reason: 'quarantined',
+        detail,
+        lane: 'own',
+        quarantine: { signals: page.signals, text: page.text, title: page.title },
+      };
     }
 
     // A render that still yields nothing is not a success — let the caller
