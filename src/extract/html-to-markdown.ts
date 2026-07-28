@@ -1,39 +1,17 @@
 // ─── HTML to Markdown ───────────────────────────────────────────────────────
 //
-// VENDOR-PARITY-1 (2026-07-27): markdown is Firecrawl's headline output, and
-// the single clearest reason a caller reaches for it instead of the free lane.
-// It is not a cosmetic format choice — it is an ACCURACY lever.
+// VENDOR-PARITY-1: markdown is an ACCURACY lever, not a format choice. Plain
+// text flattens a schedule table into unlabelled tokens; markdown keeps the
+// columns, headings and link targets the page's author already encoded, which
+// is the difference between an extractor reading and guessing.
 //
-// Plain visible text flattens a page. This:
+// Scoped to the main content region, so nav, footers and cookie banners never
+// reach the model — Firecrawl's `onlyMainContent`, using logic we already had
+// and were spending only on a change hash.
 //
-//     Summer Concert Series
-//     July 11 The Hold Steady 7:00 PM $25
-//     July 18 Waxahatchee 7:30 PM Free
-//
-// is what `page.text` gives you for a table, and an LLM asked to pull events
-// out of it has to guess which token is a date, a act, a time, a price — and
-// which row each belongs to. The same region as markdown:
-//
-//     ## Summer Concert Series
-//     | Date | Artist | Time | Price |
-//     | --- | --- | --- | --- |
-//     | July 11 | The Hold Steady | 7:00 PM | $25 |
-//
-// carries the structure the page's author already encoded. Headings scope
-// their sections, lists keep items separate, tables keep columns aligned to
-// meaning, and links keep their text attached to their href. Every one of
-// those is information that was in the HTML and that plain-text extraction
-// throws away before the model ever sees it.
-//
-// Scoped to the main-content region, so nav, footers, cookie banners and
-// sidebars never reach the model either — Firecrawl's `onlyMainContent`,
-// which we already had the logic for (extract/content-region-hash.ts) and
-// were using ONLY to compute a change hash.
-//
-// Deliberately hand-written rather than pulling in Turndown: the tag set that
-// actually matters for content extraction is small, and a dependency here
-// would have to be audited for the same prompt-injection and ReDoS concerns
-// as everything else in this package.
+// Hand-written rather than pulling in Turndown: the tag set that matters for
+// extraction is small, and a dependency would need the same injection and
+// ReDoS audit as everything else here.
 
 import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { AnyNode } from 'domhandler';

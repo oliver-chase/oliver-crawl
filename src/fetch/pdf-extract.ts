@@ -1,31 +1,15 @@
 // ─── PDF text extraction (optional peer) ────────────────────────────────────
 //
-// CRAWL-PDF-1 (2026-07-27). Suppliers, municipalities and venues routinely
-// publish a whole season, catalogue or specification as a single PDF, and the
-// fetch rung refused `application/pdf` outright — so the most complete
-// document on the site was the one document we could not read.
+// CRAWL-PDF-1: the parser is an OPTIONAL peer, not a dependency. It is a large
+// amount of parsing code over hostile input, and putting that in every
+// consumer's install — including the majority who never crawl a PDF — is the
+// wrong trade for a library whose value is screening what it fetches.
 //
-// ── Why this is an OPTIONAL peer, not a dependency ──
+// `npm install unpdf` enables it; without it the rung reports a structural
+// failure naming the package rather than skipping silently.
 //
-// A PDF parser is a large amount of parsing code operating on hostile input.
-// Adding it as a hard dependency would put that surface into every consumer's
-// install, including the majority who never crawl a PDF — in a library whose
-// stated value is screening what it fetches, that trade is backwards.
-//
-// So it follows the same pattern as the Chromium rung: the parser is imported
-// only at real runtime, and its absence means the rung skips rather than the
-// crawl failing. A consumer who wants PDFs installs it:
-//
-//   npm install unpdf
-//
-// and PDFs start being read. A consumer who does not gets a `structural`
-// failure naming the missing package, which is honest and actionable.
-//
-// THE IMPORT TRICK: a plain `import('unpdf')` is constant-folded by bundler
-// tracers, which then try to resolve the parser's own optional deps and break
-// serverless builds for consumers who never wanted it. A Function-constructor
-// import is invisible to every tracer — see local-render.ts, which learned
-// this the hard way.
+// The import uses the same Function-constructor trick as local-render.ts, so
+// bundler tracers cannot see it and serverless builds are unaffected.
 
 /** Bound the work: a PDF is untrusted input like everything else here. */
 const MAX_PDF_PAGES = 50;

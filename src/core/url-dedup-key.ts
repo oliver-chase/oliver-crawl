@@ -1,42 +1,16 @@
 // ─── Canonical dedup key for a URL ──────────────────────────────────────────
 //
-// URL-DEDUP-1 (2026-07-27, found auditing this package against Fallow, which
-// had already hit it): one page is routinely reachable under several
-// spellings. A site's own nav will link its calendar as `/events`, its footer
-// as `/events/`, a "see the lineup" button as `/events#lineup`, and its
-// Facebook share link as `/events?utm_source=facebook`.
+// URL-DEDUP-1: one page is reachable under several spellings — `/events`,
+// `/events/`, `/events#lineup`, `/events?utm_source=fb`. Keying dedup on the
+// raw string sees four pages and spends four slots of `maxPages` on one.
 //
-// Keying dedup on the raw URL string sees four pages there. The crawler then
-// fetches the same document four times, returns it four times, and spends
-// four slots of `maxPages` doing it — on a site crawled with maxPages: 20,
-// that is a fifth of the budget burned to learn nothing, while real pages go
-// unvisited because the queue ran out.
+// IDENTITY ONLY, never for fetching: some servers really do treat `/events`
+// and `/events/` as different resources, so we still request what the site
+// published.
 //
-// ── This key is for IDENTITY ONLY, never for fetching ──
-//
-// The crawler still requests the exact URL the site published. Normalising
-// what we REQUEST would be a different and worse bug: some servers really do
-// treat `/events` and `/events/` as different resources, and some care about
-// param order. We only ever use this to answer "have I already seen this?"
-//
-// ── Why this is more conservative than Fallow's version ──
-//
-// Fallow's `url-normalize.ts` also strips `ref`, `ref_src` and `source`. That
-// is right for de-duplicating URLs a human pasted into a submission box, where
-// the cost of a wrong merge is one re-paste.
-//
-// It is wrong for a crawler. Some CMSs genuinely route on `?source=` or
-// `?ref=`, so merging those would silently drop a real page — and a page never
-// fetched is a page whose absence nobody can see. The two failure modes are
-// not symmetric:
-//
-//   missed merge  -> a duplicate fetch. Wasteful, visible, harmless.
-//   wrong merge   -> a real page is never crawled. Invisible, and the data
-//                    is simply gone.
-//
-// So this strips only parameters that are unambiguously analytics tracking —
-// ones with no routing meaning on any server. When in doubt, keep the param
-// and eat the duplicate fetch.
+// Only unambiguous analytics params are stripped. The failure modes are not
+// symmetric — a missed merge costs a duplicate fetch, a wrong merge means a
+// real page is never crawled and nobody can see its absence.
 
 /**
  * Parameters that are pure analytics tracking and never affect which document

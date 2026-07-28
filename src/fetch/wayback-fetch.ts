@@ -1,27 +1,13 @@
 // ─── Internet Archive fallback rung (free) ──────────────────────────────────
 //
-// WAYBACK-RUNG-1 (2026-07-27). When every live rung fails for TRANSPORT
-// reasons — the host is down, DNS is failing, the origin times out — the page
-// often still exists in the Internet Archive. The CDX API is free, keyless,
-// and public, which makes this a legitimate free rung rather than another
-// vendor.
+// WAYBACK-RUNG-1: when every live rung fails on transport, the page often
+// still exists in the Internet Archive, whose CDX API is free and keyless.
 //
-// ── The gate, which matters more than the feature ──
-//
-// This rung runs ONLY when robots posture is explicitly `allow`.
-//
-// That restriction is the whole design. An archive fallback is trivially a way
-// to read pages a site refused us, and building that would make every other
-// guard in this package decorative. So:
-//
-//   disallow  — never. The site said no; reading a copy is still reading it.
-//   unknown   — never. We fail closed on unknown everywhere else, and an
-//               archive is not a way to launder an unresolved posture.
-//   allow     — yes, and only after the live rungs have failed.
-//
-// It is also last by construction: an archived copy is by definition older
-// than the live page, so preferring it to a live fetch would silently serve
-// stale data. It runs when the alternative is nothing at all.
+// The gate matters more than the feature. An archive fallback is trivially a
+// way to read pages a site refused, so this runs ONLY for an explicit `allow`
+// posture — never disallow, never unknown, never for a credentialed target.
+// It is also last: an archived copy is older than the live page by
+// definition, so it runs when the alternative is nothing at all.
 
 /** CDX index: which snapshots exist, newest first, successful captures only. */
 const CDX_ENDPOINT = 'https://web.archive.org/cdx/search/cdx';

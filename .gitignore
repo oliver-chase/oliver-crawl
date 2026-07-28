@@ -5,3 +5,6 @@ dist/
 *.log
 .DS_Store
 coverage/
+
+# Local agent state and worktree checkouts — never shared
+.claude/

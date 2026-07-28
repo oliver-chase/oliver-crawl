@@ -1,28 +1,11 @@
 // ─── oliver-crawl ───────────────────────────────────────────────────────────
 //
-// Governed web crawling with two independent lanes:
+// Two fetch paths. `own` runs on your infrastructure with no key and no
+// per-call cost, and is the default. `vendor` (Firecrawl, Apify) is off
+// unless a call passes `lanes: ['own', 'vendor']`.
 //
-//   own    — our crawler. No keys, no cost. SSRF/DNS-rebinding guards,
-//            prompt-injection sanitising, conditional GET, JSON-LD, content
-//            -region hashing. The default.
-//   vendor — third-party scraping APIs (Firecrawl, Apify). Off unless asked
-//            for, and only usable if a key is configured.
-//
-// Pick one, or both. `lanes: ['own']` is the default and never spends money.
 // `lanes: ['own', 'vendor']` is the common production shape: try free first,
-// escalate only for pages the free lane genuinely cannot read.
-//
-//   import { createCrawler, configFromEnv } from '@oliver/crawl-core';
-//
-//   const crawler = createCrawler(configFromEnv());
-//   const result = await crawler.crawl(
-//     { baseUrl: 'https://example.com', robotsPolicy: 'allow' },
-//     'https://example.com/events',
-//     { lanes: ['own', 'vendor'] },
-//   );
-//   if (result.ok && !result.notModified) console.log(result.pages[0]?.text);
-//
-// Ordinary failure is a value, never an exception: check `result.ok`.
+// escalate only for pages the free ladder genuinely cannot read.
 
 import { resolveConfig, availableVendorRungs, configFromEnv, DEFAULT_USER_AGENT } from './core/config.js';
 import { crawlWithOwnLane } from './lanes/own/index.js';

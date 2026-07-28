@@ -147,35 +147,11 @@ async function resolveRobotsPolicy(url: string, config: ResolvedConfig): Promise
 }
 
 /**
- * VENDOR-POLICY-1 (2026-07-27, found in audit): the lane-independent policy
- * gate — eligibility, robots posture (resolved for real under autoRobots),
- * and the same-site rule.
+ * Resolve a target's robots posture when the crawler is configured to.
  *
- * Extracted from the own lane because the vendor lane's doc comment promised
- * "the caller is still expected to have vetted the URL (crawl() does)" while
- * crawl() only vetted INSIDE the own lane. `lanes: ['vendor']` therefore ran
- * with no vetting at all: no same-site check, no robots check, nothing —
- * paying Firecrawl to fetch a URL our own lane would have refused to touch.
- * Governance is a property of the CRAWL, not of which network makes the
- * request.
- *
- * Deliberately excludes the DNS-resolves-public check: that guards OUR
- * machine's socket against SSRF, and in the vendor lane our machine never
- * connects to the target. The vendor's network is the vendor's problem;
- * which URLs we are willing to crawl at all is ours.
- *
- * Throws on refusal; callers convert to a `blocked` result.
- */
-/**
- * Resolve a target's robots posture, when the crawler is configured to.
- *
- * CRAWLSITE-AUTOROBOTS-1: crawlSite validates its seeds up front, before any
- * lane runs, so it needs the SAME resolution `crawl()` performs internally.
- * Without it, `autoRobots` silently did nothing for whole-site crawls and
- * every seed failed closed on a posture that would have resolved to 'allow'.
- *
- * Returns the target unchanged when autoRobots is off or a posture is already
- * set — an explicit policy is never overridden.
+ * CRAWLSITE-AUTOROBOTS-1: crawlSite validates seeds before any lane runs, so
+ * it needs the same resolution `crawl()` does internally. An explicit policy
+ * is never overridden.
  */
 export async function resolveTargetPolicy(target: CrawlTarget, config: ResolvedConfig): Promise<CrawlTarget> {
   if (!config.autoRobots || (target.robotsPolicy ?? 'unknown') !== 'unknown') return target;
@@ -183,6 +159,17 @@ export async function resolveTargetPolicy(target: CrawlTarget, config: ResolvedC
   return { ...target, robotsPolicy: policy };
 }
 
+/**
+ * VENDOR-POLICY-1: the lane-independent policy gate — eligibility, robots
+ * posture, same-site. Governance is a property of the CRAWL, not of which
+ * network makes the request: before this, `lanes: ['vendor']` ran with no
+ * vetting at all.
+ *
+ * Excludes the DNS-resolves-public check on purpose. That guards OUR socket
+ * against SSRF, and in the vendor lane our machine never connects.
+ *
+ * Throws on refusal; callers convert to a `blocked` result.
+ */
 export async function approveCrawlPolicy(
   target: CrawlTarget,
   url: string,
