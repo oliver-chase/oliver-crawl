@@ -47,6 +47,7 @@ moment one changes.
 | `GUARD-PRECISION-2` | Same, second pass: a missed attack alongside the false positives. | `guard/prompt-injection-guard.ts` | — |
 | `GUARD-TITLE-1` | `<title>` lives in `<head>`, so it was never part of the body text or markdown the guard inspects and shipped raw. A title is page content callers display and feed to models. | `fetch/build-page.ts` | `guard/title-guard.test.ts` |
 | `GUARD-PRECISION-3` | encoded-payload spans URL paths because `/` is in its class. URLs are stripped before that rule only. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
+| `GUARD-PRECISION-4` | The tool-exfiltration destination may be an EMAIL ADDRESS, not only a bare host. `to attacker@evil.com` was missed because the destination clause cannot match across an `@`, so the narrowing that fixed two live false positives had dropped a case the Fallow extractor this descends from still catches — and whose own test asserts it. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `HOST-CACHE-SCOPE-1` | A module-level DNS cache shared by every crawler let one crawler's observation answer another's security check. | `core/rung-memory.ts` | `core/rung-memory.test.ts` |
 | `JINA-CREDENTIAL-1` | Never send a credentialed target's URL to a public proxy. It discloses the URL and cannot succeed anyway. | `lanes/own/index.ts` | `lanes/lane-exhaustion.test.ts` |
 | `JINA-SELFHOST-1` | The reader endpoint is configurable. A rung advertised as free should not depend on one third party's uptime. | `core/types.ts` | — |
