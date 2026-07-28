@@ -107,9 +107,22 @@ for pattern in "${PII_PATTERNS[@]}"; do
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
       case "$file" in
-        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|*.md|.githooks/pre-commit|config/contracts/planning-doc-governance.json) continue ;;
+        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|*.md|.githooks/pre-commit|core/templates/project/pre-commit|config/contracts/planning-doc-governance.json) continue ;;
       esac
-      if grep -nE -e "$pattern" "$file" 2>/dev/null; then
+      # Strip known non-PII strings before matching. `git@github.com` is the
+      # SSH form npm writes into package-lock.json "resolved" entries for a git
+      # dependency — a protocol user on a public host, not a person's address.
+      # Without this, adding any git dependency makes the lockfile permanently
+      # uncommittable, and a gate that blocks a correct commit is one people
+      # learn to pass with --no-verify.
+      #
+      # Stripped at MATCH level, not line level. Filtering whole grep output
+      # lines let anything sharing a line with an exempt string escape EVERY
+      # pattern — including /Users/ home paths, which have nothing to do with
+      # lockfiles. Removing only the exempt substring leaves the rest of the
+      # line to match.
+      if sed -E 's#git\+ssh://git@github\.com/[^"[:space:],]*##g; s#git@github\.com:[^"[:space:],]*##g' "$file" 2>/dev/null | grep -nE -e "$pattern" >/dev/null; then
+        sed -E 's#git\+ssh://git@github\.com/[^"[:space:],]*##g; s#git@github\.com:[^"[:space:],]*##g' "$file" 2>/dev/null | grep -nE -e "$pattern"
         echo "  BLOCKED: $file contains PII matching pattern: $pattern"
         VIOLATIONS=$((VIOLATIONS + 1))
       fi
