@@ -189,27 +189,11 @@ module by module with the consumer's own suite green at each step.
 
 ---
 
-## PROBE-DNS-SEAM-1 — open
-
-`probeCheapChangeSignal` calls `assertHostResolvesToPublicAddress` without an
-injectable `dnsLookup`, unlike every other fetch path in the package. Its
-refusal paths are unit-testable; its success path is not, because it needs
-real DNS.
-
-**Spec.** Give it the same `dnsLookup` option the rest of the fetch layer
-takes. Small, and it closes the last untestable success path in the public
-surface.
-
-Not urgent: the function is exported for consumers who want a pre-fetch change
-probe, and `crawlSite`'s own re-crawl path does not use it. Recorded so it is
-not rediscovered as a mystery.
-
----
-
 ## Live tracker
 
 | Date | Entry | Change |
 |---|---|---|
+| 2026-07-27 | PROBE-DNS-SEAM-1 | CLOSED. dnsLookup is now injectable, matching every other fetch path; the success path is unit-tested. Also deduplicated `sleep`, which existed in two modules. |
 | 2026-07-27 | ROBOTS-4XX-1 | FIXED. RFC 9309 treats any 4xx on robots.txt as UNAVAILABLE — the crawler may access, and a 403 equals a 404. We allowed only 404/410 and failed closed on the rest, refusing 4 of 60 live sources that read fine once permitted. 429 stays excluded: rate limited is not unavailable. Live sample went 55/60 to 60/60. |
 | 2026-07-27 | CRAWL-PARITY-1 | RESOLVED. Both extractors over the same 60 live sources: Fallow 59/60, oliver-crawl 60/60 with the same stored-policy config, median text ratio 0.98. The gap was autoRobots vs a stored policy, not extraction. |
 | 2026-07-27 | THIN-PAGE-1 | FIXED. A JS page shipping only nav and footer passed the "is the parse empty" check and never escalated to render — 1,232 chars fetched vs 5,519 rendered on a live site. `renderWhenTextBelow` opts in to escalating an implausibly short page; a render that returns less is discarded, so it never loses the page it had. |

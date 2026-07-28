@@ -19,6 +19,7 @@
 // blocked. Politeness is a feature.
 
 import { urlDedupKey } from './core/url-dedup-key.js';
+import { sleep } from './core/host-throttle.js';
 import { assertRequestUrlAllowed, assertTargetEligible } from './fetch/host-policy.js';
 import { findNextPageUrl } from './extract/pagination-discovery.js';
 import type { Crawler } from './index.js';
@@ -209,9 +210,7 @@ function isTerminal(reason: string): boolean {
   return reason === 'blocked' || reason === 'quarantined' || reason === 'no_lane_available';
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+
 
 /**
  * Crawl a target across its seeds.

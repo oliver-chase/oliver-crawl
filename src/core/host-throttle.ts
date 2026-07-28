@@ -66,7 +66,7 @@ export function intervalForHost(hostname: string, minIntervalMs: number, adaptiv
   return Math.max(minIntervalMs, Math.round(avg * adaptiveMultiplier));
 }
 
-function sleep(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 

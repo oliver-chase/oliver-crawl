@@ -99,11 +99,22 @@ describe('fetchViaWayback — called directly rather than through the ladder', (
 });
 
 describe('probeCheapChangeSignal — the pre-fetch change probe', () => {
-  // PROBE-DNS-SEAM-1: only the refusal paths are unit-testable. Unlike every
-  // other fetch path here, this one calls assertHostResolvesToPublicAddress
-  // with no injectable dnsLookup, so its success path needs real DNS. That is
-  // a missing seam, recorded in BACKLOG rather than worked around with a test
-  // that quietly depends on the network.
+  // PROBE-DNS-SEAM-1 is closed: dnsLookup is injectable, so the success path
+  // is exercisable without real DNS like every other fetch path here.
+  test('reports the validators the origin exposes', async () => {
+    globalThis.fetch = (async () =>
+      new Response('', {
+        status: 200,
+        headers: { etag: 'W/"abc"', 'last-modified': 'Wed, 01 Jul 2026 00:00:00 GMT' },
+      })) as typeof fetch;
+
+    const target = { baseUrl: 'https://x.example.com', robotsPolicy: 'allow' as const, active: true };
+    const signal = await probeCheapChangeSignal(target, 'https://x.example.com/a', {
+      dnsLookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    });
+    expect(signal?.etag).toBe('W/"abc"');
+  });
+
   test('an off-domain URL is refused without a request', async () => {
     let called = false;
     globalThis.fetch = (async () => {

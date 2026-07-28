@@ -75,12 +75,22 @@ moment one changes.
 | `WHITE-LABEL-2` | User-facing strings named another project's bot regardless of the configured agent. | `fetch/robots-check.ts` | `fetch/crawl-delay.test.ts` |
 | `QUARANTINE-TELEMETRY-1` | Every rung emits a usage event when it quarantines. A guard nobody can see firing teaches an operator nothing. | `lanes/own/index.ts` | `lanes/lane-exhaustion.test.ts` |
 | `OFFDOMAIN-WWW-1` | `www.` and apex are the same site; anything else is not. | `fetch/host-policy.ts` | `fetch/host-policy.test.ts` |
-| `PROBE-DNS-SEAM-1` | **Open.** `probeCheapChangeSignal` takes no injectable `dnsLookup`, unlike every other fetch path, so only its refusal paths are unit-testable. Spec in [BACKLOG](BACKLOG.md). | `fetch/cheap-change-probe.ts` | `core/public-helpers.test.ts` |
+| `PROBE-DNS-SEAM-1` | `probeCheapChangeSignal` takes an injectable `dnsLookup` like every other fetch path, so its success path is testable without real DNS. | `fetch/cheap-change-probe.ts` | `core/public-helpers.test.ts` |
 
 ## Decisions with no test
 
-A decision no test names is one refactor from being undone silently. Some are
-structural — a build flag, a packaging choice — and have nothing a unit test can
-hold. `check-decisions.mjs` reports these on every run without failing, because
+A decision no test names is one refactor from being undone silently.
+`check-decisions.mjs` reports these on every run without failing, because
 making it fatal would produce hollow tests rather than real ones.
+
+The five that remain are structural, and named here so the gap is a decision
+rather than an oversight:
+
+| ID | Why no test |
+|---|---|
+| `CI-NODE20-1` | A runtime-compatibility choice in the hash helper. Exercised by every test that hashes; nothing to assert beyond "it runs here". |
+| `CRAWL-CONCURRENCY-1` | The default is 1, so the concurrent path only exists when a caller opts in. Covered indirectly by the searchAndCrawl suite. |
+| `CRAWL-PERF-1` | Parse-once instead of parse-per-script-tag. A behavioural test would assert output that is identical either way; only a profiler shows the difference. |
+| `DEPLOY-BLOCKER-1` | The playwright import is written to be invisible to bundler tracers, which also makes it unmockable. Verified by consumers' builds not breaking, not by a unit test. |
+| `GUARD-PRECISION-2` | Superseded in practice by `GUARD-PRECISION-3`'s suite, which exercises the same patterns against real page copy. |
 

@@ -33,7 +33,7 @@ import {
 } from './host-policy.js';
 import { sha256Hex } from '../core/hash.js';
 import { DEFAULT_USER_AGENT } from '../core/config.js';
-import type { CrawlTarget } from '../core/types.js';
+import type { DnsLookupFn, CrawlTarget } from '../core/types.js';
 
 /** A cheap "has this page changed" fingerprint. Cheaper than a full crawl by
  *  orders of magnitude: a HEAD/ranged GET and a hash, no parsing, no LLM. */
@@ -60,6 +60,10 @@ const PROBE_MAX_BODY_BYTES = 200_000; // enough to hash a shell page, not a full
 export async function probeCheapChangeSignal(
   source: CrawlTarget,
   url: string,
+  // PROBE-DNS-SEAM-1: injectable, like every other fetch path here. Without
+  // it this function's success path could only be exercised against real DNS,
+  // so it was the one public entry point with no unit-testable happy path.
+  opts?: { dnsLookup?: DnsLookupFn },
 ): Promise<CheapChangeSignal | null> {
   let safeUrl: URL;
   try {
@@ -69,7 +73,7 @@ export async function probeCheapChangeSignal(
     // resolution check every other direct-fetch call site in this repo
     // (secure-crawlee-runner.ts, secure-browser-runner.ts) applies before
     // fetching.
-    await assertHostResolvesToPublicAddress(safeUrl.hostname);
+    await assertHostResolvesToPublicAddress(safeUrl.hostname, opts?.dnsLookup);
   } catch {
     return null;
   }
