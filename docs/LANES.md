@@ -10,7 +10,7 @@ It is a ladder of rungs. Each runs only when the ones above it could not finish 
 
 | # | Rung | Cost | What it does |
 |---|------|------|--------------|
-| 1 | Policy | free | Eligibility, robots posture, same-site, SSRF/DNS-rebinding. Refusals happen **before any content fetch**. With `autoRobots: true` an unknown posture is resolved by really fetching robots.txt — cached per host, so one request per host, never per page |
+| 1 | Policy | free | Eligibility, robots posture, same-site, SSRF/DNS-rebinding. Refusals happen **before any content fetch**. With `autoRobots: true` an unknown posture is resolved by really fetching robots.txt — cached per host, so one request per host, never per page. Per RFC 9309, a 4xx means the file is unavailable and crawling is permitted; 5xx and network failures fail closed, and 429 is treated as rate limited rather than unavailable |
 | 2 | Conditional GET | free | Sends `If-None-Match` / `If-Modified-Since` from stored validators; a 304 ends the crawl with nothing fetched |
 | 3 | Fetch | free | Plain HTTPS fetch, real UA, redirects re-validated per hop, body capped at 2 MB |
 | 4 | Parse | free | Visible text, title, JSON-LD, same-site links, outbound hosts; SPA payload recovery |

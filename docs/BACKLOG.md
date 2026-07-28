@@ -178,6 +178,11 @@ page that parsed but is implausibly short. Opt-in with no default: there is no
 way to know more content exists without rendering, and rendering every short
 page would be a large cost for pages that are simply short.
 
+**Update after ROBOTS-4XX-1: oliver-crawl now reads 60/60 under `autoRobots`**,
+so the configuration caveat above no longer applies. Passing a stored
+`robotsPolicy` is still supported and still faster (it skips a robots fetch
+per host), but it is no longer required to match Fallow's coverage.
+
 **Remaining before adoption:** none from this comparison. The migration
 procedure in [EXISTING-PROJECTS](EXISTING-PROJECTS.md) still applies — swap
 module by module with the consumer's own suite green at each step.
@@ -188,6 +193,7 @@ module by module with the consumer's own suite green at each step.
 
 | Date | Entry | Change |
 |---|---|---|
+| 2026-07-27 | ROBOTS-4XX-1 | FIXED. RFC 9309 treats any 4xx on robots.txt as UNAVAILABLE — the crawler may access, and a 403 equals a 404. We allowed only 404/410 and failed closed on the rest, refusing 4 of 60 live sources that read fine once permitted. 429 stays excluded: rate limited is not unavailable. Live sample went 55/60 to 60/60. |
 | 2026-07-27 | CRAWL-PARITY-1 | RESOLVED. Both extractors over the same 60 live sources: Fallow 59/60, oliver-crawl 60/60 with the same stored-policy config, median text ratio 0.98. The gap was autoRobots vs a stored policy, not extraction. |
 | 2026-07-27 | THIN-PAGE-1 | FIXED. A JS page shipping only nav and footer passed the "is the parse empty" check and never escalated to render — 1,232 chars fetched vs 5,519 rendered on a live site. `renderWhenTextBelow` opts in to escalating an implausibly short page; a render that returns less is discarded, so it never loses the page it had. |
 | 2026-07-27 | docs | Every export documented in REFERENCE's API surface; seven were undocumented (fetchViaWayback, jinaEndpoint, useArchiveFallback, resolveTarget, diffContent, pickDetailLinks, findContentImages). |
