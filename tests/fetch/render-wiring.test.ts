@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
+import { isSecurityRefusal } from '@/fetch/local-render';
+import { assertHostResolvesToPublicAddress, assertRedirectUrlAllowedForHost } from '@/fetch/host-policy';
 
 // RENDER-HOP-1 / RENDER-REDIRECT-1 wiring guard.
 //
@@ -51,5 +53,46 @@ describe('subresource requests are screened too', () => {
     // A blocked tracker or internal beacon must not lose the page.
     const subresourceBlock = renderFn.slice(renderFn.indexOf('isNavigationRequest'));
     expect(subresourceBlock).toMatch(/route\.abort\(\)/);
+  });
+});
+
+describe('security refusals are reported, ordinary unavailability is not', () => {
+  // RENDER-SILENT-1 made the render rung report a blocked redirect instead of
+  // returning a bare null that looked like an uninstalled browser. Nothing
+  // tested that reporting, and the decision is enforced by matching the text
+  // of guard error messages — so rewording a guard would turn its reporting
+  // off silently.
+  //
+  // These cases throw from the REAL guards and feed the ACTUAL message through
+  // the predicate, so a reworded guard message fails here rather than going
+  // quiet in production.
+  const privateAddress = async () => [{ address: '127.0.0.1', family: 4 }];
+
+  test.each([
+    ['host resolving to a private address', () => assertHostResolvesToPublicAddress('evil.example.com', privateAddress)],
+    ['redirect off the requested domain', () => assertRedirectUrlAllowedForHost('site.example.com', '', 'https://other.example.com/x')],
+    ['redirect to another port', () => assertRedirectUrlAllowedForHost('site.example.com', '', 'https://site.example.com:8443/x')],
+    ['redirect carrying credentials', () => assertRedirectUrlAllowedForHost('site.example.com', '', 'https://u:p@site.example.com/x')],
+    ['redirect downgrading to http', () => assertRedirectUrlAllowedForHost('site.example.com', '', 'http://site.example.com/x')],
+  ])('%s is reported', async (_name, trigger) => {
+    let message: string | null = null;
+    try {
+      await trigger();
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).not.toBeNull();
+    expect(isSecurityRefusal(message!)).toBe(true);
+  });
+
+  test.each([
+    'Cannot find module \'playwright\'',
+    'Timeout 20000ms exceeded.',
+    'page.goto: net::ERR_NAME_NOT_RESOLVED',
+    'browserType.launch: Executable doesn\'t exist',
+  ])('ordinary unavailability stays silent: %s', (reason) => {
+    // The other half of the decision. Reporting everything would train an
+    // operator to ignore the signal, which is the same outcome as not having it.
+    expect(isSecurityRefusal(reason)).toBe(false);
   });
 });

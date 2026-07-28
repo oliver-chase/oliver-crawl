@@ -152,6 +152,23 @@ export async function assertLandedSameSite(
 }
 
 /**
+ * Whether a render failure was a SECURITY refusal rather than the rung simply
+ * being unavailable. Only the first kind is reported (RENDER-SILENT-1): a
+ * missing browser, a timeout or a dead render service are ordinary and already
+ * visible as a skipped rung, while a blocked redirect is an operator's only
+ * signal that something is attacking the crawl. Reporting both would train the
+ * operator to ignore the signal, which ends up where we started.
+ *
+ * Matching on message TEXT couples this to how the guards word themselves, so
+ * rewording one would switch its reporting off silently — RENDER-SILENT-1's own
+ * defect, re-entering by another door. render-wiring.test.ts pins the coupling
+ * by throwing from the REAL guards and asserting each message still matches.
+ */
+export function isSecurityRefusal(reason: string): boolean {
+  return /Blocked|redirect hop|off-domain|cross-port|credential/i.test(reason);
+}
+
+/**
  * Render a URL with local headless Chromium and return the post-JS HTML, or
  * null when the rung cannot run (wrong runtime, not opted in, playwright
  * absent) or the render failed.
@@ -237,7 +254,7 @@ export async function renderViaLocalChromium(
     const reason = error instanceof Error ? error.message : String(error);
     // Only security refusals are reported. A missing browser, a timeout or a
     // dead render service are ordinary and already visible as a skipped rung.
-    if (/Blocked|redirect hop|off-domain|cross-port|credential/i.test(reason)) onBlocked?.(reason);
+    if (isSecurityRefusal(reason)) onBlocked?.(reason);
     return null;
   } finally {
     if (browser) await browser.close().catch(() => {});
