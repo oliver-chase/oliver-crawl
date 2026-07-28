@@ -169,6 +169,24 @@ export async function assertLandedSameSite(
 }
 
 /**
+ * Can the local render rung actually run here?
+ *
+ * Exists because a CONSUMER cannot answer this correctly. OSG's setup-doctor
+ * inferred it with require.resolve('playwright') from its own module, and QA
+ * showed that lies: playwright installed under a sub-package resolved there
+ * while this module's own import still failed, so the doctor reported the rung
+ * available when it was dark — exactly the confusion that check exists to
+ * prevent.
+ *
+ * Uses the SAME import seam the rung uses, so the answer is the rung's answer
+ * rather than a guess that happens to agree most of the time.
+ */
+export async function isLocalRenderAvailable(): Promise<boolean> {
+  if (!hasNodeRuntime()) return false;
+  return (await importPlaywright()) !== null;
+}
+
+/**
  * Whether a render failure was a SECURITY refusal rather than the rung simply
  * being unavailable. Only the first kind is reported (RENDER-SILENT-1): a
  * missing browser, a timeout or a dead render service are ordinary and already

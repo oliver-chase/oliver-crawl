@@ -240,7 +240,7 @@ export { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
 export type { SitemapDiscoveryResult, SitemapEntry } from './fetch/sitemap-discovery.js';
 export { fetchViaWayback } from './fetch/wayback-fetch.js';
 export type { WaybackResult } from './fetch/wayback-fetch.js';
-export { renderViaLocalChromium, MAX_ACTIONS, MAX_ACTION_TOTAL_MS } from './fetch/local-render.js';
+export { isLocalRenderAvailable, renderViaLocalChromium, MAX_ACTIONS, MAX_ACTION_TOTAL_MS } from './fetch/local-render.js';
 export type { BrowserAction } from './fetch/local-render.js';
 export { createDohLookup, DEFAULT_DOH_ENDPOINT } from './fetch/host-policy.js';
 export { renderViaService, renderServiceFrom } from './fetch/browser-render.js';
