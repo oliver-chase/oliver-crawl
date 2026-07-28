@@ -91,7 +91,11 @@ export async function probeCheapChangeSignal(
         return null;
       }
       try {
-        await assertHostResolvesToPublicAddress(next.hostname);
+        // PROBE-DNS-SEAM-1: the caller's resolver applies on redirect hops too.
+        // It was passed on the first host and dropped here, so a crawler with
+        // its own resolver had it silently bypassed on every redirect — the
+        // hops an attacker controls.
+        await assertHostResolvesToPublicAddress(next.hostname, opts?.dnsLookup);
       } catch {
         return null;
       }

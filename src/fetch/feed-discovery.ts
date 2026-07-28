@@ -14,19 +14,50 @@
 // positively confirm — never a guessed URL that wasn't fetched and validated.
 
 import { assertHostResolvesToPublicAddress } from './host-policy.js';
+import type { DnsLookupFn } from '../core/types.js';
 import { DEFAULT_USER_AGENT } from '../core/config.js';
 
 export type FeedDiscoveryResult = { feedUrl: string | null; reason: string };
+
+/** www and apex are one site; anything else is not. */
+function isSameSiteHost(host: string, other: string): boolean {
+  const strip = (h: string) => h.toLowerCase().replace(/^www\./, '');
+  try {
+    return strip(host) === strip(new URL(other).hostname);
+  } catch {
+    return strip(host) === strip(other);
+  }
+}
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_HTML_BYTES = 1_000_000;
 const MAX_FEED_BYTES = 2_000_000;
 const MAX_REDIRECTS = 4;
 
-// SSRF-guarded fetch that follows redirects manually, re-validating each hop's
-// host — same discipline as robots-check / cheap-change-probe. Exported so the
-// source auto-router (source-autofix.ts) reuses the exact same guard.
-export async function safeFetch(rawUrl: string, doFetch: typeof fetch, accept: string): Promise<Response | null> {
+/**
+ * SSRF-guarded fetch that follows redirects manually, re-validating each hop.
+ *
+ * SAFEFETCH-PARITY-1: this claimed "same discipline as robots-check /
+ * cheap-change-probe" and was weaker than both. It re-resolved each hop's host
+ * but accepted ANY host, so a discovery URL could redirect off-site and be
+ * followed; and it took no injectable resolver, so a crawler running its own
+ * DNS had it bypassed here entirely.
+ *
+ * Both are closed. `sameSiteAs` enforces the destination stays on the target's
+ * site when the caller knows it — discovery is triggered by a target, so it
+ * always does. `dnsLookup` is threaded like every other fetch path.
+ *
+ * `http:` is still accepted here, unlike the crawl path. Feed and sitemap URLs
+ * are frequently published as http even by sites served over https, and
+ * refusing them would drop real feeds; the public-address check is what makes
+ * that safe.
+ */
+export async function safeFetch(
+  rawUrl: string,
+  doFetch: typeof fetch,
+  accept: string,
+  opts?: { sameSiteAs?: string; dnsLookup?: DnsLookupFn },
+): Promise<Response | null> {
   let current: URL;
   try {
     current = new URL(rawUrl);
@@ -39,7 +70,7 @@ export async function safeFetch(rawUrl: string, doFetch: typeof fetch, accept: s
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
       try {
-        await assertHostResolvesToPublicAddress(current.hostname);
+        await assertHostResolvesToPublicAddress(current.hostname, opts?.dnsLookup);
       } catch {
         return null;
       }
@@ -58,6 +89,8 @@ export async function safeFetch(rawUrl: string, doFetch: typeof fetch, accept: s
         return null;
       }
       if (current.protocol !== 'https:' && current.protocol !== 'http:') return null;
+      // SAFEFETCH-PARITY-1: a redirect may not leave the target's site.
+      if (opts?.sameSiteAs && !isSameSiteHost(current.hostname, opts.sameSiteAs)) return null;
     }
     return null;
   } catch {
@@ -157,8 +190,12 @@ function looksLikeIcs(body: string): boolean {
   return /BEGIN:VCALENDAR/i.test(body.slice(0, 4_000));
 }
 
-async function validateIcsUrl(url: string, doFetch: typeof fetch): Promise<boolean> {
-  const res = await safeFetch(url, doFetch, 'text/calendar,text/plain');
+async function validateIcsUrl(
+  url: string,
+  doFetch: typeof fetch,
+  opts: { sameSiteAs: string; dnsLookup?: DnsLookupFn },
+): Promise<boolean> {
+  const res = await safeFetch(url, doFetch, 'text/calendar,text/plain', opts);
   if (!res || !res.ok) return false;
   const contentType = res.headers.get('content-type') || '';
   const body = (await res.text().catch(() => '')).slice(0, MAX_FEED_BYTES);
@@ -173,12 +210,13 @@ async function validateIcsUrl(url: string, doFetch: typeof fetch): Promise<boole
 // in the page HTML first (authoritative), then common platform guesses.
 export async function discoverIcsFeed(
   baseUrl: string,
-  opts?: { fetchImpl?: typeof fetch },
+  opts?: { fetchImpl?: typeof fetch; dnsLookup?: DnsLookupFn },
 ): Promise<FeedDiscoveryResult> {
   const doFetch = opts?.fetchImpl ?? fetch;
+  const guard = { sameSiteAs: baseUrl, ...(opts?.dnsLookup ? { dnsLookup: opts.dnsLookup } : {}) };
 
   // If baseUrl is already an ICS feed, nothing to discover.
-  const pageRes = await safeFetch(baseUrl, doFetch, 'text/html,application/xhtml+xml,text/calendar');
+  const pageRes = await safeFetch(baseUrl, doFetch, 'text/html,application/xhtml+xml,text/calendar', guard);
   if (pageRes && pageRes.ok) {
     const contentType = pageRes.headers.get('content-type') || '';
     const body = (await pageRes.text().catch(() => '')).slice(0, MAX_HTML_BYTES);
@@ -187,20 +225,20 @@ export async function discoverIcsFeed(
     }
     const declared = parseFeedLinksFromHtml(body, baseUrl);
     for (const candidate of declared) {
-      if (await validateIcsUrl(candidate, doFetch)) {
+      if (await validateIcsUrl(candidate, doFetch, guard)) {
         return { feedUrl: candidate, reason: 'found an ICS feed declared in the page (rel="alternate")' };
       }
     }
     // DETERMINISM-1b: Google Calendar embed -> derived public ICS.
     for (const candidate of googleCalendarIcsCandidates(body)) {
-      if (await validateIcsUrl(candidate, doFetch)) {
+      if (await validateIcsUrl(candidate, doFetch, guard)) {
         return { feedUrl: candidate, reason: 'derived from a Google Calendar embed on the page' };
       }
     }
   }
 
   for (const candidate of candidateIcsUrls(baseUrl)) {
-    if (await validateIcsUrl(candidate, doFetch)) {
+    if (await validateIcsUrl(candidate, doFetch, guard)) {
       return { feedUrl: candidate, reason: 'found an ICS feed at a common platform path' };
     }
   }

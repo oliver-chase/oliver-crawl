@@ -67,6 +67,7 @@ moment one changes.
 | `ROBOTS-DELAY-1` | Honour the site's published Crawl-delay as a floor. Reading robots for permission and ignoring its pacing takes half the file. | `fetch/robots-check.ts` | `fetch/crawl-delay.test.ts` |
 | `ROBOTS-REDIRECT-1` | Off-domain robots redirects are FOLLOWED. Refusing them cost six working sources to stop one parked domain. | `fetch/robots-check.ts` | `fetch/robots-redirect.test.ts` |
 | `ROBOTS-TTL-1` | The robots cache had no expiry, so a transient failure stalled a host permanently and a new Disallow was never seen. | `lanes/own/index.ts` | `fetch/robots-cache-ttl.test.ts` |
+| `SAFEFETCH-PARITY-1` | safeFetch claimed the same discipline as robots-check and cheap-change-probe but accepted any redirect host and took no injectable resolver. Same-site is now enforced when the caller supplies it, and the resolver is threaded like every other fetch path. | `fetch/feed-discovery.ts` | `fetch/safefetch-parity.test.ts` |
 | `SEARCH-DIAG-1` | Report every provider's failure. Naming only the last one points at the wrong thing to fix. | `search/index.ts` | `search/search.test.ts` |
 | `SEARCH-DIAG-2` | Every provider erroring is an outage, not `no_results`. | `search/index.ts` | `search/search.test.ts` |
 | `SEARCH-INJECTION-1` | Guard provider titles and snippets. A snippet is the target page's own meta description. | `search/index.ts` | `search/search.test.ts` |
