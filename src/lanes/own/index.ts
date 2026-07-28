@@ -36,14 +36,11 @@
 // caller may fall through to the vendor lane — but only if it asked for it.
 
 import * as cheerio from 'cheerio';
-import { summarizeStructuredData } from '../../extract/structured-summary.js';
 import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js';
 import { extractPdfText } from '../../fetch/pdf-extract.js';
-import { looksLikeEmptyState } from '../../core/soft-404.js';
-import { EXTRACTOR_VERSION } from '../../core/extractor-version.js';
 import { forgetWinningRung, shouldSkipDirectFetch } from '../../core/rung-memory.js';
 import { looksLikeBlockPage } from '../../core/block-page.js';
-import { buildPage } from '../../fetch/build-page.js';
+import { buildPage, buildTextPage } from '../../fetch/build-page.js';
 import { parseRetryAfter, readBodyCapped, fetchFollowingSafeRedirects } from '../../fetch/http-mechanics.js';
 import { fetchViaWayback } from '../../fetch/wayback-fetch.js';
 import {
@@ -58,7 +55,6 @@ import { evaluateRobotsForUrl } from '../../fetch/robots-check.js';
 import { emitUsage } from '../../core/usage.js';
 import { throttleHost, recordHostLatency } from '../../core/host-throttle.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
-import { sha256Hex } from '../../core/hash.js';
 import type { ResolvedConfig } from '../../core/config.js';
 import type { CrawlOptions, CrawlPage, CrawlResult, CrawlTarget } from '../../core/types.js';
 
@@ -345,28 +341,16 @@ export async function crawlWithOwnLane(
     return {
       ok: true,
       pages: [
-        {
+        await buildTextPage({
           url: response.url || requestUrl.toString(),
           text: sanitizedPdf.text,
-          markdown: '',
           contentKind: 'pdf',
-          likelyEmptyState: looksLikeEmptyState(sanitizedPdf.text),
-          candidateContentImages: [],
-          extractorVersion: EXTRACTOR_VERSION,
-          structuredData: summarizeStructuredData([]),
-          title: null,
           contentType,
-          bodySha256: await sha256Hex(sanitizedPdf.text),
-          contentRegionSha256: '',
-          textSha256: await sha256Hex(sanitizedPdf.text),
-          httpEtag: response.headers.get('etag'),
-          httpLastModified: response.headers.get('last-modified'),
-          jsonLd: [],
-          outboundHosts: [],
-          links: [],
-          lane: 'own',
           rung: 'fetch',
-        },
+          lane: 'own',
+          etag: response.headers.get('etag'),
+          lastModified: response.headers.get('last-modified'),
+        }),
       ],
     };
   }
@@ -395,31 +379,17 @@ export async function crawlWithOwnLane(
     return {
       ok: true,
       pages: [
-        {
+        await buildTextPage({
           url: response.url || requestUrl.toString(),
           text: sanitizedData.text,
-          // No HTML, so no markdown, links, JSON-LD or structural hash to
-          // derive. Empty rather than faked — same honesty rule as
-          // contentRegionSha256 on the text-only rungs (CRAWL-HASH-1).
-          markdown: '',
           contentKind,
-          likelyEmptyState: looksLikeEmptyState(sanitizedData.text),
-          candidateContentImages: [],
-          extractorVersion: EXTRACTOR_VERSION,
-          structuredData: summarizeStructuredData([]),
-          title: null,
           contentType,
-          bodySha256: await sha256Hex(html),
-          contentRegionSha256: '',
-          textSha256: await sha256Hex(sanitizedData.text),
-          httpEtag: response.headers.get('etag'),
-          httpLastModified: response.headers.get('last-modified'),
-          jsonLd: [],
-          outboundHosts: [],
-          links: [],
-          lane: 'own',
           rung: 'fetch',
-        },
+          lane: 'own',
+          etag: response.headers.get('etag'),
+          lastModified: response.headers.get('last-modified'),
+          bodySource: html,
+        }),
       ],
     };
   }
@@ -720,36 +690,16 @@ async function jinaFallback(
     return {
       ok: true,
       pages: [
-        {
+        await buildTextPage({
           url,
           text: sanitized.text,
-          // No HTML to convert on a text-only rung. Empty rather than
-          // pretending, same rule as contentRegionSha256 (CRAWL-HASH-1).
-          markdown: '',
           contentKind: 'text',
-          likelyEmptyState: looksLikeEmptyState(sanitized.text),
-          // Text-only rung — no markup to scan for images.
-          candidateContentImages: [],
-          extractorVersion: EXTRACTOR_VERSION,
-          // Jina returns prose, not the page's script tags — no JSON-LD to
-          // summarise. Reported honestly as "none found", which correctly
-          // tells a caller a model is their only option on this rung.
-          structuredData: summarizeStructuredData([]),
-          title: jina.title,
           contentType: 'text/markdown',
-          bodySha256: await sha256Hex(jina.text),
-          // Text-only rung: no HTML structure to strip, so no comparable
-          // structural hash exists. Empty rather than a lookalike (CRAWL-HASH-1).
-          contentRegionSha256: '',
-          textSha256: await sha256Hex(sanitized.text),
-          httpEtag: null,
-          httpLastModified: null,
-          jsonLd: [],
-          outboundHosts: [],
-          links: [],
-          lane: 'own',
           rung: 'jina',
-        },
+          lane: 'own',
+          title: jina.title,
+          bodySource: jina.text,
+        }),
       ],
     };
   } catch (error) {

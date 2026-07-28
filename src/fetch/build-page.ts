@@ -125,3 +125,56 @@ export async function buildPage(input: {
     rung: input.rung,
   };
 }
+
+/**
+ * Build a CrawlPage for a rung that produced TEXT rather than HTML — the
+ * calendar/CSV/JSON documents, the PDF text layer, Jina, and the vendor lane.
+ *
+ * These four rungs each hand-assembled the same object literal. Adding a
+ * REQUIRED field to CrawlPage surfaced every one of them through the type
+ * checker, but an optional field would not have, and the rungs would have
+ * drifted apart silently — one returning a field the others omit is exactly
+ * the kind of difference a consumer discovers as inconsistent data rather
+ * than as an error.
+ *
+ * The HTML-derived fields are empty here rather than faked, which is the same
+ * honesty rule `contentRegionSha256` follows: a rung change must never look
+ * like a content change.
+ */
+export async function buildTextPage(input: {
+  url: string;
+  text: string;
+  contentKind: CrawlPage['contentKind'];
+  contentType: string;
+  rung: string;
+  lane: CrawlPage['lane'];
+  title?: string | null;
+  etag?: string | null;
+  lastModified?: string | null;
+  /** Hash source when the delivered text is not what arrived on the wire. */
+  bodySource?: string;
+}): Promise<CrawlPage> {
+  const textSha256 = await sha256Hex(input.text);
+  return {
+    url: input.url,
+    text: input.text,
+    markdown: '',
+    contentKind: input.contentKind,
+    likelyEmptyState: looksLikeEmptyState(input.text),
+    candidateContentImages: [],
+    extractorVersion: EXTRACTOR_VERSION,
+    structuredData: summarizeStructuredData([]),
+    title: input.title ?? null,
+    contentType: input.contentType,
+    bodySha256: input.bodySource === undefined ? textSha256 : await sha256Hex(input.bodySource),
+    contentRegionSha256: '',
+    textSha256,
+    httpEtag: input.etag ?? null,
+    httpLastModified: input.lastModified ?? null,
+    jsonLd: [],
+    outboundHosts: [],
+    links: [],
+    lane: input.lane,
+    rung: input.rung,
+  };
+}

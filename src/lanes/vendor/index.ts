@@ -20,10 +20,7 @@
 import { availableVendorRungs } from '../../core/config.js';
 import { emitUsage } from '../../core/usage.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
-import { summarizeStructuredData } from '../../extract/structured-summary.js';
-import { looksLikeEmptyState } from '../../core/soft-404.js';
-import { EXTRACTOR_VERSION } from '../../core/extractor-version.js';
-import { sha256Hex } from '../../core/hash.js';
+import { buildTextPage } from '../../fetch/build-page.js';
 import type { ResolvedConfig } from '../../core/config.js';
 import type { CrawlOptions, CrawlResult } from '../../core/types.js';
 
@@ -173,34 +170,16 @@ export async function crawlWithVendorLane(
       return {
         ok: true,
         pages: [
-          {
+          await buildTextPage({
             url,
             text: sanitized.text,
-            // Both vendor rungs are ASKED for markdown (Firecrawl with
-            // onlyMainContent, Apify likewise), so the delivered text already
-            // is markdown — same value, not a second conversion.
-            markdown: sanitized.text,
             contentKind: 'html',
-            likelyEmptyState: looksLikeEmptyState(sanitized.text),
-            candidateContentImages: [],
-            extractorVersion: EXTRACTOR_VERSION,
-            // Vendors return rendered markdown, not the page's script tags.
-            structuredData: summarizeStructuredData([]),
-            title: result.title,
             contentType: 'text/markdown',
-            bodySha256: await sha256Hex(result.text),
-            // Vendors return markdown, not HTML — same reasoning as the Jina
-            // rung: no comparable structural hash (CRAWL-HASH-1).
-            contentRegionSha256: '',
-            textSha256: await sha256Hex(sanitized.text),
-            httpEtag: null,
-            httpLastModified: null,
-            jsonLd: [],
-            outboundHosts: [],
-            links: [],
-            lane: 'vendor',
             rung: rungName,
-          },
+            lane: 'vendor',
+            title: result.title,
+            bodySource: result.text,
+          }),
         ],
       };
     } catch (error) {
