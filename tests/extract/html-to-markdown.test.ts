@@ -57,6 +57,26 @@ describe('structure the page author encoded survives', () => {
   });
 });
 
+describe('MARKDOWN-BLOCKLINK-1 — a bare link keeps its href', () => {
+  // Found via searchSite: results pages list links as direct children of a
+  // container, and the href was dropped for every one of them.
+  test('a link that is a direct child of main keeps its URL', () => {
+    expect(md('<main><a href="/education/summer-camp/">Summer Camp Programme Details</a></main>')).toBe(
+      '[Summer Camp Programme Details](/education/summer-camp/)',
+    );
+  });
+
+  test('a list of bare links keeps every URL', () => {
+    const out = md('<main><a href="/a">First Article Title</a><a href="/b">Second Article Title</a></main>');
+    expect(out).toContain('](/a)');
+    expect(out).toContain('](/b)');
+  });
+
+  test('a link inside a paragraph still works', () => {
+    expect(md('<main><p>See the <a href="/x">details</a>.</p></main>')).toBe('See the [details](/x).');
+  });
+});
+
 describe('page chrome never reaches the model', () => {
   test('nav, header, footer and aside are dropped', () => {
     const out = md(`<body>

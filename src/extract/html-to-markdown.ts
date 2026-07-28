@@ -234,6 +234,25 @@ function renderNode($: CheerioAPI, $el: Cheerio<AnyNode>, el: AnyNode, blocks: s
       return;
     }
 
+    case 'a': {
+      // MARKDOWN-BLOCKLINK-1 (2026-07-27): a link that is a direct child of a
+      // container rather than inside a paragraph. The `default` branch
+      // recursed into its text and emitted the label with the href DROPPED,
+      // so any site listing links as bare children of a div — search results,
+      // index pages, link lists — produced markdown with no URLs at all.
+      //
+      // Same shape as the block-level <img> case below: the inline path knew
+      // how to render these, and nothing routed block-level ones to it.
+      //
+      // Rendered from the anchor ITSELF, not via inline() — inline() walks an
+      // element's CHILDREN, so handing it the <a> renders only the label and
+      // drops the href, which is the bug this case exists to fix.
+      const label = inline($, $el).trim();
+      const href = $el.attr('href') || '';
+      if (label) blocks.push(href ? `[${label}](${href})` : label);
+      return;
+    }
+
     case 'img': {
       // A block-level image, not wrapped in a paragraph. Common for flyers,
       // and its alt text is often the only description of the event — the

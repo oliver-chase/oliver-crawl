@@ -173,6 +173,32 @@ retrying it on resume would just repeat the failure.
 already persisted those when you received them. This resumes the work, not the
 results.
 
+### Searching within a site (free)
+
+`crawler.search()` asks a search engine, which always costs money. When you
+already know the site and want its relevant pages, ask the site instead:
+
+```ts
+import { searchSite } from '@oliver/crawl-core';
+
+const found = await searchSite(crawler, target, 'annual report');
+found.urls;     // same-site result URLs
+found.pattern;  // which query shape worked — pass back as knownPattern to skip probing
+```
+
+Free, and uncontroversial: submitting a query to a site's published search form
+is ordinary use of a feature, not working around one. It also reaches pages
+neither link-following nor a sitemap will — an archived page reachable only
+through search is exactly the kind a large site buries.
+
+Results are read from the **main content region**, not the whole page, so the
+site's navigation does not come back as hits. Asset links are excluded.
+
+It probes a handful of query shapes (`/?s=`, `/search?q=`, and a few others)
+and reports which one worked. Many sites have no usable search; that returns
+`ok: false` with a reason rather than throwing. This does **not** replace web
+search — it cannot tell you which sites exist.
+
 ### Mapping a site without crawling it
 
 `crawlSite` with `followLinks` has to FETCH every page to find the next one.
