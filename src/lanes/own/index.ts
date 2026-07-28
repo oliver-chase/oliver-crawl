@@ -510,6 +510,11 @@ async function archiveFallback(
  * same publisher, and flagging it adds review load for a non-event — which
  * matters because a consumer here is under a standing rule that per-source
  * review load must shrink.
+ *
+ * Tested through the ladder, not against a restatement of the rule:
+ * `tests/lanes/origin-moved.test.ts` drives all five shapes through a real
+ * crawl. An earlier version asserted a duplicated copy of the regex, which
+ * meant rewriting the detector left it green.
  */
 function isOffDomainRefusal(detail: string, requestedUrl: string): boolean {
   const found = detail.match(/https?:\/\/[^\s)]+/);

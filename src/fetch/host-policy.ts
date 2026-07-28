@@ -196,11 +196,11 @@ export function assertTargetEligible(target: CrawlTarget): void {
   validateBaseUrl(target);
 }
 
-// A host and its apex/www counterpart are the same site. This is the single
-// OFFDOMAIN-WWW-1: www. and apex are one site; anything else is not.
-// most common in-page link and redirect shape (example.com <-> www.example
-// .com); treating them as different hosts breaks crawling a site with its own
-// links. Nothing broader is allowed — a subdomain is NOT the same site.
+// OFFDOMAIN-WWW-1: a host and its apex/www counterpart are the same site.
+// This is the single most common in-page link and redirect shape
+// (example.com <-> www.example.com); treating them as different hosts breaks
+// crawling a site with its own links. Nothing broader is allowed — a subdomain
+// is NOT the same site.
 function hostsMatchAllowingWww(a: string, b: string): boolean {
   const norm = (host: string) => host.toLowerCase().replace(/^www\./, '');
   return a.toLowerCase() === b.toLowerCase() || norm(a) === norm(b);
