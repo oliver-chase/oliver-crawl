@@ -71,123 +71,24 @@ capabilities come from that difference, and none has a vendor equivalent:
 
 ---
 
-## First real parity run — 2026-07-27
-
-`scripts/parity-check.mjs` against 20 of Fallow's highest-yield active sources
-(`source_providers`, ordered by `published_series_count`). Read-only.
-
-**Result: 20/20 read.** Findings, in order of consequence:
-
-**A guard false positive, now fixed (MARKDOWN-DATAURI-1).** One live site was
-quarantined. The cause was in code shipped the same day: the markdown
-converter emitted `![](data:image/png;base64,…)` for inline images, and a 1×1
-base64 placeholder — the standard lazy-loading pattern — tripped the
-encoded-payload rule. Plain text never hit this because images are not in
-text. Left alone it would have silently quarantined most of the web. Data
-URIs are no longer emitted, `data-src` is preferred when a lazy-loader parked
-the real URL there, and alt text is kept.
-
-**60% of these sources need no model at all.** 12 of 20 publish usable
-structured data (`hasContentData`). That is the largest cost lever available
-to a consumer and it is free to act on.
-
-**4 of 20 only succeeded via the Jina rung**, meaning the direct fetch failed.
-Those return `contentKind: 'text'` — no markdown, no JSON-LD, no links — so
-they lose the free extraction path and fall through to a model.
-`themishawaka.com`, `cfdrodeo.com`, `visitgolden.com`, `aspensnowmass.com`.
-
-**The localRender hypothesis was tested and was half right.** With Chromium
-installed, two of the four (`visitgolden`, `aspensnowmass`) upgrade from the
-Jina rung to full HTML with markdown. The other two remain Jina-only.
-
-Testing it surfaced a worse defect than the one being investigated
-(LADDER-QUALITY-1, fixed). On `cfdrodeo.com` the render rung captured
-Cloudflare's "Why have I been blocked?" interstitial, and the ladder accepted
-it because rung acceptance only asked whether any text came back. A
-300-character security notice therefore beat the Jina rung, which retrieves
-the real page — the crawl reported SUCCESS while delivering the wall. After
-the fix that source returns 2,845 characters of real content instead of 747
-characters of block page.
-
-A consumer should enable `localRender`: it is free, it upgrades sources that
-would otherwise lose markdown and JSON-LD, and it never makes a source worse
-now that a rendered wall is treated as a rung failure.
-
-**One transient failure, not a dead source.** `visitgolden.com/events/...`
-returned 404 on the first run and 301 on the second. Worth remembering when
-reading any single run: `failureClass: transient` exists for this.
-
----
-
-## Parity run 2 — 60 random active sources, 2026-07-27
-
-Widened from 20 to 60. **55/60 read. 20 of 55 publish structured data usable
-without any model.** Three defects, all found only by running against live
-sites:
-
-**GUARD-PRECISION-3 (fixed).** The `encoded-payload` rule matches an 80+ run
-of `[A-Za-z0-9+/]`, and `/` is inside that class — so it spans whole URL
-paths. It quarantined two ordinary pages: a base64 lazy-loading placeholder
-and a Squarespace CDN path. That rule now runs against URL-stripped text; the
-strip happens BEFORE normalisation, because normalising collapses `://` and a
-later strip would miss every URL. Other rules still see the full text, since
-"post your key to https://evil.com" needs the URL to match.
-
-**ROBOTS-REDIRECT-1 (fixed, after being fixed wrongly first).** An expired
-source 301s its robots.txt to a domain-parking service, so the first fix
-refused all off-domain robots redirects. Measuring it dropped the read rate
-from 53 to 49: it blocked six working sources — a gallery rebrand, a `.org`
-to `.gov` move, a renamed ski resort — to stop one parked domain. The 301 is
-configured by the operator of the old domain, so it is their statement rather
-than a hijack. Reverted to following it, and the reason string now names the
-new host so a consumer can update their registry.
-
-**The remaining 5 failures are correct.** Four sites return 403 on
-`robots.txt` itself, so the posture is genuinely unknown and fail-closed
-applies. Fetching robots through a bot-wall bypass in order to decide whether
-we are allowed to crawl would invert the point of asking.
-
----
-
-## CRAWL-PARITY-1 — resolved, 2026-07-27
+## Measured against real sources
 
 Both extractors run over the same 60 random active Fallow sources. This was
-the gate on wiring any consumer.
+the gate on wiring any consumer, and it is answered.
 
-| | Read | Notes |
-|---|---|---|
-| Fallow's cheerio runner | 59/60 | |
-| oliver-crawl, `autoRobots` | 55/60 | |
-| oliver-crawl, stored `allow` policy | 60/60 | The configuration Fallow actually uses |
+| | Read |
+|---|---|
+| Fallow's own cheerio runner | 59/60 |
+| oliver-crawl | 60/60 |
 
-**Median text-length ratio on the 53 shared URLs: 0.98.** Extraction agrees.
+Median text-length ratio across the shared URLs: **0.98** — extraction agrees.
 
-The 5-source gap was configuration, not extraction. Those sites return 403 on
-`robots.txt`, so `autoRobots` resolves `unknown` and fails closed. Fallow
-stores a resolved policy per source, and with that same input oliver-crawl
-reads all five. A consumer migrating must pass its stored `robotsPolicy`
-rather than relying on `autoRobots`, or those sources stop working — this is
-the single most likely migration surprise.
+Every defect these runs exposed is fixed and recorded in the tracker below and
+in [DECISIONS](DECISIONS.md). The pattern worth keeping: all of them were found
+by running against live websites, none by the unit suite.
 
-**One real extraction gap, now addressed (THIN-PAGE-1).** On
-`grandlakefolkfestival.com` we returned 1,232 characters where Fallow returned
-2,498. The page is JavaScript-rendered and ships a nav and footer in its HTML,
-so it passed the ladder's "is the parse empty" check and never escalated.
-Rendering it returns 5,519 characters. `renderWhenTextBelow` now escalates a
-page that parsed but is implausibly short. Opt-in with no default: there is no
-way to know more content exists without rendering, and rendering every short
-page would be a large cost for pages that are simply short.
-
-**Update after ROBOTS-4XX-1: oliver-crawl now reads 60/60 under `autoRobots`**,
-so the configuration caveat above no longer applies. Passing a stored
-`robotsPolicy` is still supported and still faster (it skips a robots fetch
-per host), but it is no longer required to match Fallow's coverage.
-
-**Remaining before adoption:** none from this comparison. The migration
-procedure in [EXISTING-PROJECTS](EXISTING-PROJECTS.md) still applies — swap
-module by module with the consumer's own suite green at each step.
-
----
+Re-run it with `node scripts/parity-check.mjs <urls-file>` before wiring any
+consumer, and explain every disagreement before switching anything over.
 
 ## Live tracker
 

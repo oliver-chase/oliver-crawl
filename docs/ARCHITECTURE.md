@@ -179,6 +179,8 @@ src/
     hash.ts             cross-runtime SHA-256
     usage.ts            report a call, never throw
   fetch/
+    build-page.ts       HTML -> CrawlPage: the one place a page shape is made
+    http-mechanics.ts   body cap, safe redirect loop, Retry-After
     host-policy.ts      SSRF/DNS-rebinding — may we request this?
     robots-check.ts     robots.txt fetch + parse
     jina-fetch.ts       free keyless fallback
