@@ -75,23 +75,20 @@ type SearchProvider = {
 /**
  * Normalise provider output across the trust boundary.
  *
- * A search provider is UNTRUSTED in two separate ways, and both have to be
- * handled here because this is the only place every provider's output passes
- * through:
+ * A search provider is UNTRUSTED two ways, and both are handled here because
+ * this is the only place every provider's output passes through.
  *
- *   1. The `url` may not be a safe public http(s) URL. A `javascript:` href
- *      reaching a caller's UI is an XSS; a private-network URL reaching the
- *      fetcher is an SSRF.
- *   2. SEARCH-INJECTION-1 (found in audit): `title` and `snippet`
- *      are attacker-influenceable prose — a snippet is usually just the target
- *      page's own meta description. Crawled page text has always gone through
- *      the injection guard, but these did not, so the identical payload was
- *      blocked when we fetched the page and waved through when a search engine
- *      quoted it. These strings are documented as feeding prompts, which makes
- *      that the shorter path to the model, not the longer one.
+ * The `url` may not be a safe public http(s) URL — a `javascript:` href reaching
+ * a caller's UI is an XSS, a private-network URL reaching the fetcher is an SSRF.
  *
- * A tripped snippet drops the prose but KEEPS the url: the url is separately
- * validated and still useful, and throwing away a real result because its meta
+ * SEARCH-INJECTION-1: `title` and `snippet` are attacker-influenceable prose, a
+ * snippet usually being the target page's own meta description. Crawled page text
+ * always went through the injection guard but these did not, so an identical
+ * payload was blocked when we fetched the page and waved through when a search
+ * engine quoted it — the shorter path to the model, not the longer one.
+ *
+ * A tripped snippet drops the prose but KEEPS the url, which is separately
+ * validated and still useful. Discarding a real result because its meta
  * description was hostile would cost accuracy for no security gain.
  */
 function normalizeResults(raw: Array<{ title?: string; snippet?: string; url?: string }>, maxResults: number): SearchResult[] {

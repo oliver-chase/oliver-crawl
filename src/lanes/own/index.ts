@@ -1,39 +1,18 @@
 // ─── LANE 1: the own lane ───────────────────────────────────────────────────
 //
-// Our crawler. No API keys, no vendor accounts, no per-call cost — it fetches
-// with the platform's own fetch, parses with cheerio, and applies the guards
-// in this package. This is the lane that makes the package worth having:
-// everything a vendor charges for on a plain HTML page, done here for free,
-// with controls a vendor does not offer at all.
+// Our crawler. No API keys, no vendor accounts, no per-call cost — platform
+// fetch, cheerio parsing, and this package's own guards. It is what makes the
+// package worth having: everything a vendor charges for on a plain HTML page,
+// done here for free, with controls a vendor does not offer at all.
 //
-// What runs, in order, and why it stops early when it can:
+// Every rung in this lane is free and needs no credentials, except the remote
+// render service, which runs on infrastructure YOU control — that is why it
+// sits here rather than in the vendor lane. Falling through to the vendor lane
+// happens only when the caller explicitly asked for it.
 //
-//   1. Policy      — eligibility, same-site, SSRF/DNS-rebinding (host-policy)
-//   2. Conditional — If-None-Match / If-Modified-Since. A 304 ends the crawl
-//                    for free, which is the cheapest possible outcome and the
-//                    common one for a page checked on a schedule.
-//   3. Fetch       — with a real UA, redirect following re-validated per hop
-//                    (a redirect is an attacker-controllable input).
-//   4. Parse       — visible text, title, JSON-LD, same-site links, outbound
-//                    hosts; SPA recovery from inline script payloads when the
-//                    served HTML is a JS shell.
-//   5. Guard       — prompt-injection sanitising BEFORE the text is returned,
-//                    so an LLM downstream never sees unsanitised page content.
-//   6. Hash        — full-body and content-region digests, so the caller can
-//                    tell a real content change from a nav/footer tweak.
-//   7. Local render — FREE local headless Chromium (config.localRender),
-//                    for pages whose content only exists after JavaScript
-//                    runs. Needs `npx playwright install chromium` once on
-//                    the machine; absent, it degrades silently.
-//   8. Remote render — YOUR render service (config.browserRender), for
-//                    environments that cannot run a browser themselves.
-//   9. Jina        — free, keyless last resort for pages the direct fetch
-//                    cannot reach (bot walls, JS-only, moved hosts).
-//
-// Rungs 1-7 cost nothing and need no credentials. Rung 8 runs on
-// infrastructure you control (which is why it is in THIS lane and not the
-// vendor lane). Rung 9 is a free public service. If this lane fails, the
-// caller may fall through to the vendor lane — but only if it asked for it.
+// docs/LANES.md is the rung table and the reasoning behind the order. Keep it
+// there, not here: `freeFallbackLadder` below is the single definition of the
+// order, and a second copy in this header would drift from it.
 
 import * as cheerio from 'cheerio';
 import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js';
@@ -59,35 +38,23 @@ import type { ResolvedConfig } from '../../core/config.js';
 import type { CrawlOptions, CrawlPage, CrawlResult, CrawlTarget } from '../../core/types.js';
 
 
-// CRAWL-HARDEN-1: bytes read from any origin are capped (config.limits
-// .maxBodyBytes, default 2 MB). Without a cap, a hostile or misconfigured
-// origin streaming an endless body ties up memory until the process dies —
-// response.text() reads EVERYTHING before returning. The sanitiser's char
-// cap protects the LLM; this protects the crawler itself.
-
-// CRAWL-ROBOTS-1: robots.txt was ported but nothing ever CALLED it — the lane
-// trusted whatever robotsPolicy the caller set, so a "governed crawler" was
-// only as governed as the consumer's bookkeeping. With config.autoRobots on,
-// an 'unknown' posture is resolved for real, and cached per HOST so it costs
-// one robots.txt request per host rather than one per page.
+// CRAWL-ROBOTS-1: robots.txt was ported but nothing ever CALLED it, so a
+// "governed crawler" was only as governed as the consumer's bookkeeping. With
+// config.autoRobots on, an 'unknown' posture is resolved for real and cached per
+// HOST — one robots.txt request per host, not per page.
 //
-// ROBOTS-TTL-1 (found in audit): that cache had no expiry at all,
-// and the comment here claimed "long-lived processes never need this." Exactly
-// backwards — a long-lived process is the only place it matters, and it broke
-// in both directions:
+// ROBOTS-TTL-1: that cache had no expiry, and this comment once claimed
+// long-lived processes never needed one — exactly backwards, since a long-lived
+// process is the only place it matters. It broke both ways. A site ADDING a
+// Disallow after we cached 'allow' kept being crawled for the life of the
+// process, which is the one thing robots compliance exists to prevent. Worse, a
+// transient failure cached 'unknown' permanently, and since unknown fails closed
+// a single network blip meant that host never crawled again, silently. Fallow hit
+// exactly this: 125 sources sat fail-closed for four days.
 //
-//   1. A site that ADDS a Disallow after we cached 'allow' kept being crawled
-//      for the life of the process. Crawling against an explicit refusal is
-//      the one thing robots compliance exists to prevent.
-//   2. Worse, a transient failure cached 'unknown' PERMANENTLY. Since unknown
-//      fails closed, a single network blip meant that host never crawled
-//      again — silently, with no error to notice. Fallow hit precisely this
-//      shape: 125 sources sat fail-closed for four days before a human
-//      spotted it (see its robots-recheck-sweep.ts).
-//
-// The two TTLs are deliberately asymmetric. A successful answer is stable and
-// cheap to trust for hours. A failure must be retried soon, because the cost
-// of holding it is a host that silently stops working.
+// The two TTLs are deliberately asymmetric: a successful answer is cheap to
+// trust for hours, a failure must be retried soon, because the cost of holding
+// it is a host that silently stops working.
 export const ROBOTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — resolved posture
 export const ROBOTS_FAILURE_TTL_MS = 5 * 60 * 1000; //     5m — unresolved, retry soon
 

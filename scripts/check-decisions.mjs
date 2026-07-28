@@ -1,23 +1,17 @@
 #!/usr/bin/env node
 // ─── Decision-record integrity gate ─────────────────────────────────────────
 //
-// This codebase records WHY in the code: roughly 40% of non-blank lines in
-// src/ are comments, and most of them explain a decision by naming the defect
-// it prevents — MARKDOWN-DATAURI-1, ROBOTS-4XX-1, and so on.
+// This codebase records WHY in the code, naming the defect a decision prevents
+// — MARKDOWN-DATAURI-1, ROBOTS-4XX-1, and so on. That only stays durable if the
+// records stay honest, and three things rot quietly without a check: a decision
+// written down but never tested, so the next refactor undoes it and nothing goes
+// red; a decision deleted from the code whose test and docs keep describing it;
+// and an ID invented in a test or doc that no code ever referenced, which reads
+// as authoritative and is fiction.
 //
-// That is only durable if the records stay honest. Left unchecked, three
-// things rot quietly:
-//
-//   1. A decision is written into the code and never tested, so the next
-//      refactor silently undoes it and nothing goes red.
-//   2. A decision is removed from the code but its test and its docs keep
-//      describing behaviour that no longer exists.
-//   3. An ID is invented in a test or a doc that no code ever referenced,
-//      which reads as authoritative and is fiction.
-//
-// This gate makes each of those fail the build instead of aging into
-// folklore. It is deliberately mechanical: it checks that the records line
-// up, never that the reasoning is good.
+// This fails the build on each instead of letting them age into folklore.
+// Deliberately mechanical: it checks the records line up, never that the
+// reasoning is good.
 //
 //   node scripts/check-decisions.mjs
 //   node scripts/check-decisions.mjs --list   # what is recorded, and where

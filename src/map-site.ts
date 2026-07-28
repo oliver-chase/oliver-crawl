@@ -1,25 +1,22 @@
 // ─── What pages does this site have? ────────────────────────────────────────
 //
-// PARITY-MAP-1: Firecrawl's `/map` returns hundreds of a
-// domain's URLs in roughly one request. Answering the same question here
-// meant `crawlSite` with `followLinks`, which FETCHES every page in order to
-// find the next — minutes and hundreds of requests to learn something the
-// site mostly already publishes.
+// PARITY-MAP-1: Firecrawl's `/map` returns hundreds of a domain's URLs in about
+// one request. Answering the same question here meant `crawlSite` with
+// `followLinks`, which FETCHES every page to find the next — minutes and hundreds
+// of requests for something the site mostly already publishes.
 //
-// This asks the cheap sources only:
+// So this reads only the cheap sources: /sitemap.xml and one level of index
+// files, RSS/Atom/ICS feeds linked from the homepage, and the homepage's own
+// links. Exactly one page body is fetched — the homepage. Everything else is a
+// listing document.
 //
-//   1. /sitemap.xml (and one level of index files) — the site's own list
-//   2. RSS/Atom/ICS feeds linked from the homepage
-//   3. the homepage's own links
+// That is cheap enough to run BEFORE deciding what a real crawl should target,
+// which turns `maxPages` into a budget you spend deliberately rather than one the
+// queue order spends for you.
 //
-// One page body is fetched, total: the homepage. Everything else is a
-// listing document. That is cheap enough to run BEFORE deciding what a real
-// crawl should target — which turns `maxPages` into a budget you spend
-// deliberately, instead of one the queue order spends for you.
-//
-// Deliberately NOT a crawl: it does not follow links recursively, does not
-// return page content, and does not respect `maxDepth` because there is no
-// depth. If you want content, feed the result to crawlSite as `seeds`.
+// Deliberately NOT a crawl: no recursive link-following, no page content, and no
+// `maxDepth` because there is no depth. For content, feed the result to crawlSite
+// as `seeds`.
 
 import type { Crawler } from './index.js';
 import type { CrawlTarget } from './core/types.js';

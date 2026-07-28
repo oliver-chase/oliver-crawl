@@ -27,8 +27,14 @@ export function parseRetryAfter(value: string | null): number | undefined {
   return undefined;
 }
 
-/** Read a response body up to `maxBytes`, truncating (not failing) beyond it —
- *  the readable prefix of a huge page is still worth extracting from. */
+/**
+ * CRAWL-HARDEN-1: read a response body up to `maxBytes`, truncating rather than
+ * failing beyond it — the readable prefix of a huge page is still worth
+ * extracting from. The cap itself is the point: `response.text()` reads
+ * EVERYTHING before returning, so an endless body from a hostile or
+ * misconfigured origin ties up memory until the process dies. The sanitiser's
+ * char cap protects the LLM; this protects the crawler.
+ */
 export async function readBodyCapped(response: Response, maxBytes: number): Promise<string> {
   const contentType = response.headers.get('content-type');
   const reader = response.body?.getReader();
