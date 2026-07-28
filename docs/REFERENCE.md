@@ -50,17 +50,68 @@ if (result.ok && !result.notModified) {
   page.jsonLd;    // structured data, free and deterministic — no LLM needed
   page.links;     // same-site links, for pagination or detail pages
   page.httpEtag;  // pass back next time to get a free 304
+
+  // What the guard did to this page, as distinct from whether it refused it.
+  page.truncated;       // text or markdown hit maxTextChars — the tail was never seen
+  page.redactionCount;  // >0 means an injection pattern was found and masked
 }
 ```
+
+Neither is recoverable afterwards, which is why they are reported: a truncated
+page is one whose end you do not have, and a non-zero `redactionCount` means the
+text differs from what the origin served. Both change how far you should trust
+an extraction taken from it.
 
 Failure is a **value, not an exception**:
 
 ```ts
 if (!result.ok) {
-  result.reason;  // 'blocked' | 'unreachable' | 'empty' | 'quarantined' | 'no_lane_available'
-  result.detail;  // human-readable explanation
+  result.reason;        // 'blocked' | 'unreachable' | 'empty' | 'quarantined' | 'no_lane_available'
+  result.detail;        // human-readable explanation
+  result.failureClass;  // 'structural' | 'transient' — is retrying worth it?
+  result.quarantine;    // present ONLY when reason === 'quarantined'
 }
 ```
+
+### When a page is quarantined
+
+A quarantine is a decision, not a fetch failure, and the difference matters if
+you are the one who has to explain a missing page.
+
+`result.quarantine` carries what tripped the guard and enough of the page to
+review it — `signals`, `text`, and `title`. Without it a quarantine is
+indistinguishable from a timeout at your call site, which leaves you dropping
+the page silently. That is the outcome quarantining exists to prevent, so the
+evidence travels with the refusal.
+
+```ts
+if (!result.ok && result.reason === 'quarantined') {
+  result.quarantine.signals;  // which rules fired, with the matched text
+  result.quarantine.text;     // SANITIZED page text — redactions already applied
+  result.quarantine.title;
+}
+```
+
+The text is sanitized, never raw. A reviewer needs to see what the page said,
+not be handed a working instruction to paste into a model.
+
+### When the origin has moved
+
+`result.originMoved` is present on a **successful** crawl when the direct fetch
+was refused for leaving the site and a fallback rung served the page anyway.
+
+```ts
+if (result.ok && result.originMoved) {
+  result.originMoved.refusal;   // the guard message, naming the new host
+  result.originMoved.servedBy;  // 'jina' | 'archive' | the render rung
+}
+```
+
+This is what a sold or parked domain looks like: the redirect is refused, a
+fallback follows it from its own IPs, and the new owner's content comes back
+under your URL. Refusing outright would be wrong — an off-domain redirect is
+routinely a real migration — so the crawl succeeds and tells you, rather than
+deciding for you. Absent on an ordinary crawl; its presence is the signal.
 
 ### Both lanes
 

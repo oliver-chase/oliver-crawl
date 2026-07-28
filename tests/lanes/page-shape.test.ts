@@ -95,6 +95,45 @@ function serve(handler: (url: string) => Response) {
 
 const html = (body: string) => new Response(body, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
 
+describe('GUARD-TELEMETRY-1 reports real values, not just the right types', () => {
+  // page-shape asserted `typeof` only, so hardcoding redactionCount: 0 and
+  // truncated: false — making the HTML lane tell the same lie the text rungs
+  // told — left all tests green. A type assertion on a telemetry field proves
+  // the field exists, which is not what anyone relies on it for.
+
+  test('a capped page reports truncated', async () => {
+    serve(() => html(`<html><head><title>Cal</title></head><body><main><p>${'Real venue copy about the show. '.repeat(200)}</p></main></body></html>`));
+    const r = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
+      target, 'https://site.example.com/x', { maxTextChars: 500 },
+    );
+    if (!r.ok || r.notModified) throw new Error('expected pages');
+    expect(r.pages[0]!.truncated).toBe(true);
+    expect(r.pages[0]!.text).toContain('[TRUNCATED]');
+  });
+
+  test('an ordinary page reports NOT truncated', async () => {
+    serve(() => html('<html><head><title>Cal</title></head><body><main><p>A short listing for Saturday.</p></main></body></html>'));
+    const r = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
+      target, 'https://site.example.com/x',
+    );
+    if (!r.ok || r.notModified) throw new Error('expected pages');
+    expect(r.pages[0]!.truncated).toBe(false);
+    expect(r.pages[0]!.redactionCount).toBe(0);
+  });
+
+  test('markdown truncation counts, not only text', async () => {
+    // Markdown is capped independently and is the field the README tells
+    // consumers to feed a model. A link-heavy page grows markdown past text.
+    const links = Array.from({ length: 400 }, (_, i) => `<a href="/e/${i}">Event number ${i} at the venue</a>`).join(' ');
+    serve(() => html(`<html><head><title>Cal</title></head><body><main>${links}</main></body></html>`));
+    const r = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
+      target, 'https://site.example.com/x', { maxTextChars: 4000 },
+    );
+    if (!r.ok || r.notModified) throw new Error('expected pages');
+    expect(r.pages[0]!.truncated).toBe(true);
+  });
+});
+
 describe('every rung returns a complete page', () => {
   test('fetch (HTML)', async () => {
     serve(() => html(HTML));

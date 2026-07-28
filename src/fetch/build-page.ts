@@ -142,8 +142,12 @@ export async function buildPage(input: {
     likelyEmptyState: looksLikeEmptyState(sanitizedMarkdown.text || sanitized.text),
     candidateContentImages: findContentImages($, input.url),
     extractorVersion: EXTRACTOR_VERSION,
-    redactionCount: sanitized.redactionCount,
-    truncated: sanitized.truncated,
+    // BOTH fields, because an HTML page produces two. `markdown` is capped
+    // independently and is the field the README tells consumers to feed a
+    // model — reporting only the text cap left a page whose markdown ended in
+    // [TRUNCATED] claiming to be complete.
+    redactionCount: sanitized.redactionCount + sanitizedMarkdown.redactionCount,
+    truncated: sanitized.truncated || sanitizedMarkdown.truncated,
     structuredData: summarizeStructuredData(jsonLd),
     title,
     ...(input.includeHtml ? { html: input.html } : {}),

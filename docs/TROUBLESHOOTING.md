@@ -76,7 +76,11 @@ Three causes, cheapest to check first.
 
 The prompt-injection guard found instructions aimed at whatever AI reads the page, and the page is withheld rather than returned.
 
-This is not always an attack. A page quoting an injection payload in an article trips the same patterns. Check `result.detail` for which signal fired; if it is a false positive on ordinary copy, that is a bug worth reporting rather than a setting to relax.
+This is not always an attack. A page quoting an injection payload in an article trips the same patterns.
+
+`result.quarantine.signals` names which rules fired and shows the text that matched each one — `result.detail` is a fixed sentence and names none of them. `result.quarantine.text` is the sanitized page, so you can raise a review task instead of dropping the page silently.
+
+If a rule fires on ordinary copy, that is a bug worth reporting rather than a setting to relax.
 
 ---
 
