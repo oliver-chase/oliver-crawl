@@ -1,25 +1,14 @@
 // ─── Is this failure worth retrying? ────────────────────────────────────────
 //
-// CRAWL-DEGRADE-1: the package reported per-crawl outcomes and
-// left every consumer to re-invent the same triage from raw `reason` strings
-// and prose `detail` text — and to get it wrong, because the interesting
-// distinction is not in `reason` at all.
-//
-// `unreachable` covers both a DNS blip that will be gone in a minute and a
-// domain that no longer exists. `empty` covers both a 404 and a page that
-// happened to render nothing today. A consumer deciding "retry tonight" vs
-// "tell a human this source is dead" needs those separated, and only this
-// package has the context to judge it.
-//
-// One bit, deliberately:
+// CRAWL-DEGRADE-1: the useful distinction is not in `reason`. `unreachable`
+// covers both a DNS blip and a domain that no longer exists; `empty` covers
+// both a 404 and a page that rendered nothing today.
 //
 //   transient  — the world might differ next time. Retry on your schedule.
-//   structural — retrying changes nothing until something is fixed. A human,
-//                or a config change, is required.
+//   structural — retrying changes nothing until something is fixed.
 //
-// A consumer counting consecutive `structural` failures per source has what
-// it needs to disable a dead one automatically; counting `transient` ones
-// tells it nothing except that the internet is the internet.
+// A consumer counting consecutive `structural` failures can retire a dead
+// source automatically. Counting `transient` ones tells it nothing.
 
 import type { CrawlFailureReason } from './types.js';
 

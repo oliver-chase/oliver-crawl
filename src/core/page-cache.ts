@@ -1,21 +1,11 @@
 // ─── In-process page cache ──────────────────────────────────────────────────
 //
-// Stops the same URL being fetched twice in quick succession by the same
-// process.
+// Collapses repeat requests for the same URL inside a short window, so a run
+// that reaches one page from several links pays for it once.
 //
-// crawlSite dedupes within ONE run, but that is the only protection there
-// was: two runs, or two independent callers, or a detail page reachable from
-// two listing pages, all re-fetched. For an origin that looks like a repeat
-// visitor for no reason; for the caller it is latency and bandwidth spent to
-// learn something already known.
-//
-// Deliberately small in scope:
-//   - in-memory only, so it dies with the process (a persistent cache is a
-//     consumer's decision, and they already have `validators` for that)
-//   - short TTL, because it is a stampede guard, not a content store
-//   - OFF by default — a cache that turns itself on is a cache that serves a
-//     stale page to someone who did not ask for one
-//   - only successful, non-304 results are cached; failures must be retryable
+// Keyed on url + lane set: a result served by the free lane is not
+// interchangeable with one a vendor produced. Only successful non-304 results
+// are stored — caching a failure would turn a blip into a persistent one.
 
 import type { CrawlResult } from './types.js';
 

@@ -58,7 +58,7 @@ type RenderPage = {
 };
 
 /**
- * PARITY-ACTIONS-1 (2026-07-27): steps to run before the page is captured.
+ * PARITY-ACTIONS-1: steps to run before the page is captured.
  *
  * The case this exists for is a "Load more" button or an infinite-scroll
  * listing, where the first render genuinely does not contain the content and
@@ -79,25 +79,6 @@ export const MAX_ACTION_TOTAL_MS = 20_000;
 const MAX_SINGLE_WAIT_MS = 5_000;
 const ACTION_STEP_TIMEOUT_MS = 5_000;
 
-/**
- * Run caller-supplied actions against an already-loaded page.
- *
- * Every limit here exists because these are instructions driving a browser on
- * our infrastructure:
- *
- *   - the action COUNT and total elapsed time are capped, so a long list
- *     cannot hold a browser open indefinitely;
- *   - a failed step is swallowed rather than fatal — a "Load more" button that
- *     is absent because everything already loaded is the normal end state, not
- *     an error;
- *   - navigation is checked after every step and the run stops if the page
- *     left its origin. A click can navigate, and an action that walked the
- *     browser to another site would turn this into a request forgery with a
- *     real browser behind it.
- *
- * Actions must never be derived from crawled page content. That would let a
- * page we fetched script the browser that fetched it.
- */
 /** Exported for tests: the security-relevant logic is here, and the
  *  playwright import seam is deliberately invisible to bundlers, so this
  *  cannot be reached by mocking the module. */

@@ -1,24 +1,13 @@
-// ─── What structured data does this page actually carry? ────────────────────
+// ─── What structured data does this page carry? ─────────────────────────────
 //
-// JSONLD-SIGNAL-1: the single largest cost lever a crawl package
-// has over its consumer's bill.
+// JSONLD-SIGNAL-1: the expensive part of a crawl pipeline is the model call
+// after it, and a page publishing complete schema.org data needs no model at
+// all — reading it is free, exact, and cannot hallucinate.
 //
-// The expensive part of a crawl pipeline is not the crawl — it is the LLM
-// extraction afterwards. A page that publishes complete schema.org data needs
-// NO model at all: reading it is free, exact, and can't hallucinate. A page
-// that publishes nothing needs one.
-//
-// We already returned `jsonLd: unknown[]`, and every consumer then wrote the
-// same awkward loop to answer "is any of this actually useful?" — because the
-// majority of JSON-LD in the wild is site furniture. A typical venue page
-// emits `WebSite`, `Organization` and `BreadcrumbList` and not one word about
-// the events on it. A consumer that checks `jsonLd.length > 0` and skips the
-// LLM on that page silently extracts nothing.
-//
-// So the package answers the generic half of the question — WHAT is here, and
-// is any of it about the page's content rather than about the site — and the
-// caller keeps the domain half, which is whether those particular fields are
-// enough for them. That is the same split used everywhere else here.
+// `jsonLd.length > 0` is a misleading test, because most structured data in
+// the wild is site furniture: a retailer emits WebSite, Organization and
+// BreadcrumbList on pages with no Product on them. This reports what is
+// actually about the CONTENT, and leaves domain sufficiency to the caller.
 
 /**
  * schema.org types that describe the SITE or the page's furniture rather than

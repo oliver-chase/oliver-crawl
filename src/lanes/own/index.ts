@@ -71,7 +71,7 @@ import type { CrawlOptions, CrawlPage, CrawlResult, CrawlTarget } from '../../co
 // an 'unknown' posture is resolved for real, and cached per HOST so it costs
 // one robots.txt request per host rather than one per page.
 //
-// ROBOTS-TTL-1 (2026-07-27, found in audit): that cache had no expiry at all,
+// ROBOTS-TTL-1 (found in audit): that cache had no expiry at all,
 // and the comment here claimed "long-lived processes never need this." Exactly
 // backwards — a long-lived process is the only place it matters, and it broke
 // in both directions:
@@ -438,25 +438,6 @@ export async function crawlWithOwnLane(
 }
 
 /**
- * LANE-EXHAUST-1 (2026-07-27, found in audit): the remaining FREE rungs, in
- * order, as one function.
- *
- * Before this, a failed fetch (network error, or an HTTP status like a 403
- * bot wall) jumped straight to Jina and never tried rendering at all — while
- * only the "fetched but empty" path tried the render rungs. That is exactly
- * backwards for the most common blocking case: a 403 is precisely where a
- * real headless browser, with a real TLS fingerprint and real headers, tends
- * to succeed where a bare fetch cannot.
- *
- * The consequence was not just a missed page: skipping a free rung makes the
- * crawl fall through to the PAID lane sooner. Lane 1 must be exhausted before
- * lane 2 is reached, and defining the order in one place is what keeps that
- * true as rungs are added.
- *
- * Order: free local Chromium (your CPU) -> your own render service -> Jina
- * (free public). Returns null only when every rung declined.
- */
-/**
  * WAYBACK-RUNG-1: the archive rung, gated hard.
  *
  * Only for an explicit `allow` posture, and only after every live rung has
@@ -514,6 +495,13 @@ async function archiveFallback(
   return { ok: true, pages: [page] };
 }
 
+/**
+ * The remaining FREE rungs, in one order defined once.
+ *
+ * LANE-EXHAUST-1: local Chromium -> your render service -> Jina. A skipped
+ * free rung pushes the crawl into the paid lane sooner than it needed to go,
+ * so every failure path routes through here rather than choosing its own.
+ */
 async function freeFallbackLadder(
   url: string,
   config: ResolvedConfig,
@@ -526,7 +514,7 @@ async function freeFallbackLadder(
   const rendered = await renderFallback(url, config, options, started);
   if (rendered) return rendered;
 
-  // JINA-CREDENTIAL-1 (2026-07-27, found in audit): the Jina rung is a PUBLIC
+  // JINA-CREDENTIAL-1 (found in audit): the Jina rung is a PUBLIC
   // third-party proxy — we hand it a URL and it fetches the page itself. For a
   // target the caller gave credentials for (a members-only calendar, a partner
   // feed), that is all downside:
@@ -696,12 +684,6 @@ async function jinaFallback(
   }
 }
 
-/**
- * Fetch with redirects followed MANUALLY, re-validating each hop. Automatic
- * redirect following would let an origin bounce the crawler to an internal
- * address after the initial checks passed — the redirect target is
- * attacker-controlled input and gets the same guard as the first URL.
- */
 /** Headers the crawler owns; a target cannot override them. */
 const RESERVED_HEADERS = new Set(['host', 'content-length', 'user-agent', 'accept-encoding']);
 

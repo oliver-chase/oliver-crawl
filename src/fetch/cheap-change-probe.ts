@@ -1,30 +1,14 @@
-// ─── C10: cheap change-detection gate ahead of paid crawls ─────────────────
+// ─── Cheap pre-fetch change probe ───────────────────────────────────────────
 //
-// The `html` lane already skips its LLM extraction cost on an unchanged-page
-// hash (source-reference-upsert.ts's findUnchangedUrls) — but that check
-// happens AFTER the (cheap) Cheerio fetch. The `browser` lane is different:
-// the EXPENSIVE step (a paid headless render) is the fetch itself, so the
-// only way to save money is to check BEFORE it, not after.
+// A HEAD-shaped request that reads ETag/Last-Modified/Content-Length without
+// pulling the body, so an unchanged page can be skipped before it costs a
+// full fetch.
 //
-// EPIC-1 S5 already found that hashing a JS-hydrated page's plain-fetched
-// PRE-RENDER shell is unsound — the shell can be byte-identical while the
-// rendered content changed (that's the whole reason a source is on the
-// browser lane). So this probe prefers a server-declared strong signal
-// (ETag / Last-Modified) and treats a body hash as a weaker, best-effort
-// fallback used ONLY when neither header is present on either side. Any
-// probe failure (network error, timeout, non-2xx, a redirect) returns
-// null — callers must treat null as "unknown," never as "unchanged."
-// Failing open (crawl anyway) costs a render fee; failing closed (skip
-// anyway) can silently stop refreshing a source forever. Only the former
-// is acceptable.
-//
-// NOT wired into the `instagram` lane (code review, 2026-07-11): Instagram
-// serves a largely static/generic shell to unauthenticated requests — the
-// whole reason that lane pays for Apify instead of fetching directly — so
-// its ETag/Last-Modified/body-hash would stay identical regardless of real
-// new posts, guaranteeing exactly the fail-closed-forever failure this
-// module exists to avoid. See lib/ingestion/ingestion-worker.ts's
-// instagram-lane block for the full reasoning.
+// Redirects are followed MANUALLY, re-validating each hop: `follow` would
+// fetch every intermediate before any host on the chain was checked. Bailing
+// on redirects instead — the original behaviour — returned null for every
+// redirecting source, so their validators were never read and each paid for a
+// full re-crawl every tick.
 
 import {
   assertHostResolvesToPublicAddress,

@@ -213,13 +213,6 @@ function isTerminal(reason: string): boolean {
 
 
 /**
- * Crawl a target across its seeds.
- *
- * Takes a `Crawler` rather than a config so lane selection, budgeting and
- * usage reporting all come along for free — this orchestrator never needs to
- * know which lane served a page.
- */
-/**
  * Decide which URLs a run starts from, and record what the sitemap told us.
  *
  * Pulled out of `crawlSite` because it answers a question the main loop does
@@ -273,6 +266,13 @@ async function resolveSeeds(
   return { seeds: fresh.map((entry) => entry.url), lastmod, skippedByLastmod };
 }
 
+/**
+ * Crawl a whole site: seeds, discovery, budgets, dedup and resume.
+ *
+ * Takes a `Crawler` rather than a config so lane selection, budgeting and
+ * usage reporting come along for free — this orchestrator never needs to know
+ * which lane served a page.
+ */
 export async function crawlSite(
   crawler: Crawler,
   target: CrawlTarget,
