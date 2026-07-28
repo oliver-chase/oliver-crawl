@@ -118,11 +118,23 @@ for pattern in "${PII_PATTERNS[@]}"; do
       #
       # Stripped at MATCH level, not line level. Filtering whole grep output
       # lines let anything sharing a line with an exempt string escape EVERY
-      # pattern — including /Users/ home paths, which have nothing to do with
-      # lockfiles. Removing only the exempt substring leaves the rest of the
-      # line to match.
-      if sed -E 's#git\+ssh://git@github\.com/[^"[:space:],]*##g; s#git@github\.com:[^"[:space:],]*##g' "$file" 2>/dev/null | grep -nE -e "$pattern" >/dev/null; then
-        sed -E 's#git\+ssh://git@github\.com/[^"[:space:],]*##g; s#git@github\.com:[^"[:space:],]*##g' "$file" 2>/dev/null | grep -nE -e "$pattern"
+      # pattern, including /Users/ home paths that have nothing to do with
+      # lockfiles.
+      #
+      # The class is POSITIVE and bounded to owner/repo, which is all a GitHub
+      # remote is. A negative class terminated on only three characters, so the
+      # strip ran past the repo name and ate whatever followed — fifteen
+      # separators defeated it, e.g. `git@github.com:a/b.git;victim@example.org`
+      # stripped to nothing and committed clean.
+      #
+      # The `#<sha>` fragment is deliberately NOT consumed: eating it let
+      # `...git#victim@example.org` escape, because `victim` is a legal tag
+      # name, and a SHA matches no PII pattern anyway.
+      #
+      # The left boundary's back-reference closes the prefix attack, so
+      # `notgit@github.com:a/b.git` no longer anchors the exemption.
+      if sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' "$file" 2>/dev/null | grep -nE -e "$pattern" >/dev/null; then
+        sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' "$file" 2>/dev/null | grep -nE -e "$pattern"
         echo "  BLOCKED: $file contains PII matching pattern: $pattern"
         VIOLATIONS=$((VIOLATIONS + 1))
       fi
