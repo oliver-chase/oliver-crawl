@@ -123,6 +123,7 @@ function scan(text, hashStyle) {
   lines.forEach((raw, i) => {
     const line = raw.trim();
     let isComment = false;
+    let endsBlock = false;
 
     if (hashStyle) {
       const wasOpen = docQuote !== null;
@@ -136,7 +137,11 @@ function scan(text, hashStyle) {
       if (line && !isComment && !line.startsWith('#')) seenCode = true;
     } else if (inBlock) {
       isComment = true;
-      if (line.includes('*/')) inBlock = false;
+      // A `*/` ends the comment, so whatever follows is a different one. Without
+      // this, a function's JSDoc and the `//` block introducing the NEXT function
+      // counted as a single essay and failed on their sum. Same reasoning as the
+      // `/*` case below: two comments about two things are not one narrative.
+      if (line.includes('*/')) { inBlock = false; endsBlock = true; }
     } else if (inTemplate) {
       // A template literal is data. `/*` inside one used to open a comment block
       // that never closed, so every line to the end of the file counted as one
@@ -150,6 +155,7 @@ function scan(text, hashStyle) {
       close();
       isComment = true;
       if (!line.includes('*/')) inBlock = true;
+      else endsBlock = true;
     } else if (line.startsWith('//') || line.startsWith('*')) {
       isComment = true;
     }
@@ -169,6 +175,7 @@ function scan(text, hashStyle) {
     } else if (line !== '') {
       close();
     }
+    if (endsBlock) close();
   });
   close();
   // Non-blank denominator. Counting blank lines understates density by roughly
