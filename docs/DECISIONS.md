@@ -62,6 +62,7 @@ moment one changes.
 | `PARITY-MAP-1` | List a site's URLs without crawling it. One page body fetched. | `map-site.ts` | `lanes/map-site.test.ts` |
 | `PARITY-READABILITY-1` | Paragraphs vote for their parent when no semantic tag exists. Guardrails because a wrong pick loses content. | `extract/html-to-markdown.ts` | `extract/html-to-markdown.test.ts` |
 | `READABILITY-CHROME-1` | Scoring ran before chrome removal, so a prose-heavy sidebar could win and the later strip could not undo it. | `extract/html-to-markdown.ts` | `extract/html-to-markdown.test.ts` |
+| `RENDER-REDIRECT-1` | page.goto follows the whole redirect chain inside Chromium and the caller builds the page with the URL it ASKED for, so an origin could bounce this rung to a private address and have that content returned under the original URL. The landing host is now re-checked, and again after any browser actions. | `fetch/local-render.ts` | `fetch/render-redirect.test.ts` |
 | `ROBOTS-4XX-1` | RFC 9309: a 4xx means robots.txt is UNAVAILABLE and crawling is permitted. 429 excluded. | `fetch/robots-check.ts` | `fetch/robots-check.test.ts` |
 | `ROBOTS-DELAY-1` | Honour the site's published Crawl-delay as a floor. Reading robots for permission and ignoring its pacing takes half the file. | `fetch/robots-check.ts` | `fetch/crawl-delay.test.ts` |
 | `ROBOTS-REDIRECT-1` | Off-domain robots redirects are FOLLOWED. Refusing them cost six working sources to stop one parked domain. | `fetch/robots-check.ts` | `fetch/robots-redirect.test.ts` |

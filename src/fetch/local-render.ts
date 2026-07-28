@@ -1,29 +1,25 @@
 // ─── Local Chromium render rung (free) ──────────────────────────────────────
 //
-// Renders a JS-only page with a LOCAL headless Chromium — no service, no
-// vendor, no per-call cost. On any machine that has run
-// `npx playwright install chromium` once, this makes the whole render story
-// free; the remote render service and the vendor lane become fallbacks for
-// environments that can't run a browser (serverless/edge).
+// Renders a JS-only page with a LOCAL headless Chromium — no service, no vendor,
+// no per-call cost. Once a machine has run `npx playwright install chromium`, the
+// whole render story is free; the remote service and vendor lane become fallbacks
+// for environments that cannot run a browser.
 //
-// Three guards, all of which must pass or it no-ops to null (the crawl then
-// tries the remote render service, then Jina, exactly as before):
-//   1. A real Node runtime — workerd/edge cannot spawn Chromium.
-//   2. `localRender: true` in config — an explicit opt-in, so a consumer
-//      that deploys the same code to a laptop AND a worker chooses where
-//      rendering happens instead of discovering it by crash.
-//   3. `playwright` must actually import. It is NOT a dependency of this
-//      package — see the Function-constructor import below.
+// Three guards, and failing any of them no-ops to null so the crawl continues to
+// the remote render service, then Jina: a real Node runtime (workerd cannot spawn
+// Chromium), an explicit `localRender: true` so a consumer deploying to both a
+// laptop and a worker chooses where rendering happens instead of finding out by
+// crash, and playwright actually importing — it is NOT a dependency here.
 //
-// THE IMPORT TRICK (inherited from the origin repo, which learned it the
-// hard way): a plain `import('playwright')` — even computed like
-// ['play','wright'].join('') — is constant-folded by bundler tracers
-// (@vercel/nft, esbuild, webpack), which then try to resolve playwright's
-// own optional deps and break the build of any consumer that bundles for
-// serverless. In the origin, exactly this pinned production three days
-// stale (their DEPLOY-BLOCKER-1, 2026-07-22). A Function-constructor import
-// is invisible to every tracer: resolved only at real runtime, only where
-// guards 1-2 already passed.
+// THE IMPORT TRICK: a plain `import('playwright')`, even computed as
+// ['play','wright'].join(''), gets constant-folded by bundler tracers (@vercel/nft,
+// esbuild, webpack), which then try to resolve playwright's optional deps and break
+// the build of any consumer bundling for serverless. That pinned production three
+// days stale in the origin repo (DEPLOY-BLOCKER-1). A Function-constructor import
+// is invisible to every tracer — resolved at real runtime, only past guards 1-2.
+
+import { assertHostResolvesToPublicAddress } from './host-policy.js';
+import type { DnsLookupFn } from '../core/types.js';
 
 const RENDER_TIMEOUT_MS = 20_000;
 
@@ -125,10 +121,44 @@ export async function runActions(page: RenderPage, actions: BrowserAction[], ori
  * Returns HTML (not extracted text) so the caller feeds it through the SAME
  * buildPage path as every other rung — one parser, one guard, one shape.
  */
+/**
+ * RENDER-REDIRECT-1: where did the browser actually land?
+ *
+ * `page.goto` follows the entire redirect chain inside Chromium, and nothing
+ * downstream re-checks the destination — the caller builds the page with the
+ * URL it ASKED for. An origin could therefore bounce this rung to any host,
+ * including a private address, and have the content returned under the
+ * original URL. The direct-fetch rung re-validates every hop; this one did
+ * not, while the README claimed the check repeats after each redirect.
+ *
+ * Exported for tests: playwright's import is deliberately invisible to
+ * bundlers, so the surrounding function cannot be mocked.
+ */
+export async function assertLandedSameSite(
+  finalUrl: string,
+  requestedUrl: string,
+  dnsLookup?: DnsLookupFn,
+): Promise<void> {
+  const landed = new URL(finalUrl);
+  const requested = new URL(requestedUrl);
+
+  const strip = (h: string) => h.toLowerCase().replace(/^www\./, '');
+  if (strip(landed.hostname) !== strip(requested.hostname)) {
+    throw new Error(`Render redirected off-site: ${requested.hostname} -> ${landed.hostname}`);
+  }
+  if (landed.protocol !== 'https:' && landed.protocol !== 'http:') {
+    throw new Error(`Render redirected to a non-http(s) URL: ${landed.protocol}`);
+  }
+  // A same-named host can still resolve somewhere private between the policy
+  // check and the browser's own lookup.
+  await assertHostResolvesToPublicAddress(landed.hostname, dnsLookup);
+}
+
 export async function renderViaLocalChromium(
   url: string,
   enabled: boolean,
   actions: BrowserAction[] = [],
+  dnsLookup?: DnsLookupFn,
 ): Promise<string | null> {
   if (!enabled || !url || !hasNodeRuntime()) return null;
   const pw = await importPlaywright();
@@ -140,7 +170,11 @@ export async function renderViaLocalChromium(
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: RENDER_TIMEOUT_MS });
+    // RENDER-REDIRECT-1: the browser followed the chain; check where it ended.
+    await assertLandedSameSite(page.url(), url, dnsLookup);
     if (actions.length > 0) await runActions(page, actions, new URL(url).origin);
+    // Actions can navigate too, so the check repeats after they run.
+    await assertLandedSameSite(page.url(), url, dnsLookup);
     const html = await page.content();
     return html && html.length > 0 ? html : null;
   } catch {
