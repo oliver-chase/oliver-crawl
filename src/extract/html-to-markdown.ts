@@ -32,7 +32,7 @@ function collapse(text: string): string {
  * The main-content root, in order of confidence:
  *
  *   1. The first `<main>` or `<article>` — the author told us, believe them.
- *   2. PARITY-READABILITY-1 (2026-07-27): on div-soup pages that never use
+ *   2. PARITY-READABILITY-1: on div-soup pages that never use
  *      semantic tags, score the content the Readability way — paragraphs
  *      vote for their parent — and take the winning cluster.
  *   3. `<body>`, when nothing scores — chrome stripping is then all we have.
@@ -76,7 +76,7 @@ function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
 
   $('p').each((_, p) => {
     const $p = $(p);
-    // READABILITY-CHROME-1 (2026-07-27, found in review): a paragraph inside
+    // READABILITY-CHROME-1 (found in review): a paragraph inside
     // nav/header/footer/aside is furniture and must not vote. Without this a
     // prose-heavy sidebar outscores a short real article and is returned AS
     // the main region — and because the winner is then a DESCENDANT of the
@@ -213,7 +213,7 @@ function renderNode($: CheerioAPI, $el: Cheerio<AnyNode>, el: AnyNode, blocks: s
     }
 
     case 'a': {
-      // MARKDOWN-BLOCKLINK-1 (2026-07-27): a link that is a direct child of a
+      // MARKDOWN-BLOCKLINK-1: a link that is a direct child of a
       // container rather than inside a paragraph. The `default` branch
       // recursed into its text and emitted the label with the href DROPPED,
       // so any site listing links as bare children of a div — search results,
@@ -255,7 +255,7 @@ function renderNode($: CheerioAPI, $el: Cheerio<AnyNode>, el: AnyNode, blocks: s
 /**
  * Render one <img> as markdown. Shared by the block and inline paths.
  *
- * MARKDOWN-DATAURI-1 (2026-07-27, found by scripts/parity-check.mjs on a live
+ * MARKDOWN-DATAURI-1 (found by scripts/parity-check.mjs on a live
  * site): a `data:` src is never emitted. Lazy-loading libraries put a 1x1
  * base64 PNG in `src` and the real URL in `data-src`, and emitting that
  * base64 blob tripped the injection guard's encoded-payload rule — which

@@ -1,6 +1,6 @@
 // ─── Search a site using the site's own search ──────────────────────────────
 //
-// SEARCH-ONSITE-1 (2026-07-27). `crawler.search()` asks a search engine, which
+// SEARCH-ONSITE-1. `crawler.search()` asks a search engine, which
 // always costs money and returns the whole web. But the question consumers
 // actually ask most often is narrower — "which pages on THIS site are about
 // X" — and nearly every site already answers it.

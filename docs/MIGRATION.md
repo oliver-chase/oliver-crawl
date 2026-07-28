@@ -30,7 +30,7 @@ Nothing has been removed from Fallow. The library is additive until a consumer s
 | Free local render rung | `fetch/local-render.ts` | Local headless Chromium, tried BEFORE the remote render service — makes JS rendering free on any machine with `npx playwright install chromium`. Untraceable import so it never breaks a bundler; degrades silently where absent |
 | Sitemap discovery | `fetch/sitemap-discovery.ts` | NEW capability (not in the origin): reads `/sitemap.xml`, follows index files one level, same-site-filters every URL. Free "what pages does this site have" |
 
-## Hardening pass (2026-07-27 self-audit)
+## Hardening pass (self-audit)
 
 Reviewing my own work found four real gaps, all fixed with red-capable tests:
 - **CRAWL-VALIDATE-1** — conditional-GET headers were never sent. The lane accepted `etag`/`lastModified`, documented the free-304 path, and had the 304 branch — but no `If-None-Match`/`If-Modified-Since` ever went on the wire, so the whole re-crawl-efficiency story was dead against a real origin. The 304 test only passed because its stub returned 304 unconditionally. Now sent; verified live (a real origin returned 304 on the second crawl).

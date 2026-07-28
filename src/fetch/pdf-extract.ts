@@ -15,7 +15,7 @@
 const MAX_PDF_PAGES = 50;
 
 /**
- * PDF-TIMEOUT-1 (2026-07-27, found in review): a wall-clock bound on parsing.
+ * PDF-TIMEOUT-1 (found in review): a wall-clock bound on parsing.
  *
  * Every other module that touches remote data has a timeout; this one had
  * none, because it parses bytes rather than fetching them. But those bytes

@@ -1,6 +1,6 @@
 // ─── What changed, not just that something did ──────────────────────────────
 //
-// BETTER-DIFF-1 (2026-07-27): `unchanged` is a boolean. A consumer whose
+// BETTER-DIFF-1: `unchanged` is a boolean. A consumer whose
 // listing page gained ONE event re-extracts the whole page — and pays for the
 // whole page — to discover that one row moved.
 //

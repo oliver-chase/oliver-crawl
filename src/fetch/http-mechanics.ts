@@ -81,7 +81,7 @@ export async function fetchFollowingSafeRedirects(
   const baseHost = url.hostname;
   const basePort = url.port || '';
 
-  // CRAWL-VALIDATE-1 (2026-07-27, found in self-audit): the FIRST version of
+  // CRAWL-VALIDATE-1 (found in self-audit): the FIRST version of
   // this accepted etag/lastModified in CrawlOptions, documented the free-304
   // path in the lane header, had the 304 branch in the caller — and never
   // sent If-None-Match / If-Modified-Since on the wire. The 304 test passed

@@ -1,6 +1,6 @@
 // ─── What pages does this site have? ────────────────────────────────────────
 //
-// PARITY-MAP-1 (2026-07-27): Firecrawl's `/map` returns hundreds of a
+// PARITY-MAP-1: Firecrawl's `/map` returns hundreds of a
 // domain's URLs in roughly one request. Answering the same question here
 // meant `crawlSite` with `followLinks`, which FETCHES every page in order to
 // find the next — minutes and hundreds of requests to learn something the

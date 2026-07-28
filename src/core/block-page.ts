@@ -1,6 +1,6 @@
 // ─── Is this a block page wearing a 200? ────────────────────────────────────
 //
-// LADDER-QUALITY-1 (2026-07-27, found live on cfdrodeo.com): the local-render
+// LADDER-QUALITY-1 (found live on cfdrodeo.com): the local-render
 // rung captured Cloudflare's "Why have I been blocked?" interstitial and the
 // ladder accepted it, because rung acceptance only asked "did text come back?"
 // A 300-character block page therefore beat the Jina rung, which retrieves the

@@ -1,6 +1,6 @@
 // ─── Which link probably answers the question? ──────────────────────────────
 //
-// CRAWL-DETAILLINK-1 (2026-07-27): when a page leaves a field unanswered, the
+// CRAWL-DETAILLINK-1: when a page leaves a field unanswered, the
 // answer is usually one click away — parking on /visit, prices on /tickets,
 // hours on /faq. Every consumer writes the same "scan the labels for a likely
 // link" loop, and `PageLink` already carries `{ url, text }`, so the input is

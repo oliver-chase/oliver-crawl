@@ -1,6 +1,6 @@
 // ─── Is this failure worth retrying? ────────────────────────────────────────
 //
-// CRAWL-DEGRADE-1 (2026-07-27): the package reported per-crawl outcomes and
+// CRAWL-DEGRADE-1: the package reported per-crawl outcomes and
 // left every consumer to re-invent the same triage from raw `reason` strings
 // and prose `detail` text — and to get it wrong, because the interesting
 // distinction is not in `reason` at all.

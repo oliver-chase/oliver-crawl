@@ -94,7 +94,7 @@ export function createCrawler(config: CrawlConfig): Crawler {
       // asserts are pure); the own lane still adds its DNS/SSRF check, which
       // only matters when OUR socket connects.
       //
-      // CACHE-POLICY-1 (2026-07-27, found in review): this runs BEFORE the
+      // CACHE-POLICY-1 (found in review): this runs BEFORE the
       // cache read, and the order is load-bearing. The page cache is keyed on
       // (url, lanes) and NOT on the target, so serving a hit first let a
       // second target read a page it was never allowed to fetch — an

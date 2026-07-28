@@ -1,6 +1,6 @@
 // ─── What kind of document did we just fetch? ───────────────────────────────
 //
-// CRAWL-FEED-1 (2026-07-27): the own lane accepted only html/xhtml/plain and
+// CRAWL-FEED-1: the own lane accepted only html/xhtml/plain and
 // refused everything else as `empty`. That made a documented capability
 // unusable: fetch/feed-discovery.ts exists to FIND ICS calendar feeds — and
 // argues in its own header that they are more accurate and more stable than

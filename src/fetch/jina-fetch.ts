@@ -18,7 +18,7 @@
 // null as "fallback did not help," never as empty content.
 
 /**
- * JINA-SELFHOST-1 (2026-07-27): the endpoint is configurable.
+ * JINA-SELFHOST-1: the endpoint is configurable.
  *
  * The public reader is free and keyless, which is why this rung exists — but
  * it is infrastructure we do not control, and a rate limit or an outage there

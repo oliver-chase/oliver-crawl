@@ -31,7 +31,7 @@ export const DEFAULT_DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
 /**
  * Hosts proven to resolve publicly. Success-only.
  *
- * HOST-CACHE-SCOPE-1 (2026-07-27, found by live validation): this was a
+ * HOST-CACHE-SCOPE-1 (found by live validation): this was a
  * single module-level Map shared by every crawler in the process. A host
  * validated by one crawler was therefore trusted by ALL of them — including
  * one deliberately configured with a different resolver. The live SSRF check

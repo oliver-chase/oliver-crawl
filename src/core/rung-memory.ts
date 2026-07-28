@@ -1,6 +1,6 @@
 // ─── Remember which rung actually works for a host ──────────────────────────
 //
-// BETTER-RUNGMEMORY-1 (2026-07-27): every crawl walked the ladder from the
+// BETTER-RUNGMEMORY-1: every crawl walked the ladder from the
 // top. A host that always 403s the direct fetch and always succeeds on the
 // render rung therefore cost a guaranteed wasted request on every page,
 // forever — and on a 200-page site that is 200 requests spent proving

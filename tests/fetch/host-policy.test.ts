@@ -8,7 +8,7 @@ import {
 } from '@/fetch/host-policy';
 import type { CrawlTarget } from '@/core/types';
 
-// CRAWL-C5 (2026-07-27): this module is the SSRF / DNS-rebinding guard for
+// CRAWL-C5: this module is the SSRF / DNS-rebinding guard for
 // the entire crawl stack — every fetch the crawler makes passes through it —
 // and it was the ONLY generic crawl module with no direct test file. These
 // tests exist both to lock the security behavior down and as the

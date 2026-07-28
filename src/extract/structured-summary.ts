@@ -1,6 +1,6 @@
 // ─── What structured data does this page actually carry? ────────────────────
 //
-// JSONLD-SIGNAL-1 (2026-07-27): the single largest cost lever a crawl package
+// JSONLD-SIGNAL-1: the single largest cost lever a crawl package
 // has over its consumer's bill.
 //
 // The expensive part of a crawl pipeline is not the crawl — it is the LLM

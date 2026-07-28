@@ -1,6 +1,6 @@
 // ─── Which image on this page is the content? ───────────────────────────────
 //
-// CRAWL-VISION-1 (2026-07-27): municipal and venue pages routinely publish the
+// CRAWL-VISION-1: municipal and venue pages routinely publish the
 // real detail — dates, lineup, time, address, parking — inside ONE poster or
 // flyer image, with almost nothing in the page text. Today such a page parses
 // fine, yields no meaningful text, walks the whole free ladder, and reports

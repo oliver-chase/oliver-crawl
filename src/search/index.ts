@@ -82,7 +82,7 @@ type SearchProvider = {
  *   1. The `url` may not be a safe public http(s) URL. A `javascript:` href
  *      reaching a caller's UI is an XSS; a private-network URL reaching the
  *      fetcher is an SSRF.
- *   2. SEARCH-INJECTION-1 (2026-07-27, found in audit): `title` and `snippet`
+ *   2. SEARCH-INJECTION-1 (found in audit): `title` and `snippet`
  *      are attacker-influenceable prose — a snippet is usually just the target
  *      page's own meta description. Crawled page text has always gone through
  *      the injection guard, but these did not, so the identical payload was
@@ -199,7 +199,7 @@ export async function search(
     };
   }
 
-  // SEARCH-DIAG-1 (2026-07-27, found in audit): every provider's outcome is
+  // SEARCH-DIAG-1 (found in audit): every provider's outcome is
   // kept, not just the last one.
   //
   // This started as a single `lastDetail` that each provider overwrote. With

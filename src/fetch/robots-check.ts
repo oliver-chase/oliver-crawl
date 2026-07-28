@@ -23,7 +23,7 @@ export type RobotsCheckResult = {
   policy: RobotsPolicy;
   reason: string;
   /**
-   * ROBOTS-DELAY-1 (2026-07-27): the site's own `Crawl-delay`, in ms, when it
+   * ROBOTS-DELAY-1: the site's own `Crawl-delay`, in ms, when it
    * published one. Null when absent.
    *
    * This is the origin stating, in the one machine-readable place it has, how
@@ -125,7 +125,7 @@ export async function evaluateRobotsForUrl(
       if (next.protocol !== 'https:' && next.protocol !== 'http:') {
         return { policy: 'unknown', reason: 'robots.txt redirected to a non-http(s) URL', crawlDelayMs: null };
       }
-      // ROBOTS-REDIRECT-1 (2026-07-27): an off-domain robots.txt redirect is
+      // ROBOTS-REDIRECT-1: an off-domain robots.txt redirect is
       // FOLLOWED, and the reason records where it went.
       //
       // The first version of this refused them, reasoning that a stranger's
