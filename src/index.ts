@@ -28,7 +28,7 @@ import { resolveConfig, availableVendorRungs, configFromEnv, DEFAULT_USER_AGENT 
 import { crawlWithOwnLane } from './lanes/own/index.js';
 import { crawlWithVendorLane } from './lanes/vendor/index.js';
 import type { SitemapEntry } from './fetch/sitemap-discovery.js';
-import { approveCrawlPolicy } from './lanes/own/index.js';
+import { approveCrawlPolicy, resolveTargetPolicy } from './lanes/own/index.js';
 import { classifyFailure } from './core/failure-class.js';
 import { rememberWinningRung } from './core/rung-memory.js';
 import { search, availableSearchProviders } from './search/index.js';
@@ -49,6 +49,12 @@ export type Crawler = {
    * User-Agent and DNS resolver, not a second set.
    */
   discoverSeedEntries: (target: CrawlTarget, maxUrls?: number) => Promise<SitemapEntry[]>;
+  /**
+   * The target with its robots posture resolved, when `autoRobots` is on.
+   * crawlSite calls this before validating seeds; an explicit posture is
+   * returned unchanged (CRAWLSITE-AUTOROBOTS-1).
+   */
+  resolveTarget: (target: CrawlTarget) => Promise<CrawlTarget>;
   /** Which vendor rungs are usable with the current keys. Empty is normal
    *  and fine — it just means the own lane is the only one available. */
   vendorRungs: () => string[];
@@ -74,6 +80,7 @@ export function createCrawler(config: CrawlConfig): Crawler {
       });
       return found.urls;
     },
+    resolveTarget: (target) => resolveTargetPolicy(target, resolved),
     discoverSeedEntries: async (target, maxUrls) => {
       const found = await discoverSitemapUrls(target, {
         userAgent: resolved.userAgent,

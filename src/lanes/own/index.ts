@@ -229,6 +229,23 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<str
  *
  * Throws on refusal; callers convert to a `blocked` result.
  */
+/**
+ * Resolve a target's robots posture, when the crawler is configured to.
+ *
+ * CRAWLSITE-AUTOROBOTS-1: crawlSite validates its seeds up front, before any
+ * lane runs, so it needs the SAME resolution `crawl()` performs internally.
+ * Without it, `autoRobots` silently did nothing for whole-site crawls and
+ * every seed failed closed on a posture that would have resolved to 'allow'.
+ *
+ * Returns the target unchanged when autoRobots is off or a posture is already
+ * set — an explicit policy is never overridden.
+ */
+export async function resolveTargetPolicy(target: CrawlTarget, config: ResolvedConfig): Promise<CrawlTarget> {
+  if (!config.autoRobots || (target.robotsPolicy ?? 'unknown') !== 'unknown') return target;
+  const policy = await resolveRobotsPolicy(target.baseUrl, config);
+  return { ...target, robotsPolicy: policy };
+}
+
 export async function approveCrawlPolicy(
   target: CrawlTarget,
   url: string,
