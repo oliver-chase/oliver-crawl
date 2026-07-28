@@ -96,7 +96,7 @@ Two mechanisms, because origins differ:
 - **Origin sends ETag/Last-Modified** → conditional GET → **304, nothing fetched at all**, reported under `notModified`.
 - **Origin sends nothing** (most small sites) → the **content-region hash** (nav/footer-insensitive) is compared → the page is fetched, but `unchanged` tells you the real content is identical so extraction/LLM can be skipped.
 
-Both use the same loop: store `result.validators`, pass them back as `priorValidators`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire it with `onSignals` (push) or the return value (pull) — see [ADOPTION.md](ADOPTION.md).
+Both use the same loop: store `result.validators`, pass them back as `priorValidators`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire it with `onSignals` (push) or the return value (pull) — see [ADOPTING.md](ADOPTING.md).
 
 ### Site-wide change detection in one request
 
@@ -539,7 +539,7 @@ npm run build     # emit dist/
 
 ## Status
 
-Feature-complete and hardened: typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Test and live-check counts live in the [README's Status section](../README.md#status). Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [ADOPTION.md](ADOPTION.md) to use it in a repo, [LANES.md](LANES.md) for the lane model.
+Feature-complete and hardened: typecheck clean (strict, `noUncheckedIndexedAccess`), builds to dist, verified against live sites AND as a real git-installed dependency. Test and live-check counts live in the [README's Status section](../README.md#status). Both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [ADOPTING.md](ADOPTING.md) to use it in a repo, [LANES.md](LANES.md) for the lane model.
 
 ## License
 
@@ -547,4 +547,4 @@ MIT
 
 ---
 
-**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ADOPTION](ADOPTION.md) · [LANES](LANES.md) · [ARCHITECTURE](ARCHITECTURE.md) · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ADOPTING](ADOPTING.md) · [LANES](LANES.md) · [ARCHITECTURE](ARCHITECTURE.md) · [BACKLOG](BACKLOG.md) — known gaps

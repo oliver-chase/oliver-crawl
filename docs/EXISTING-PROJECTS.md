@@ -1,6 +1,6 @@
 # Adding this to a project you've already built
 
-[ADOPTION.md](ADOPTION.md) assumes a clean start. This page is for the harder case: **you already have crawling code, real data, and things that must not break.**
+[ADOPTING.md](ADOPTING.md) assumes a clean start. This page is for the harder case: **you already have crawling code, real data, and things that must not break.**
 
 The rule throughout: **add alongside, prove it matches, then delete.** Never swap in place.
 
@@ -266,4 +266,4 @@ The package can *replay* a stored selector recipe (`applyRecipe`). Judging wheth
 
 ---
 
-**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ADOPTION](ADOPTION.md) — starting fresh instead · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved out of Fallow · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ADOPTING](ADOPTING.md) — starting fresh instead · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved out of Fallow · [BACKLOG](BACKLOG.md) — known gaps

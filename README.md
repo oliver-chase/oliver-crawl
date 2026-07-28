@@ -244,7 +244,7 @@ The library holds no database. Persistence, scheduling, and converting pages int
 
 | | |
 |---|---|
-| **[ADOPTION.md](docs/ADOPTION.md)** | Starting from a new project |
+| **[ADOPTING.md](docs/ADOPTING.md)** | Starting from a new project |
 | **[EXISTING-PROJECTS.md](docs/EXISTING-PROJECTS.md)** | Replacing crawling code you already run |
 | **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Request flow, module map, design boundaries |
 | **[LANES.md](docs/LANES.md)** | The rung ladder, in order |
