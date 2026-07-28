@@ -153,12 +153,24 @@ export async function buildTextPage(input: {
   lastModified?: string | null;
   /** Hash source when the delivered text is not what arrived on the wire. */
   bodySource?: string;
+  /**
+   * Set ONLY when the rung's text already IS markdown.
+   *
+   * The vendor rungs are asked for markdown explicitly (Firecrawl with
+   * `onlyMainContent`), so their text is markdown and belongs in both fields —
+   * the same value, not a second conversion. Jina returns prose that merely
+   * looks markdown-ish, so it leaves this unset and reports an empty
+   * `markdown` rather than claiming structure it did not derive.
+   *
+   * Defaults to empty, which is the honest answer for a rung with no HTML.
+   */
+  markdown?: string;
 }): Promise<CrawlPage> {
   const textSha256 = await sha256Hex(input.text);
   return {
     url: input.url,
     text: input.text,
-    markdown: '',
+    markdown: input.markdown ?? '',
     contentKind: input.contentKind,
     likelyEmptyState: looksLikeEmptyState(input.text),
     candidateContentImages: [],

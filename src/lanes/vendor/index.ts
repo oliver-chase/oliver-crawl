@@ -179,6 +179,9 @@ export async function crawlWithVendorLane(
             lane: 'vendor',
             title: result.title,
             bodySource: result.text,
+            // Both vendor rungs are ASKED for markdown, so the delivered text
+            // already is markdown — same value, not a second conversion.
+            markdown: sanitized.text,
           }),
         ],
       };
