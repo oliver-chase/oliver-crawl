@@ -11,11 +11,19 @@ That is a statement about this list, not about the library. Two things remain
 true and are recorded here because they are the next real decisions, not
 because they are queued work:
 
-- **No consumer has adopted this yet.** Fallow and tesknota still run their own
-  crawling code. `scripts/parity-check.mjs` exists to gate that swap: run it and
-  the consumer's existing extractor over the same URLs, and explain every
-  disagreement before changing anything. A silent extraction difference across
-  every source does not read as a bug — it reads as the data getting worse.
+- **One consumer is wired; two are not.** oliver-strategic-growth depends on
+  this package as `@oliver/crawl-core`, pinned to a git TAG and reached through
+  a single seam (`sdr/scripts/shared/page-fetch.js`). A tag, not a branch, on
+  purpose: a floating ref would let a mid-session commit here change a
+  production crawl silently, and this library's failure mode is quietly thinner
+  data. The cost is that shipping to a consumer is deliberate work — tag, bump
+  the pin, install.
+
+  Fallow and tesknota still run their own crawling code.
+  `scripts/parity-check.mjs` gates those swaps: run it and the consumer's
+  existing extractor over the same URLs, and explain every disagreement before
+  changing anything. A silent extraction difference across every source does not
+  read as a bug — it reads as the data getting worse.
 - **Residential proxies and general web search stay paid.** Both were assessed
   and neither is free-achievable. See the parity table.
 
