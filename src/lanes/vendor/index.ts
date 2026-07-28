@@ -191,6 +191,8 @@ export async function crawlWithVendorLane(
             // Both vendor rungs are ASKED for markdown, so the delivered text
             // already is markdown — same value, not a second conversion.
             markdown: sanitized.text,
+            redactionCount: sanitized.redactionCount,
+            truncated: sanitized.truncated,
           }),
         ],
       };

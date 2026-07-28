@@ -307,6 +307,8 @@ export async function crawlWithOwnLane(
           lane: 'own',
           etag: response.headers.get('etag'),
           lastModified: response.headers.get('last-modified'),
+          redactionCount: sanitizedPdf.redactionCount,
+          truncated: sanitizedPdf.truncated,
         }),
       ],
     };
@@ -349,6 +351,8 @@ export async function crawlWithOwnLane(
           etag: response.headers.get('etag'),
           lastModified: response.headers.get('last-modified'),
           bodySource: html,
+          redactionCount: sanitizedData.redactionCount,
+          truncated: sanitizedData.truncated,
         }),
       ],
     };
@@ -693,7 +697,15 @@ async function jinaFallback(
     if (sanitized.signals.length > 0) {
       const detail = 'Prompt-injection signals in fallback content.';
       emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-      return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+      // QUARANTINE-EVIDENCE-1. This site was MISSED when the decision shipped,
+      // and it is the one that matters most: the Jina rung runs whenever the
+      // direct fetch is bot-walled, so it is the common case rather than an
+      // edge. A consumer whose policy is never to lose a page got a bare
+      // refusal here and had to drop it.
+      return {
+        ok: false, reason: 'quarantined', detail, lane: 'own',
+        quarantine: { signals: sanitized.signals, text: sanitized.text, title: jina.title ?? null },
+      };
     }
 
     emitUsage(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
@@ -709,6 +721,8 @@ async function jinaFallback(
           lane: 'own',
           title: jina.title,
           bodySource: jina.text,
+          redactionCount: sanitized.redactionCount,
+          truncated: sanitized.truncated,
         }),
       ],
     };

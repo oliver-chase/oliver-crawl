@@ -74,9 +74,44 @@ describe('a quarantine refusal carries what tripped it', () => {
     expect(result.quarantine!.signals.length).toBeGreaterThan(0);
   });
 
-  test('an ordinary failure carries no quarantine evidence', () => {
+  test('an ordinary failure carries no quarantine evidence', async () => {
     // The field is the SIGNAL that this is a quarantine. Populating it on other
-    // failures would make a consumer raise review tasks for timeouts.
-    expect(true).toBe(true);
+    // failures would make a consumer raise review tasks for timeouts. This was
+    // `expect(true)` — the exact shape this suite exists to catch elsewhere.
+    globalThis.fetch = (async () => new Response('nope', { status: 500 })) as typeof fetch;
+    const result = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
+      target,
+      'https://site.example.com/x',
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).not.toBe('quarantined');
+    expect(result.quarantine, 'an ordinary failure carried quarantine evidence').toBeUndefined();
+  });
+
+  test('the JINA rung reports evidence too', async () => {
+    // The site missed when the decision shipped, and the one that matters most:
+    // this rung runs whenever the direct fetch is bot-walled.
+    // Padded past the rung's minimum length: a body too short never reaches
+    // the guard at all, and the test then proves nothing about quarantine.
+    const PAYLOAD_BODY =
+      'Title: X\nURL Source: https://site.example.com/\n\nMarkdown Content:\n' +
+      'Real venue copy about the concert series and its supporting acts. '.repeat(8) +
+      PAYLOAD;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('r.jina.ai')) return new Response(PAYLOAD_BODY, { status: 200 });
+      return new Response('blocked', { status: 403 });
+    }) as typeof fetch;
+
+    const result = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
+      target,
+      'https://site.example.com/x',
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('quarantined');
+    expect(result.quarantine, 'the Jina rung returned a bare refusal').toBeDefined();
+    expect(result.quarantine!.signals.length).toBeGreaterThan(0);
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "@oliver/crawl-core",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "Governed web crawling: a self-hosted crawler lane with SSRF guards and prompt-injection sanitising, plus an optional vendor-API lane. Use either, or both.",
   "type": "module",
   "license": "MIT",

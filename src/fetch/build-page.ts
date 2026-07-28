@@ -193,6 +193,22 @@ export async function buildTextPage(input: {
   /** Hash source when the delivered text is not what arrived on the wire. */
   bodySource?: string;
   /**
+   * GUARD-TELEMETRY-1: what the guard did, from the caller that ran it.
+   *
+   * These were hardcoded to 0/false here on the reasoning that a text rung
+   * "receives prose that has already been through the guard, so nothing was
+   * redacted or capped at THIS step". That was wrong, and QA proved it on all
+   * four text rungs: each one calls sanitizeCrawledText immediately before
+   * this and throws the result away. Pages came back reporting complete and
+   * unmodified while the delivered text literally contained [TRUNCATED].
+   *
+   * Passed in rather than recomputed, because only the caller holds the
+   * sanitiser result and re-running the guard here would be a second pass over
+   * the same text to learn something already known.
+   */
+  redactionCount?: number;
+  truncated?: boolean;
+  /**
    * Set ONLY when the rung's text already IS markdown.
    *
    * The vendor rungs are asked for markdown explicitly (Firecrawl with
@@ -214,11 +230,11 @@ export async function buildTextPage(input: {
     likelyEmptyState: looksLikeEmptyState(input.text),
     candidateContentImages: [],
     extractorVersion: EXTRACTOR_VERSION,
-    // A text rung receives prose that has already been through the guard, so
-    // nothing was redacted or capped at THIS step. Reporting the upstream
-    // rung's numbers here would attribute them to the wrong stage.
-    redactionCount: 0,
-    truncated: false,
+    // Defaults only for a caller that genuinely ran no guard; every rung that
+    // sanitises passes its own numbers. See the field docs above for why the
+    // previous hardcoded 0/false was a lie rather than a simplification.
+    redactionCount: input.redactionCount ?? 0,
+    truncated: input.truncated ?? false,
     structuredData: summarizeStructuredData([]),
     title: input.title ?? null,
     contentType: input.contentType,

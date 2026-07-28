@@ -51,10 +51,24 @@ describe('a page served past an off-domain refusal is flagged', () => {
     expect(result.originMoved!.servedBy).toBe('jina');
   });
 
-  test('an ordinary Jina fallback is NOT flagged', () => {
+  test('an ordinary Jina fallback is NOT flagged', async () => {
     // The signal has to mean something. Flagging every Jina page would make a
-    // consumer review the whole bot-walled long tail.
-    expect(true).toBe(true);
+    // consumer review the whole bot-walled long tail. This was `expect(true)`
+    // — a name asserting a guarantee its body never checked.
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('r.jina.ai')) return new Response(JINA_BODY, { status: 200 });
+      return new Response('blocked', { status: 403 });
+    }) as typeof fetch;
+
+    const result = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
+      target,
+      'https://site.example.com/',
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.notModified) throw new Error('expected pages');
+    expect(result.pages[0]!.rung).toBe('jina');
+    expect(result.originMoved, 'a plain bot-wall was reported as a moved origin').toBeUndefined();
   });
 
   test('the detector recognises the real guard message', () => {
