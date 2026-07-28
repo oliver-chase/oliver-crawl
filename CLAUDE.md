@@ -5,8 +5,9 @@
 
 # oliver-crawl — Agent Rules
 
-Run `npm run check` before commit. This repo has no `scripts/validate.sh`; `check` is its
-canonical validation and runs typecheck, tests, the comment budget, and the decisions ledger.
+Run `npm run check` before commit — it is this repo's canonical validation and runs
+typecheck, tests, the comment budget, and the decisions ledger. The framework's default
+validate.sh filename does not exist here, so do not go looking for it.
 
 Comment density runs above the fleet guideline by design — see `.comment-budget.json`. The
 exported types and functions are the contract a consumer reads, so their fields carry the
