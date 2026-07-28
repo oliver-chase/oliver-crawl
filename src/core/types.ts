@@ -293,6 +293,22 @@ export type CrawlResult =
        * The text is SANITIZED, not raw: a reviewer needs to see what the page
        * said, not to be handed a live payload. Redactions are already applied.
        */
+      /**
+       * BODY-RECEIVED-1: did an origin actually answer, or did we never get a
+       * page at all?
+       *
+       * `unreachable` covers both "the site is down" and "the site served a
+       * JavaScript shell with no readable text", because from the ladder's side
+       * both end with no content from anywhere. Those are different facts for a
+       * consumer: the first is worth retrying, the second is a page that was
+       * read and had nothing in it, which a catalogue may want to RETAIN for a
+       * later parser pass rather than log as an error.
+       *
+       * Fallow had to recover this by regex-matching `detail`, which is the
+       * coupling that has silently switched several signals off in this fleet.
+       * The library knows the answer; it should say it.
+       */
+      bodyReceived?: boolean;
       quarantine?: {
         signals: PromptInjectionSignal[];
         /** Sanitized page text, capped at the crawl's maxTextChars. */

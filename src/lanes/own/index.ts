@@ -387,7 +387,10 @@ export async function crawlWithOwnLane(
 
   if (!page.text.trim()) {
     // Served HTML had no readable text — a JS shell. Same free ladder.
-    return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target), target);
+    // BODY-RECEIVED-1: an origin DID answer here — the page simply had no
+    // readable text. The ladder's later rungs cannot know that, so it is
+    // recorded now rather than inferred from wording afterwards.
+    return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target), target, true);
   }
 
   // THIN-PAGE-1: the page parsed and has text, but too little of it. A
@@ -544,6 +547,7 @@ async function freeFallbackLadder(
   priorDetail: string,
   credentialed: boolean,
   target?: CrawlTarget,
+  bodyReceived = false,
 ): Promise<CrawlResult> {
   const rendered = await renderFallback(url, config, options, started);
   if (rendered) {
@@ -581,6 +585,13 @@ async function freeFallbackLadder(
     return withOriginMoved(viaJina, priorDetail, 'jina', url);
   }
 
+  // BODY-RECEIVED-1 is attached HERE rather than inside each rung. A rung knows
+  // whether IT got content; only the ladder knows whether the original fetch
+  // did, and that is the fact a consumer needs to tell "the site is down" from
+  // "the site served a shell".
+  const withBodyFlag = (result: CrawlResult): CrawlResult =>
+    result.ok || !bodyReceived ? result : { ...result, bodyReceived: true };
+
   // Last, and only for an explicitly permitted target — see archiveFallback.
   if (target) {
     const archived = await archiveFallback(target, url, config, options, started);
@@ -589,7 +600,7 @@ async function freeFallbackLadder(
     // capture can post-date the sale, so it carries the flag too.
     if (archived) return withOriginMoved(archived, priorDetail, 'archive', url);
   }
-  return viaJina;
+  return withBodyFlag(viaJina);
 }
 
 /** Does this target carry caller-supplied request headers (i.e. credentials)? */
