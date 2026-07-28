@@ -141,6 +141,10 @@ export async function buildPage(input: {
  * honesty rule `contentRegionSha256` follows: a rung change must never look
  * like a content change.
  */
+// PAGE-SHAPE-1: both constructors here are held to one contract by
+// tests/lanes/page-shape.test.ts, which drives every rung end to end and
+// checks what is IN the page rather than that a page came back. A dropped
+// field surfaces as worse extraction blamed on the sites, not as an error.
 export async function buildTextPage(input: {
   url: string;
   text: string;

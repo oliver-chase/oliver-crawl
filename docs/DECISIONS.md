@@ -55,6 +55,7 @@ moment one changes.
 | `MARKDOWN-BLOCKLINK-1` | A bare <a> under a container lost its href. Index and results pages produced markdown with no URLs. | `extract/html-to-markdown.ts` | `extract/html-to-markdown.test.ts` |
 | `MARKDOWN-DATAURI-1` | Never emit data: image srcs. A base64 placeholder tripped the injection guard and quarantined ordinary pages. | `extract/html-to-markdown.ts` | `extract/html-to-markdown.test.ts` |
 | `PDF-TIMEOUT-1` | Parsing is time-bounded. The bytes are attacker-supplied and a hostile PDF can send a parser into work that never finishes; a hang is worse than a failure, because nothing reports and nothing retries. | `fetch/pdf-extract.ts` | `fetch/pdf-extract.test.ts` |
+| `PAGE-SHAPE-1` | Every rung returns a complete, self-consistent page, checked against one contract. Written after a refactor dropped `markdown` on the paid lane with 600 tests green — they asserted rungs returned pages, never what was in them. | `fetch/build-page.ts` | `lanes/page-shape.test.ts` |
 | `PARITY-ACTIONS-1` | Browser actions before capture, bounded by library constants a caller cannot raise. | `core/types.ts` | `fetch/browser-actions.test.ts` |
 | `PARITY-HEADERS-1` | Send a plausible header set. A missing accept-language is an old bot tell; sec-ch-ua is deliberately NOT sent. | `lanes/own/index.ts` | — |
 | `PARITY-MAP-1` | List a site's URLs without crawling it. One page body fetched. | `map-site.ts` | `lanes/map-site.test.ts` |
