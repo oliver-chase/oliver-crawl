@@ -206,4 +206,4 @@ src/
 
 ---
 
-**See also:** [README](../README.md) · [LANES](LANES.md) — the rung ladder in order · [REFERENCE](REFERENCE.md) — every option and return field · [MIGRATION](MIGRATION.md) — where the code came from · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [LANES](LANES.md) — the rung ladder in order · [REFERENCE](REFERENCE.md) — every option and return field · [MIGRATION](MIGRATION.md) — where the code came from · [BACKLOG](BACKLOG.md) — known gaps

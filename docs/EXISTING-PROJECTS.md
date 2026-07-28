@@ -266,4 +266,4 @@ The package can *replay* a stored selector recipe (`applyRecipe`). Judging wheth
 
 ---
 
-**See also:** [README](../README.md) · [ADOPTION](ADOPTION.md) — starting fresh instead · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved out of Fallow · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ADOPTION](ADOPTION.md) — starting fresh instead · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved out of Fallow · [BACKLOG](BACKLOG.md) — known gaps

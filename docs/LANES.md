@@ -125,4 +125,4 @@ It shares configuration, budgeting and usage reporting with the fetch paths and 
 
 ---
 
-**See also:** [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) — request flow and module map · [REFERENCE](REFERENCE.md) — every option and return field · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) — request flow and module map · [REFERENCE](REFERENCE.md) — every option and return field · [BACKLOG](BACKLOG.md) — known gaps

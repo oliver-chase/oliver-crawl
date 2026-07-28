@@ -39,7 +39,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm run test",
+    "check": "npm run typecheck && npm run test && npm run check:decisions",
+    "check:decisions": "node scripts/check-decisions.mjs",
     "live": "npm run build && node scripts/live-check.mjs"
   },
   "dependencies": {

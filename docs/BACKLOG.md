@@ -243,4 +243,4 @@ not rediscovered as a mystery.
 
 ---
 
-**See also:** [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) · [LANES](LANES.md) · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved here and what did not
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) · [LANES](LANES.md) · [REFERENCE](REFERENCE.md) · [MIGRATION](MIGRATION.md) — what moved here and what did not

@@ -67,4 +67,4 @@ The test of whether something belongs here is simple: would a consumer in a diff
 
 ---
 
-**See also:** [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) — where each module lives now · [EXISTING-PROJECTS](EXISTING-PROJECTS.md) — the swap procedure · [BACKLOG](BACKLOG.md) — what is still open
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ARCHITECTURE](ARCHITECTURE.md) — where each module lives now · [EXISTING-PROJECTS](EXISTING-PROJECTS.md) — the swap procedure · [BACKLOG](BACKLOG.md) — what is still open

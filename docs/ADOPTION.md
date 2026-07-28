@@ -127,4 +127,4 @@ console.assert(health.ok, `crawl smoke test failed: ${health.ok ? '' : health.de
 
 ---
 
-**See also:** [README](../README.md) · [EXISTING-PROJECTS](EXISTING-PROJECTS.md) — adding this to a live system · [REFERENCE](REFERENCE.md) — every option and return field · [LANES](LANES.md) — how the free path works · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [EXISTING-PROJECTS](EXISTING-PROJECTS.md) — adding this to a live system · [REFERENCE](REFERENCE.md) — every option and return field · [LANES](LANES.md) — how the free path works · [BACKLOG](BACKLOG.md) — known gaps

@@ -547,4 +547,4 @@ MIT
 
 ---
 
-**See also:** [README](../README.md) · [ADOPTION](ADOPTION.md) · [LANES](LANES.md) · [ARCHITECTURE](ARCHITECTURE.md) · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ADOPTION](ADOPTION.md) · [LANES](LANES.md) · [ARCHITECTURE](ARCHITECTURE.md) · [BACKLOG](BACKLOG.md) — known gaps
