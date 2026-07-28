@@ -183,6 +183,8 @@ export { configFromEnv, resolveConfig, availableVendorRungs, DEFAULT_USER_AGENT 
 // page budget, retry policy, dedup and optional pagination following.
 export { crawlSite } from './crawl-site.js';
 export { mapSite } from './map-site.js';
+export { searchSite } from './search-site.js';
+export type { SiteSearchResult, SiteSearchOptions } from './search-site.js';
 export type { SiteMapResult, SiteMapOptions } from './map-site.js';
 // Search then read what was found — with host policy re-applied per result,
 // because a search provider is an untrusted source of URLs.
