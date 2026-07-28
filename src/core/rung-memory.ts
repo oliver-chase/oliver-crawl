@@ -6,10 +6,6 @@
 // forever — and on a 200-page site that is 200 requests spent proving
 // something we already learned on page one.
 //
-// This is a place we can beat the paid APIs rather than match them: their
-// interface is stateless and per-call, so it cannot carry knowledge from one
-// page to the next. We run in-process and can.
-//
 // Two rules keep it honest:
 //
 //   1. A remembered rung is a STARTING POINT, never a restriction. The full
@@ -69,10 +65,9 @@ export function recallWinningRung(memory: RungMemory, hostname: string): string 
 /**
  * Drop a host's memory after the remembered rung failed.
  *
- * The point is self-healing: a remembered rung that stops working usually
- * means the host CHANGED, and the very path we have been skipping may now be
- * the one that works. Keeping a stale memory would turn this optimisation
- * into a way to lose pages.
+ * A remembered rung that stops working usually means the host CHANGED, so the
+ * path we have been skipping may now be the one that works. A stale memory
+ * turns this optimisation into a way to lose pages.
  */
 export function forgetWinningRung(memory: RungMemory, hostname: string): void {
   memory.delete(hostname.toLowerCase());
@@ -81,9 +76,9 @@ export function forgetWinningRung(memory: RungMemory, hostname: string): void {
 /**
  * Should the direct fetch be skipped for this host?
  *
- * True only when we have a live memory that a LATER rung is what works.
- * Deliberately narrow: this answers one question — "is the cheap rung known
- * to be useless here right now?" — rather than trying to select a rung.
+ * True only when a live memory says a LATER rung is what works. Deliberately
+ * narrow — it reports that the cheap rung is known-useless here, and does not
+ * try to select a rung.
  *
  * A caller that skips the fetch still has every recovery rung available, and
  * on failure must call `forgetWinningRung` and retry the normal path — that

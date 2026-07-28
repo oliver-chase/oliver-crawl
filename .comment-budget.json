@@ -1,0 +1,5 @@
+{
+  "max": 20,
+  "maxDensity": 40,
+  "_why": "Density guideline raised from the standard's 25%. This is a published library whose exported types and functions ARE the contract: types.ts alone is 74% comment because every field carries the decision a consumer needs, and the failure-class module is 65% because each branch records why a status is transient or structural. A full read found four fluff instances in the whole tree — a positioning paragraph, an announcer opener, a rhetorical question, a kicker closer — not a systemic problem. Block length stays at the standard 20 and is what actually fails. Revisit if density climbs without the API surface growing."
+}

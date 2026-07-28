@@ -13,10 +13,9 @@
 //   - not visiting the same URL twice
 //   - reporting per-URL outcomes without letting one bad page sink the run
 //
-// Sequential, not parallel, and deliberately so: the origin implementation
-// this was ported from ran `maxConcurrency: 1`, and hammering a small venue
-// site with parallel requests is exactly the behaviour that gets a crawler
-// blocked. Politeness is a feature.
+// Sequential, not parallel, and deliberately so: the origin implementation ran
+// `maxConcurrency: 1`, and hammering a small venue site with parallel requests
+// is what gets a crawler blocked.
 
 import { urlDedupKey } from './core/url-dedup-key.js';
 import { sleep } from './core/host-throttle.js';

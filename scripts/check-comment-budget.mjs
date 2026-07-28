@@ -94,7 +94,10 @@ function scan(text, hashStyle) {
     }
   });
   close();
-  return { maxRun, maxStart, commentLines, total: lines.length };
+  // Non-blank denominator. Counting blank lines understates density by roughly
+  // half — a repo measured at 22% this way is 39% of the lines anyone reads.
+  const nonBlank = lines.filter((l) => l.trim() !== '').length;
+  return { maxRun, maxStart, commentLines, total: nonBlank };
 }
 
 const rows = [];
@@ -113,16 +116,28 @@ const over = rows
   .filter((r) => r.maxRun > MAX && !exempt.has(r.file))
   .sort((a, b) => b.maxRun - a.maxRun);
 
-const density = totalLines ? ((totalComment / totalLines) * 100).toFixed(1) : '0.0';
+const densityPct = totalLines ? (totalComment / totalLines) * 100 : 0;
+const density = densityPct.toFixed(1);
+
+// Advisory, never fatal. Density cannot tell a good comment from a bad one — a
+// file of two-line decision records beside the code they govern reads high and
+// is correct. What it does catch is the failure block length cannot see: many
+// MEDIUM comments, each restating its own conclusion. Measured across this
+// fleet, human-written working code sits near 12%; every repo where an agent
+// had been over-explaining sat at 25% or above.
+const DENSITY_WARN = flag('--max-density', config.maxDensity ?? 25);
+const densityLine = densityPct > DENSITY_WARN
+  ? `Density ${density}% — above the ${DENSITY_WARN}% guideline. Read for restated conclusions.`
+  : `Density ${density}% (informational).`;
 
 if (!QUIET) {
   console.log('=== Comment-budget check ===');
-  console.log(`  files ${files.length}  lines ${totalLines}  comment ${totalComment} (${density}%)`);
+  console.log(`  files ${files.length}  non-blank ${totalLines}  comment ${totalComment} (${density}%)`);
   console.log(`  cap: ${MAX} consecutive comment lines${exempt.size ? `, ${exempt.size} exempt` : ''}\n`);
 }
 
 if (over.length === 0) {
-  console.log(`OK: no comment block over ${MAX} lines. Density ${density}% (informational).`);
+  console.log(`OK: no comment block over ${MAX} lines. ${densityLine}`);
   process.exit(0);
 }
 
