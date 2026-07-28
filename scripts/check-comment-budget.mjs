@@ -71,11 +71,14 @@ const files = execFileSync('git', ['-C', ROOT, 'ls-files'], { encoding: 'utf8' }
  *  rather than extending it. */
 const TAG_LINE = /^[*#\s]*@\w+/;
 
+/** Unescaped backticks on a line. An odd count flips template-literal state. */
+const backticks = (line) => (line.match(/(?<!\\)`/g) || []).length;
+
 /** Longest run of consecutive PROSE comment lines. A blank line inside a block
  *  does not end it — splitting an essay with blank lines is not shortening it. */
 function scan(text, hashStyle) {
   const lines = text.split('\n');
-  let inBlock = false;
+  let inBlock = false, inTemplate = false;
   let seenCode = false, prevCode = '';
   let run = 0, runStart = 0, maxRun = 0, maxStart = 0, commentLines = 0;
 
@@ -134,6 +137,11 @@ function scan(text, hashStyle) {
     } else if (inBlock) {
       isComment = true;
       if (line.includes('*/')) inBlock = false;
+    } else if (inTemplate) {
+      // A template literal is data. `/*` inside one used to open a comment block
+      // that never closed, so every line to the end of the file counted as one
+      // comment -- 43 of them reported in a file that had none.
+      if (backticks(line) % 2 === 1) inTemplate = false;
     } else if (line.startsWith('/*')) {
       // A new /* ... */ block starts a fresh run. A section banner sitting above
       // a function's own JSDoc is two comments, not one essay, and merging them
@@ -144,6 +152,10 @@ function scan(text, hashStyle) {
       if (!line.includes('*/')) inBlock = true;
     } else if (line.startsWith('//') || line.startsWith('*')) {
       isComment = true;
+    }
+
+    if (!hashStyle && !isComment && !inBlock && !inTemplate && backticks(line) % 2 === 1) {
+      inTemplate = true;
     }
 
     if (isComment) {
