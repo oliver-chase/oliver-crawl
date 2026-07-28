@@ -24,7 +24,12 @@ describe('CRAWL-HARDEN-1 — the body cap bounds BYTES, not characters', () => {
   // the sanitiser's character cap. The 2 MB byte cap that stops a hostile
   // origin exhausting memory had nothing asserting it at all.
   function streamOf(totalBytes: number): Response {
-    const chunk = new TextEncoder().encode('a'.repeat(64 * 1024));
+    // Multi-byte on purpose. QA replaced the byte cap with a CHARACTER cap —
+    // which buffers the whole body before slicing and so restores the exact
+    // memory exhaustion this decision prevents — and the test stayed green,
+    // because with ASCII the two caps are indistinguishable. 'é' is 2 bytes
+    // and 1 character, so a character cap now reads twice the bytes it may.
+    const chunk = new TextEncoder().encode('é'.repeat(32 * 1024));
     let sent = 0;
     const body = new ReadableStream({
       pull(controller) {
@@ -39,9 +44,15 @@ describe('CRAWL-HARDEN-1 — the body cap bounds BYTES, not characters', () => {
   test('a body larger than the cap is truncated to the cap', async () => {
     const cap = 100_000;
     const text = await readBodyCapped(streamOf(1_000_000), cap);
-    // Bytes in, characters out — ASCII here, so they correspond.
     expect(text.length).toBeLessThanOrEqual(cap);
     expect(text.length).toBeGreaterThan(0);
+    // THE assertion that separates a byte cap from a character cap. Every
+    // character here is 2 bytes, so a cap on BYTES can yield at most cap/2
+    // characters, while a cap on CHARACTERS yields exactly cap. Without this,
+    // swapping the byte cap for a character cap — which buffers the whole body
+    // first, restoring the memory exhaustion the decision prevents — kept the
+    // test green.
+    expect(text.length).toBeLessThanOrEqual(cap / 2);
   });
 
   test('a body under the cap is returned whole', async () => {

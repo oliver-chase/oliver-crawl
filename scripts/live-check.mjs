@@ -16,6 +16,7 @@
 // settings here are deliberately conservative.
 
 import { createCrawler, crawlSite, discoverSitemapUrls, mapSite, searchAndCrawl } from '../dist/index.js';
+import { renderViaLocalChromium } from '../dist/fetch/local-render.js';
 import { lookup } from 'node:dns/promises';
 
 const dns = async (h) => (await lookup(h, { all: true })).map((r) => ({ address: r.address, family: r.family }));
@@ -337,6 +338,11 @@ console.log('\nRendering');
       const r = await renderCrawler.crawl(IANA, 'https://www.iana.org/help/example-domains');
       assert(r.ok, `${r.reason}: ${r.detail}`);
       const page = r.pages[0];
+      // QA: without this the check passed on the PLAIN FETCH rung — any
+      // HTML-derived rung satisfied the body, so it asserted the shape of a
+      // page the render rung never produced. Same vacuous-shape defect as the
+      // unit test this replaced, reintroduced in its replacement.
+      assert(page.rung === 'local-render', `shape checked on ${page.rung}, not local-render`);
       assert(/^[a-f0-9]{64}$/.test(page.textSha256), 'textSha256 missing — change detection would be dead for this rung');
       assert(/^[a-f0-9]{64}$/.test(page.bodySha256), 'bodySha256 missing');
       // Rendered output IS HTML, so the HTML-derived fields must be populated
@@ -345,6 +351,35 @@ console.log('\nRendering');
       assert(page.markdown.length > 0, 'markdown empty on an HTML-derived rung');
       assert(Array.isArray(page.links) && Array.isArray(page.jsonLd), 'array fields not arrays');
       return `markdown ${page.markdown.length}, ${page.links.length} links`;
+    });
+
+    await check('a redirect chain leaving the site is refused BEFORE the hop', async () => {
+      // RENDER-HOP-2, and the only check that can prove it. The static wiring
+      // tests assert the guard is present; QA showed a guard can be present,
+      // correct and never invoked. This drives a real off-site chain that
+      // RETURNS HOME, which is the shape that defeated the previous fix: the
+      // landing check saw the original host and passed.
+      const chain =
+        'https://nghttp2.org/httpbin/redirect-to?url=' +
+        encodeURIComponent('https://httpbin.org/redirect-to?url=' + encodeURIComponent('https://nghttp2.org/httpbin/get'));
+      const reasons = [];
+      const html = await renderViaLocalChromium(chain, true, [], dns, (r) => reasons.push(r));
+      assert(html === null, 'an off-site redirect chain rendered anyway');
+      assert(reasons.length > 0, 'the refusal was silent (RENDER-SILENT-1)');
+      assert(/off-domain|Blocked/i.test(reasons[0]), `refused for an unrelated reason: ${reasons[0]}`);
+      return reasons[0].slice(0, 44);
+    });
+
+    await check('a same-site redirect still renders', async () => {
+      // The other half. A guard that refuses the attack AND the ordinary case
+      // is not a guard, it is an outage — and it would show up as the render
+      // rung quietly never working.
+      const same =
+        'https://nghttp2.org/httpbin/redirect-to?url=' + encodeURIComponent('https://nghttp2.org/httpbin/get');
+      const html = await renderViaLocalChromium(same, true, [], dns, () => {});
+      assert(html !== null, 'a same-site redirect was refused');
+      assert(html.length > 0, 'same-site redirect returned empty html');
+      return `${html.length} chars`;
     });
 
     await check('the render rung reports what it did', async () => {
@@ -372,6 +407,9 @@ console.log('\nRendering');
       );
       const rendered = events.filter((e) => e.rung === 'local-render');
       assert(rendered.length > 0, 'render rung emitted no usage event at all');
+      // QA: counting events alone kept this green with onBlocked unwired, since
+      // the success path emits too. Name what is being proven.
+      assert(rendered.some((e) => e.ok), 'no successful render event');
       return `${rendered.length} render events, ${rendered.filter((e) => e.ok).length} ok`;
     });
   }

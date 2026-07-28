@@ -23,6 +23,13 @@ import type { DnsLookupFn } from '../core/types.js';
 
 const RENDER_TIMEOUT_MS = 20_000;
 
+/**
+ * Redirect hops followed inside the render rung before the chain is refused.
+ * A library constant, not a caller option: the ceiling exists so a redirect
+ * loop cannot spin, and a caller who could raise it could restore the spin.
+ */
+const MAX_REDIRECT_HOPS = 5;
+
 function hasNodeRuntime(): boolean {
   return typeof process !== 'undefined' && process.versions?.node != null;
 }
@@ -44,10 +51,20 @@ type ChromiumLike = {
   }>;
 };
 
+/** A fetched hop. Only the parts RENDER-HOP-2 needs to walk a redirect chain. */
+type RenderResponse = {
+  status: () => number;
+  headers: () => Record<string, string>;
+};
+
 type RenderRoute = {
   request: () => { url: () => string; isNavigationRequest: () => boolean };
   abort: () => Promise<unknown>;
   continue: () => Promise<unknown>;
+  // RENDER-HOP-2 follows redirects by hand, so it needs to make each request
+  // itself and hand the final response back to the page.
+  fetch: (options: { url: string; maxRedirects: number }) => Promise<RenderResponse>;
+  fulfill: (options: { response: RenderResponse }) => Promise<unknown>;
 };
 
 type RenderPage = {
@@ -165,7 +182,20 @@ export async function assertLandedSameSite(
  * by throwing from the REAL guards and asserting each message still matches.
  */
 export function isSecurityRefusal(reason: string): boolean {
-  return /Blocked|redirect hop|off-domain|cross-port|credential/i.test(reason);
+  // Chromium's own ERR_BLOCKED_* family is ordinary browser behaviour — an
+  // ad blocker, CORB, a client rule. It contains the word "blocked" and was
+  // being reported as an attack, which is how a real signal gets ignored.
+  if (/net::ERR_BLOCKED/i.test(reason)) return false;
+  return (
+    /Blocked|redirect hop|off-domain|cross-port/i.test(reason) ||
+    // Fail-closed DNS refusals ARE security refusals and worded nothing like
+    // the others, so they were staying silent — the quietest possible failure
+    // of the decision this predicate implements.
+    /DNS lookup returned (no addresses|invalid address)/i.test(reason) ||
+    // Scoped to OUR credentialed-URL refusal. A bare /credential/ also matched
+    // a site's own "invalid credentials" body text.
+    /credentialed (crawl|redirect) URL/i.test(reason)
+  );
 }
 
 /**
@@ -230,17 +260,54 @@ export async function renderViaLocalChromium(
         }
         return;
       }
+      // RENDER-HOP-2: follow the redirect chain OURSELVES rather than letting
+      // Chromium do it. `route.continue()` hands the request to the network
+      // stack, which follows 3xx internally and never shows the handler the
+      // hops — driving `site -> off-site -> site` proved the handler saw ONE
+      // request while three responses arrived, so the off-site server got a
+      // real request and the landing check passed because the chain came home.
+      // The guard was present, correct, and never invoked.
+      //
+      // Fetching each hop with maxRedirects: 0 puts the check BEFORE the
+      // request instead of after the fact.
+      let current = request.url();
+      let response: RenderResponse | null = null;
       try {
-        // Same guard as the landing check, applied before the hop is made.
-        await assertLandedSameSite(request.url(), url, dnsLookup);
-        await route.continue();
+        for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+          await assertLandedSameSite(current, url, dnsLookup);
+          response = await route.fetch({ url: current, maxRedirects: 0 });
+          const status = response.status();
+          if (status < 300 || status >= 400) break;
+          const location = response.headers()['location'];
+          if (!location) break;
+          // Resolved against the CURRENT hop, so a relative Location behaves
+          // the way the browser would have resolved it.
+          current = new URL(location, current).toString();
+        }
       } catch (error) {
-        blockedHops.push(`${request.url()}: ${error instanceof Error ? error.message : String(error)}`);
+        blockedHops.push(`${current}: ${error instanceof Error ? error.message : String(error)}`);
         await route.abort();
+        return;
       }
+      if (!response) {
+        blockedHops.push(`${current}: redirect chain exceeded ${MAX_REDIRECT_HOPS} hops`);
+        await route.abort();
+        return;
+      }
+      await route.fulfill({ response });
     });
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: RENDER_TIMEOUT_MS });
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: RENDER_TIMEOUT_MS });
+    } catch (navError) {
+      // Aborting the navigation request IS how a hop is refused, so Chromium
+      // reports the refusal as `net::ERR_FAILED` — indistinguishable from an
+      // ordinary network error, and therefore not reported. Our own record of
+      // why we aborted has to win over the browser's generic message, or the
+      // guard blocks the attack and tells nobody. RENDER-SILENT-1 again.
+      if (blockedHops.length > 0) throw new Error(`Render blocked a redirect hop — ${blockedHops[0]}`);
+      throw navError;
+    }
     if (blockedHops.length > 0) throw new Error(`Render blocked a redirect hop — ${blockedHops[0]}`);
     // RENDER-REDIRECT-1: the browser followed the chain; check where it ended.
     await assertLandedSameSite(page.url(), url, dnsLookup);

@@ -51,8 +51,24 @@ describe('subresource requests are screened too', () => {
 
   test('a blocked subresource aborts the request, not the render', () => {
     // A blocked tracker or internal beacon must not lose the page.
-    const subresourceBlock = renderFn.slice(renderFn.indexOf('isNavigationRequest'));
+    //
+    // This slice used to run to END OF FILE, so it swept in the NAVIGATION
+    // branch's own route.abort(). QA defeated RENDER-SUBRESOURCE-1 completely —
+    // swapping this abort for continue(), letting private-address subresources
+    // through — and the whole suite stayed green. Bounded to the subresource
+    // branch alone, and comment-stripped so the prose explaining the guard
+    // cannot satisfy the assertion.
+    const start = renderFn.indexOf('isNavigationRequest');
+    const end = renderFn.indexOf('follow the redirect chain OURSELVES');
+    expect(end).toBeGreaterThan(start);
+    const subresourceBlock = renderFn
+      .slice(start, end)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
     expect(subresourceBlock).toMatch(/route\.abort\(\)/);
+    // The point of the decision: it aborts the REQUEST and lets the render
+    // continue. Throwing here would lose the page over a blocked beacon.
+    expect(subresourceBlock).not.toMatch(/throw /);
   });
 });
 
