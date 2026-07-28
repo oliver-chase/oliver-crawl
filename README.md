@@ -90,7 +90,7 @@ if (!result.ok) {
 
 ---
 
-## Four design decisions
+## Design decisions
 
 ### URLs are screened before they are requested
 
@@ -250,6 +250,8 @@ The library holds no database. Persistence, scheduling, and converting pages int
 | **[LANES.md](docs/LANES.md)** | The rung ladder, in order |
 | **[REFERENCE.md](docs/REFERENCE.md)** | Every option and return field |
 | **[MIGRATION.md](docs/MIGRATION.md)** | Provenance: what moved here, from where |
+| **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** | Failures you will hit, listed by symptom |
+| **[DECISIONS.md](docs/DECISIONS.md)** | Why the code is the way it is, indexed by the defect each choice prevents |
 | **[BACKLOG.md](docs/BACKLOG.md)** | Known gaps — read before assuming a capability exists |
 
 ## Status

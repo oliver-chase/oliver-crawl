@@ -176,21 +176,14 @@ your app beyond the per-host politeness throttle.
 
 ## Environment gotchas
 
-**Your repo is CommonJS.** This package is ESM-only. Either import it from an ESM entry point, or use dynamic import:
+Every failure a swap tends to hit — fail-closed robots, ESM-only imports, the
+bundler and `playwright`, thin pages — is in
+[TROUBLESHOOTING](TROUBLESHOOTING.md), listed by symptom.
 
-```js
-const { createCrawler } = await import('@oliver/crawl-core');
-```
+The one most likely to bite a migration: a nullable `robots_policy` column
+means every target with a null fails closed the moment you switch. Backfill it
+or set `autoRobots: true`.
 
-**You deploy to Cloudflare Workers / Vercel Edge.** Works, with two caveats: local Chromium rendering is skipped (no browser available), and DNS resolution uses DNS-over-HTTPS automatically since `node:dns` doesn't exist there. Everything else is identical. Set `browserRender` if you need JS rendering in that environment.
-
-**Your bundler complains about `playwright`.** It shouldn't — the import is deliberately written so bundler tracers cannot see it. If something still tries to resolve it, mark `playwright` external. It is not a dependency of this package.
-
-**The package installs but imports fail.** Make sure you installed a tagged version (`#<tag>`, not a bare branch). The build runs on install via `prepare`; if your CI uses `--ignore-scripts`, that step is skipped and there is no `dist/`.
-
-**Everything suddenly reports `blocked`.** Almost always fail-closed robots — see the warning in step 1.
-
----
 
 ## What you have to wire yourself
 
