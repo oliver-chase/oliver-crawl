@@ -149,10 +149,48 @@ we are allowed to crawl would invert the point of asking.
 
 ---
 
+## CRAWL-PARITY-1 — resolved, 2026-07-27
+
+Both extractors run over the same 60 random active Fallow sources. This was
+the gate on wiring any consumer.
+
+| | Read | Notes |
+|---|---|---|
+| Fallow's cheerio runner | 59/60 | |
+| oliver-crawl, `autoRobots` | 55/60 | |
+| oliver-crawl, stored `allow` policy | 60/60 | The configuration Fallow actually uses |
+
+**Median text-length ratio on the 53 shared URLs: 0.98.** Extraction agrees.
+
+The 5-source gap was configuration, not extraction. Those sites return 403 on
+`robots.txt`, so `autoRobots` resolves `unknown` and fails closed. Fallow
+stores a resolved policy per source, and with that same input oliver-crawl
+reads all five. A consumer migrating must pass its stored `robotsPolicy`
+rather than relying on `autoRobots`, or those sources stop working — this is
+the single most likely migration surprise.
+
+**One real extraction gap, now addressed (THIN-PAGE-1).** On
+`grandlakefolkfestival.com` we returned 1,232 characters where Fallow returned
+2,498. The page is JavaScript-rendered and ships a nav and footer in its HTML,
+so it passed the ladder's "is the parse empty" check and never escalated.
+Rendering it returns 5,519 characters. `renderWhenTextBelow` now escalates a
+page that parsed but is implausibly short. Opt-in with no default: there is no
+way to know more content exists without rendering, and rendering every short
+page would be a large cost for pages that are simply short.
+
+**Remaining before adoption:** none from this comparison. The migration
+procedure in [EXISTING-PROJECTS](EXISTING-PROJECTS.md) still applies — swap
+module by module with the consumer's own suite green at each step.
+
+---
+
 ## Live tracker
 
 | Date | Entry | Change |
 |---|---|---|
+| 2026-07-27 | CRAWL-PARITY-1 | RESOLVED. Both extractors over the same 60 live sources: Fallow 59/60, oliver-crawl 60/60 with the same stored-policy config, median text ratio 0.98. The gap was autoRobots vs a stored policy, not extraction. |
+| 2026-07-27 | THIN-PAGE-1 | FIXED. A JS page shipping only nav and footer passed the "is the parse empty" check and never escalated to render — 1,232 chars fetched vs 5,519 rendered on a live site. `renderWhenTextBelow` opts in to escalating an implausibly short page; a render that returns less is discarded, so it never loses the page it had. |
+| 2026-07-27 | docs | Every export documented in REFERENCE's API surface; seven were undocumented (fetchViaWayback, jinaEndpoint, useArchiveFallback, resolveTarget, diffContent, pickDetailLinks, findContentImages). |
 | 2026-07-27 | GUARD-PRECISION-3 | FIXED. encoded-payload spanned URL paths (`/` is in its character class), quarantining a base64 placeholder and a CDN path. Rule now evaluated URL-free; strip runs before normalisation. |
 | 2026-07-27 | ROBOTS-REDIRECT-1 | Fixed, then REVERSED on evidence. Refusing off-domain robots redirects cost 6 live sources to protect against 1 parked domain. Now followed, with the new host reported. Read rate 53 -> 49 -> 55 of 60. |
 | 2026-07-27 | MARKDOWN-DATAURI-1 | FIXED. Markdown emitted base64 data-URI image srcs, tripping the injection guard's encoded-payload rule and quarantining ordinary pages. Found by the first live parity run, not by the test suite — introduced and caught the same day. |

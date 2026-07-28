@@ -252,7 +252,7 @@ The library holds no database. Persistence, scheduling, and converting pages int
 
 ## Status
 
-551 tests across 43 files. Strict TypeScript, builds to `dist/`. A separate network suite (`npm run live`, 23 checks) exercises the library against real websites, and installation is verified as a genuine git dependency. Node 20+, and runs on edge and serverless runtimes, where local rendering is unavailable.
+556 tests across 44 files. Strict TypeScript, builds to `dist/`. A separate network suite (`npm run live`, 23 checks) exercises the library against real websites, and installation is verified as a genuine git dependency. Node 20+, and runs on edge and serverless runtimes, where local rendering is unavailable.
 
 ## License
 
