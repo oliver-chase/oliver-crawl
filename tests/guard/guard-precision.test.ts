@@ -104,3 +104,35 @@ describe('GUARD-PRECISION-4 — an email destination is still a destination', ()
     expect(detectPromptInjectionSignals('the server sends the close token in the Connection header')).toEqual([]);
   });
 });
+
+describe('GUARD-PRECISION-5 — a long run of letters is not encoding', () => {
+  // The rule required only an 80-character alphanumeric run. Whitespace-stripped
+  // page copy produces those constantly: QA lost a whole page because its
+  // industry mega-menu flattens to one long lowercase word, roughly 8% of a
+  // mainstream B2B sample. Same false-positive shape GUARD-PRECISION-1 fixed
+  // for tool-exfiltration, in the rule that release did not touch.
+  const flagged = (text: string) =>
+    detectPromptInjectionSignals(text).some((s) => s.id === 'encoded-payload');
+
+  test('a flattened navigation menu is released', () => {
+    expect(flagged('businessmarketingoperationsitproductsaleshealthcareretailgovernmenteducationmanufacturing')).toBe(false);
+  });
+
+  test('a long run of concatenated event categories is released', () => {
+    expect(flagged('concertsfestivalstheatrecomedydancemusicfamilyeventsworkshopsclassesexhibitionsmarkets')).toBe(false);
+  });
+
+  test('real base64 is still flagged', () => {
+    // Mixed case and digits — what actual encoding looks like at any length.
+    expect(flagged('aGVsbG8gd29ybGQgdGhpcyBpcyBhIHJlYWwgYmFzZTY0IHBheWxvYWQgd2l0aCBtaXhlZCBDQVNFIGFuZCBkaWdpdHM5OTk=')).toBe(true);
+  });
+
+  test('an all-lowercase run WITH padding is still flagged', () => {
+    // The padding is the tell. Without it this is indistinguishable from prose.
+    expect(flagged('aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjkkkkllllmmmmnnnnooooppppqqqqrrrrssssttttuuuuvvvv==')).toBe(true);
+  });
+
+  test('an embedded image payload is still flagged', () => {
+    expect(flagged('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==')).toBe(true);
+  });
+});
