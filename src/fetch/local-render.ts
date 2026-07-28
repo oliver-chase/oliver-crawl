@@ -120,15 +120,6 @@ export async function runActions(page: RenderPage, actions: BrowserAction[], ori
 }
 
 /**
- * Render a URL with local headless Chromium and return the post-JS HTML, or
- * null when unavailable (wrong runtime, not opted in, playwright absent, or
- * the render failed). Null always means "skip this rung", never an error —
- * the free rung must degrade invisibly on machines that can't run it.
- *
- * Returns HTML (not extracted text) so the caller feeds it through the SAME
- * buildPage path as every other rung — one parser, one guard, one shape.
- */
-/**
  * RENDER-REDIRECT-1: where did the browser actually land?
  *
  * `page.goto` follows the entire redirect chain inside Chromium, and nothing
@@ -160,6 +151,17 @@ export async function assertLandedSameSite(
   await assertHostResolvesToPublicAddress(new URL(finalUrl).hostname, dnsLookup);
 }
 
+/**
+ * Render a URL with local headless Chromium and return the post-JS HTML, or
+ * null when the rung cannot run (wrong runtime, not opted in, playwright
+ * absent) or the render failed.
+ *
+ * Null is not always silent: a refusal on SECURITY grounds calls `onBlocked`,
+ * because an active redirect attack must not look like a missing browser.
+ *
+ * Returns HTML rather than extracted text so the caller feeds it through the
+ * SAME buildPage path as every other rung — one parser, one guard, one shape.
+ */
 export async function renderViaLocalChromium(
   url: string,
   enabled: boolean,

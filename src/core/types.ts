@@ -349,11 +349,6 @@ export type CrawlConfig = {
   /** Default caps, overridable per request. */
   defaults?: Required<Pick<CrawlOptions, 'maxTextChars' | 'timeoutMs' | 'maxPages'>>;
   /**
-   * Safety/scale limits. Every one has a sane default; they are exposed
-   * because the right value depends on YOUR pages, and a limit you cannot
-   * raise is a limit that silently loses data.
-   */
-  /**
    * Minimum gap between requests to the SAME host, process-wide and across
    * concurrent callers. Different hosts never wait on each other.
    *
@@ -417,18 +412,6 @@ export type CrawlConfig = {
    */
   jinaEndpoint?: string;
   /**
-   * WAYBACK-RUNG-1: fall back to the Internet Archive when every live rung
-   * fails. Free and keyless. Off by default.
-   *
-   * Runs ONLY for targets whose robots posture is explicitly `allow` — never
-   * on `disallow`, never on `unknown`. An archive fallback is otherwise a way
-   * to read pages a site refused, which would make every other guard here
-   * decorative.
-   *
-   * Always last: an archived copy is older than the live page by definition,
-   * so it runs when the alternative is nothing at all.
-   */
-  /**
    * THIN-PAGE-1: escalate to the render rungs when a fetched page yields
    * fewer than this many characters, even though it yielded SOME.
    *
@@ -443,9 +426,26 @@ export type CrawlConfig = {
    * point. Rendering a page that was already complete costs time, never data.
    */
   renderWhenTextBelow?: number;
+  /**
+   * WAYBACK-RUNG-1: fall back to the Internet Archive when every live rung
+   * fails. Free and keyless. Off by default.
+   *
+   * Runs ONLY for targets whose robots posture is explicitly `allow` — never
+   * on `disallow`, never on `unknown`. An archive fallback is otherwise a way
+   * to read pages a site refused, which would make every other guard here
+   * decorative.
+   *
+   * Always last: an archived copy is older than the live page by definition,
+   * so it runs when the alternative is nothing at all.
+   */
   useArchiveFallback?: boolean;
   /** Reject archived captures older than this. Unset means any age. */
   archiveMaxAgeDays?: number;
+  /**
+   * Safety/scale limits. Every one has a sane default; they are exposed
+   * because the right value depends on YOUR pages, and a limit you cannot
+   * raise is a limit that silently loses data.
+   */
   limits?: {
     /** Max bytes read from any origin before truncating. Default 2 MB.
      *  Raise for genuinely huge listing pages; lower to harden further. */
