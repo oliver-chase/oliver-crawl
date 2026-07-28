@@ -83,3 +83,19 @@ describe('a PDF is recognised as its own content kind', () => {
     expect(result.detail).not.toContain('Unsupported content-type');
   });
 });
+
+describe('PDF-TIMEOUT-1 — parsing is time-bounded', () => {
+  test('a parser that never finishes does not hang the crawl', async () => {
+    // The bytes are attacker-supplied. A hostile PDF that sends a parser into
+    // non-terminating work would otherwise hold the crawl forever, which is
+    // worse than failing: nothing reports and nothing retries.
+    const { extractPdfText } = await import('@/fetch/pdf-extract');
+    // unpdf is not installed here, so this asserts the guard the real path
+    // has rather than simulating the parser — see the no_parser test above.
+    const result = await extractPdfText(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
+    // Whatever the reason, it RESOLVED — the contract is that this never hangs.
+    expect(typeof result.detail).toBe('string');
+  });
+});

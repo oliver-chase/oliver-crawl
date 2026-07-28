@@ -30,6 +30,18 @@
 /** Bound the work: a PDF is untrusted input like everything else here. */
 const MAX_PDF_PAGES = 50;
 
+/**
+ * PDF-TIMEOUT-1 (2026-07-27, found in review): a wall-clock bound on parsing.
+ *
+ * Every other module that touches remote data has a timeout; this one had
+ * none, because it parses bytes rather than fetching them. But those bytes
+ * are attacker-supplied, and a malformed or deliberately hostile PDF can send
+ * a parser into work that does not finish. Without a bound that hangs the
+ * crawl, and a crawl that hangs is worse than one that fails: nothing reports,
+ * nothing retries, and the process holds its slot indefinitely.
+ */
+const PDF_PARSE_TIMEOUT_MS = 20_000;
+
 type UnpdfLike = {
   extractText: (
     data: Uint8Array,
@@ -71,7 +83,15 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtractResul
   }
 
   try {
-    const extracted = await parser.extractText(bytes, { mergePages: true });
+    // Raced rather than cancelled: the parser exposes no abort signal, so the
+    // work may continue in the background — but the crawl is not held by it,
+    // and the process can still make progress.
+    const extracted = await Promise.race([
+      parser.extractText(bytes, { mergePages: true }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`PDF parsing exceeded ${PDF_PARSE_TIMEOUT_MS}ms`)), PDF_PARSE_TIMEOUT_MS),
+      ),
+    ]);
     const raw = Array.isArray(extracted.text) ? extracted.text.join('\n\n') : extracted.text;
     const text = (raw || '').trim();
 
