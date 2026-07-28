@@ -498,23 +498,17 @@ async function archiveFallback(
  * Did the direct rung refuse because the origin moved to a DIFFERENT SITE?
  *
  * Decided from the URL in the refusal, not from how the guard worded it. The
- * first version matched `Blocked off-domain ... URL` and QA showed that misses
- * the real cases: the guard checks https and credentials BEFORE off-domain, so
- * a redirect to `http://newowner.example.net/` is refused as "non-https" and a
- * credentialed one as "credentialed" — the word "off-domain" never appears,
- * and parked domains routinely 301 to plain http. Wording is the wrong thing
- * to read when the message already carries the answer.
+ * first version matched `Blocked off-domain ... URL`, and the guard checks
+ * https and credentials BEFORE off-domain — so a redirect to plain http is
+ * refused as "non-https" and the word never appears. Parked domains routinely
+ * 301 to http, which is the case this exists for.
  *
- * Registrable-domain comparison, not exact host, so `site.com` ->
- * `events.site.com` is NOT a move. That is a routine platform migration by the
- * same publisher, and flagging it adds review load for a non-event — which
- * matters because a consumer here is under a standing rule that per-source
- * review load must shrink.
+ * Registrable-domain comparison, so `site.com` -> `events.site.com` is NOT a
+ * move: same publisher, and flagging it adds review load for a non-event.
  *
- * Tested through the ladder, not against a restatement of the rule:
- * `tests/lanes/origin-moved.test.ts` drives all five shapes through a real
- * crawl. An earlier version asserted a duplicated copy of the regex, which
- * meant rewriting the detector left it green.
+ * Tested through the ladder in `tests/lanes/origin-moved.test.ts`, not against
+ * a restatement of the rule — an earlier version asserted a duplicated copy of
+ * the regex, so rewriting the detector left it green.
  */
 function isOffDomainRefusal(detail: string, requestedUrl: string): boolean {
   const found = detail.match(/https?:\/\/[^\s)]+/);
