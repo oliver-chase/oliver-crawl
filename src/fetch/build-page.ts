@@ -51,7 +51,13 @@ export async function buildPage(input: {
     }
   });
 
-  const title = $('title').first().text().trim() || null;
+  // GUARD-TITLE-1: <title> lives in <head>, so it was never part of the body
+  // text or the markdown the guard inspects, and shipped raw. A title is page
+  // content — callers display it and feed it to models — so it gets the same
+  // treatment as everything else the page supplies.
+  const rawTitle = $('title').first().text().trim();
+  if (rawTitle && sanitizeCrawledText(rawTitle, input.maxTextChars).signals.length > 0) return 'quarantined';
+  const title = rawTitle || null;
 
   // Built BEFORE the destructive strip below, and from a clone internally, so
   // the link pass further down still sees the whole document.

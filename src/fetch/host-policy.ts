@@ -197,6 +197,7 @@ export function assertTargetEligible(target: CrawlTarget): void {
 }
 
 // A host and its apex/www counterpart are the same site. This is the single
+// OFFDOMAIN-WWW-1: www. and apex are one site; anything else is not.
 // most common in-page link and redirect shape (example.com <-> www.example
 // .com); treating them as different hosts breaks crawling a site with its own
 // links. Nothing broader is allowed — a subdomain is NOT the same site.

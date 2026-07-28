@@ -583,6 +583,7 @@ async function renderFallback(
     });
     if (localPage === 'quarantined') {
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
+      // QUARANTINE-TELEMETRY-1: every rung reports its own quarantine.
       const detail = 'Locally rendered content tripped the prompt-injection guard.';
       emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
       return { ok: false, reason: 'quarantined', detail, lane: 'own' };

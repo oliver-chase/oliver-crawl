@@ -22,7 +22,7 @@
 //   node scripts/check-decisions.mjs
 //   node scripts/check-decisions.mjs --list   # what is recorded, and where
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
 const ID_PATTERN = /\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+-\d+[a-z]?\b/g;
@@ -84,12 +84,30 @@ for (const [id, files] of srcIds) {
   }
 }
 
-// 2. Every decision in the ledger still exists in the code. An entry
-//    describing code that was deleted is worse than no entry: it is confidently
-//    wrong.
+// 2. Every decision in the ledger still exists IN THE CODE.
+//
+//    This required `src/` specifically. Accepting "src OR tests" let a
+//    surviving test launder a decision that had been renamed or deleted out of
+//    the source — the exact refactor this gate exists to catch. Two entries
+//    were already in that state when it was tightened.
 for (const [id] of ledgerIds) {
-  if (!srcIds.has(id) && !testIds.has(id)) {
-    problems.push(`${id} is recorded in ${LEDGER} but no longer appears in src/ or tests/`);
+  if (!srcIds.has(id)) {
+    const where = testIds.has(id) ? 'only in tests/' : 'nowhere in the repo';
+    problems.push(`${id} is recorded in ${LEDGER} but appears ${where} — not in src/`);
+  }
+}
+
+// 2b. The ledger's Source column has to name a file that exists. A row
+//     pointing at a moved or deleted file reads as authoritative and sends the
+//     next reader somewhere empty.
+const ledgerText = readFileSync(LEDGER, 'utf8');
+for (const line of ledgerText.split('\n')) {
+  const row = line.match(/^\|\s*`([A-Z][A-Z0-9-]*-\d+[a-z]?)`\s*\|[^|]*\|\s*`([^`]+)`\s*\|/);
+  if (!row) continue;
+  const [, id, srcPath] = row;
+  const full = srcPath.startsWith('src/') ? srcPath : `src/${srcPath}`;
+  if (!existsSync(full)) {
+    problems.push(`${id}: ledger Source column names ${full}, which does not exist`);
   }
 }
 
@@ -116,7 +134,7 @@ if (untested.length > 0) {
 
 if (problems.length > 0) {
   console.log(`  ${problems.length} integrity problems:\n`);
-  for (const p of problems) console.log(`    ✗ ${p}`);
+  for (const p of problems) console.log(`    FAIL: ${p}`);
   console.log('');
   process.exit(1);
 }

@@ -34,17 +34,18 @@ moment one changes.
 | `CRAWL-HARDEN-1` | Cap body bytes. An endless response otherwise ties up memory until the process dies. | `lanes/own/index.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-HASH-1` | Compare like with like. A structural hash against a text hash across a rung change reports a change that did not happen. | `core/types.ts` | `lanes/crawl-site.test.ts` |
 | `CRAWL-PDF-1` | PDF parser is an OPTIONAL peer — a large hostile-input surface does not belong in every consumer's install. | `core/content-kind.ts` | `fetch/pdf-extract.test.ts` |
-| `CRAWL-PERF-1` | Parse the document once, not once per JSON-LD script tag. | `lanes/own/index.ts` | — |
+| `CRAWL-PERF-1` | Parse the document once, not once per JSON-LD script tag. | `fetch/build-page.ts` | — |
 | `CRAWL-RESUME-1` | Emit a snapshot after each page so a killed run continues. Package stores nothing. | `crawl-site.ts` | `lanes/crawl-resume.test.ts` |
 | `CRAWL-ROBOTS-1` | robots.txt was ported but never called. A governed crawler was only as governed as the caller's bookkeeping. | `lanes/own/index.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-UA-1` | Warn once when a User-Agent carries no contact. Operators block traffic they cannot ask about. | `core/config.ts` | `core/consumer-signals.test.ts` |
 | `CRAWL-UNCHANGED-1` | Hashes were computed and discarded. Comparing them is what makes re-crawls cheap for origins sending no ETag. | `crawl-site.ts` | `lanes/crawl-site.test.ts` |
-| `CRAWL-VALIDATE-1` | Conditional-GET headers were never actually sent; the test passed on a stub that returned 304 unconditionally. | `lanes/own/index.ts` | `lanes/own-lane.test.ts` |
+| `CRAWL-VALIDATE-1` | Conditional-GET headers were never actually sent; the test passed on a stub that returned 304 unconditionally. | `fetch/http-mechanics.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-VISION-1` | Rank images that plausibly carry the content. Finding them is free and ours; reading them is the caller's. | `core/types.ts` | `extract/backlog-batch.test.ts` |
 | `CRAWLSITE-AUTOROBOTS-1` | crawlSite checked eligibility before robots could resolve, so autoRobots did nothing for whole-site crawls. | `crawl-site.ts` | `lanes/crawlsite-autorobots.test.ts` |
 | `DEPLOY-BLOCKER-1` | The playwright import is invisible to bundler tracers. A plain import breaks serverless builds for consumers who never wanted it. | `fetch/local-render.ts` | — |
 | `GUARD-PRECISION-1` | Guard patterns tightened against real page copy that was being quarantined. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `GUARD-PRECISION-2` | Same, second pass: a missed attack alongside the false positives. | `guard/prompt-injection-guard.ts` | — |
+| `GUARD-TITLE-1` | `<title>` lives in `<head>`, so it was never part of the body text or markdown the guard inspects and shipped raw. A title is page content callers display and feed to models. | `fetch/build-page.ts` | `guard/title-guard.test.ts` |
 | `GUARD-PRECISION-3` | encoded-payload spans URL paths because `/` is in its class. URLs are stripped before that rule only. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `HOST-CACHE-SCOPE-1` | A module-level DNS cache shared by every crawler let one crawler's observation answer another's security check. | `core/rung-memory.ts` | `core/rung-memory.test.ts` |
 | `JINA-CREDENTIAL-1` | Never send a credentialed target's URL to a public proxy. It discloses the URL and cannot succeed anyway. | `lanes/own/index.ts` | `lanes/lane-exhaustion.test.ts` |
@@ -57,7 +58,7 @@ moment one changes.
 | `PDF-TIMEOUT-1` | Parsing is time-bounded. The bytes are attacker-supplied and a hostile PDF can send a parser into work that never finishes; a hang is worse than a failure, because nothing reports and nothing retries. | `fetch/pdf-extract.ts` | `fetch/pdf-extract.test.ts` |
 | `PAGE-SHAPE-1` | Every rung returns a complete, self-consistent page, checked against one contract. Written after a refactor dropped `markdown` on the paid lane with 600 tests green — they asserted rungs returned pages, never what was in them. | `fetch/build-page.ts` | `lanes/page-shape.test.ts` |
 | `PARITY-ACTIONS-1` | Browser actions before capture, bounded by library constants a caller cannot raise. | `core/types.ts` | `fetch/browser-actions.test.ts` |
-| `PARITY-HEADERS-1` | Send a plausible header set. A missing accept-language is an old bot tell; sec-ch-ua is deliberately NOT sent. | `lanes/own/index.ts` | — |
+| `PARITY-HEADERS-1` | Send a plausible header set. A missing accept-language is an old bot tell; sec-ch-ua is deliberately NOT sent. | `fetch/http-mechanics.ts` | — |
 | `PARITY-MAP-1` | List a site's URLs without crawling it. One page body fetched. | `map-site.ts` | `lanes/map-site.test.ts` |
 | `PARITY-READABILITY-1` | Paragraphs vote for their parent when no semantic tag exists. Guardrails because a wrong pick loses content. | `extract/html-to-markdown.ts` | `extract/html-to-markdown.test.ts` |
 | `READABILITY-CHROME-1` | Scoring ran before chrome removal, so a prose-heavy sidebar could win and the later strip could not undo it. | `extract/html-to-markdown.ts` | `extract/html-to-markdown.test.ts` |
