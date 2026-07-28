@@ -490,6 +490,17 @@ async function archiveFallback(
  * free rung pushes the crawl into the paid lane sooner than it needed to go,
  * so every failure path routes through here rather than choosing its own.
  */
+/**
+ * Did the direct rung refuse because the origin redirected OFF-DOMAIN?
+ *
+ * Matched on the guard's own message, which is a coupling worth naming: the
+ * test throws from the real guard and asserts this recognises the result, so
+ * rewording the guard fails there rather than silently turning the signal off.
+ */
+function isOffDomainRefusal(detail: string): boolean {
+  return /Blocked off-domain (redirect|crawl) URL/.test(detail);
+}
+
 async function freeFallbackLadder(
   url: string,
   config: ResolvedConfig,
@@ -524,7 +535,17 @@ async function freeFallbackLadder(
   }
 
   const viaJina = await jinaFallback(url, config, options, started, priorDetail);
-  if (viaJina.ok) return viaJina;
+  if (viaJina.ok) {
+    // ORIGIN-MOVED-1: this rung stepped past a POLICY refusal, not a failed
+    // fetch. Jina follows the same redirect from its own IPs, so a sold or
+    // parked domain returns the new owner's content under the old URL — and
+    // without this the caller sees an ordinary success. The refusal travels
+    // with the page so a consumer can hold it for review.
+    if (isOffDomainRefusal(priorDetail) && !viaJina.notModified) {
+      return { ...viaJina, originMoved: { refusal: priorDetail, servedBy: 'jina' } };
+    }
+    return viaJina;
+  }
 
   // Last, and only for an explicitly permitted target — see archiveFallback.
   if (target) {

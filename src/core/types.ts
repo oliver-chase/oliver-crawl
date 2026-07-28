@@ -233,7 +233,32 @@ export type { StructuredSummary } from '../extract/structured-summary.js';
 
 /** The result of a crawl. Ordinary failure is a value, not an exception. */
 export type CrawlResult =
-  | { ok: true; pages: CrawlPage[]; notModified?: false }
+  | {
+      ok: true;
+      pages: CrawlPage[];
+      notModified?: false;
+      /**
+       * ORIGIN-MOVED-1: the direct fetch was REFUSED on policy grounds and a
+       * fallback rung served the page anyway.
+       *
+       * The case that forced this: isisasheville.com, a live Fallow source, now
+       * redirects to a Spanish medical centre — the domain was sold. The direct
+       * rung correctly refuses the off-domain redirect; Jina then follows the
+       * same redirect from its own IPs and returns the new owner's content, and
+       * the crawl reported `ok: true` with no indication that the page belongs
+       * to a different business.
+       *
+       * Refusing outright is the wrong fix. An off-domain redirect is routinely
+       * a genuine migration, and this fleet has already reversed one over-strict
+       * redirect rule that cost six live sources to stop one parked domain. So
+       * the fallback still runs — but the refusal it stepped past travels with
+       * the result, so a consumer can hold the page for review instead of
+       * publishing content for a venue that no longer exists.
+       *
+       * Absent on an ordinary crawl. Its presence IS the signal.
+       */
+      originMoved?: { refusal: string; servedBy: string };
+    }
   | { ok: true; pages: []; notModified: true }
   | {
       ok: false;
