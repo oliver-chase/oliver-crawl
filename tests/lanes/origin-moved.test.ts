@@ -71,6 +71,61 @@ describe('a page served past an off-domain refusal is flagged', () => {
     expect(result.originMoved, 'a plain bot-wall was reported as a moved origin').toBeUndefined();
   });
 
+  test('the RENDER rung is flagged too — it runs before Jina', async () => {
+    // QA found the first version wrapped the Jina branch only, and
+    // renderFallback runs BEFORE it. On any deployment with browserRender
+    // configured the flag was unreachable, which is most of them.
+    const RENDERED = `<html><head><title>New Owner</title></head><body><main><p>${'Different business copy here. '.repeat(12)}</p></main></body></html>`;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('render.example.com')) {
+        return new Response(JSON.stringify({ html: RENDERED }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(null, { status: 301, headers: { location: 'https://newowner.example.net/' } });
+    }) as typeof fetch;
+
+    const result = await createCrawler({
+      userAgent: 'T/1 (+https://t.example.com)',
+      dnsLookup: publicDns,
+      browserRender: { url: 'https://render.example.com' },
+    }).crawl(target, 'https://site.example.com/');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.notModified) throw new Error('expected pages');
+    expect(result.pages[0]!.rung).toBe('browser-render');
+    expect(result.originMoved, 'the render rung served a moved origin unflagged').toBeDefined();
+    expect(result.originMoved!.servedBy).toBe('browser-render');
+  });
+
+  test('the render SERVICE cannot land us off-site (RENDER-REDIRECT-2)', async () => {
+    // The service reports where it landed and that value was trusted all the
+    // way into buildPage. The local rung had this check; the remote one had
+    // none anywhere.
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('render.example.com')) {
+        return new Response(
+          JSON.stringify({ html: '<html><body><main><p>Someone else entirely.</p></main></body></html>', url: 'https://elsewhere.example.net/' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('blocked', { status: 403 });
+    }) as typeof fetch;
+
+    const result = await createCrawler({
+      userAgent: 'T/1 (+https://t.example.com)',
+      dnsLookup: publicDns,
+      browserRender: { url: 'https://render.example.com' },
+    }).crawl(target, 'https://site.example.com/');
+
+    // It must not come back as a successful render of the requested page.
+    if (result.ok && !result.notModified) {
+      expect(result.pages[0]!.rung).not.toBe('browser-render');
+    }
+  });
+
   test('the detector recognises the real guard message', () => {
     // Matched on the guard's own wording, so the coupling is pinned here: a
     // reworded guard fails this rather than silently turning the signal off.

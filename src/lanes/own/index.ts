@@ -505,6 +505,21 @@ function isOffDomainRefusal(detail: string): boolean {
   return /Blocked off-domain (redirect|crawl) URL/.test(detail);
 }
 
+/**
+ * Attach ORIGIN-MOVED-1 to any rung that served a page past an off-domain
+ * refusal — not just Jina.
+ *
+ * The first version wrapped the Jina branch only, and `renderFallback` runs
+ * BEFORE it: on any deployment with `browserRender` configured, the render rung
+ * won and the flag was unreachable. The archive rung had the same gap. The
+ * signal has to live where the ladder decides, not on one branch of it.
+ */
+function withOriginMoved(result: CrawlResult, priorDetail: string, servedBy: string): CrawlResult {
+  if (!result.ok || result.notModified) return result;
+  if (!isOffDomainRefusal(priorDetail)) return result;
+  return { ...result, originMoved: { refusal: priorDetail, servedBy } };
+}
+
 async function freeFallbackLadder(
   url: string,
   config: ResolvedConfig,
@@ -515,7 +530,9 @@ async function freeFallbackLadder(
   target?: CrawlTarget,
 ): Promise<CrawlResult> {
   const rendered = await renderFallback(url, config, options, started);
-  if (rendered) return rendered;
+  if (rendered) {
+    return withOriginMoved(rendered, priorDetail, rendered.ok && !rendered.notModified ? (rendered.pages[0]?.rung ?? 'render') : 'render');
+  }
 
   // JINA-CREDENTIAL-1 (found in audit): the Jina rung is a PUBLIC
   // third-party proxy — we hand it a URL and it fetches the page itself. For a
@@ -545,16 +562,16 @@ async function freeFallbackLadder(
     // parked domain returns the new owner's content under the old URL — and
     // without this the caller sees an ordinary success. The refusal travels
     // with the page so a consumer can hold it for review.
-    if (isOffDomainRefusal(priorDetail) && !viaJina.notModified) {
-      return { ...viaJina, originMoved: { refusal: priorDetail, servedBy: 'jina' } };
-    }
-    return viaJina;
+    return withOriginMoved(viaJina, priorDetail, 'jina');
   }
 
   // Last, and only for an explicitly permitted target — see archiveFallback.
   if (target) {
     const archived = await archiveFallback(target, url, config, options, started);
-    if (archived) return archived;
+    // The archive capture is of the ORIGINAL url, so it is less wrong than a
+    // live fetch of the new owner — but with archiveMaxAgeDays unset the
+    // capture can post-date the sale, so it carries the flag too.
+    if (archived) return withOriginMoved(archived, priorDetail, 'archive');
   }
   return viaJina;
 }

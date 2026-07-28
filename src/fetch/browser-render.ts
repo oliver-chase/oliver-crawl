@@ -17,6 +17,7 @@
 // came over: that file's other ~400 lines are crawl orchestration coupled to
 // its own source registry, which the lane already handles here.
 
+import { assertRedirectUrlAllowedForHost } from './host-policy.js';
 import type { ResolvedConfig } from '../core/config.js';
 
 const RENDER_TIMEOUT_MS = 30_000;
@@ -80,8 +81,27 @@ export async function renderViaService(targetUrl: string, config: ResolvedConfig
   if (data.error) throw new Error(`Browser render service error: ${data.error}`);
   if (!data.html) throw new Error('Browser render service returned no HTML');
 
+  // RENDER-REDIRECT-2: the service tells us where it LANDED, and that value is
+  // trusted all the way into buildPage. RENDER-REDIRECT-1 hardened the local
+  // rung against exactly this and the remote one had no equivalent check
+  // anywhere — so a redirect off the requested site came back as ordinary
+  // content under the requested URL, which is how a sold or parked domain
+  // returns the new owner's page as a success.
+  //
+  // Checked HERE rather than at the call site: a caller that forgets is the
+  // failure mode, and this is the only place the service's answer enters.
+  const landed = data.url || targetUrl;
+  const requested = new URL(targetUrl);
+  // The SAME-SITE policy check, not the DNS one. This rung never dials the
+  // landing host — the render service did — so resolving it here would add
+  // network I/O to learn about a connection we do not make, and it broke tests
+  // that legitimately stub no resolver. What this rung CAN know is whether the
+  // service left the site it was asked for, which is the control that matters:
+  // off-domain, cross-port, credentialed and http-downgrade all refuse.
+  assertRedirectUrlAllowedForHost(requested.hostname, requested.port || '', landed);
+
   return {
-    url: data.url || targetUrl,
+    url: landed,
     status: data.status ?? 200,
     html: data.html,
     contentType: data.contentType || 'text/html',
