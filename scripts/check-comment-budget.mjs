@@ -100,7 +100,78 @@ function scan(text, hashStyle) {
   return { maxRun, maxStart, commentLines, total: nonBlank };
 }
 
+// ─── Correspondence: does the comment describe the code beneath it? ─────────
+//
+// A comment can pass every length and density rule and still document a
+// different function. Found by reading, never by a gate: a header describing
+// "one silent refresh attempt on an expired JWT ... returns true when a new
+// access token was stored" sat above a helper that hides a dropdown, 55 lines
+// from the function it described.
+//
+// Two rules, both chosen because they are unambiguous. A prose checker would be
+// a keyword list, which is the failure WRITING_PROCESS names directly.
+const DECL = /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/;
+// Capitalised, and either opening the comment or following a sentence end. That
+// is the JSDoc convention for a function's OWN return, and the capital is what
+// separates it from a claim about something else. Matching the bare word anywhere
+// gave a 100% false-positive rate on live code: "a destructive command returns a
+// confirm card" describes the server, and "silently resolves to the default" is
+// not a return claim at all.
+const RETURN_CLAIM = /(?:^|[.!?]\s+)(?:Returns?|Resolves?)\s+(?:true|false|null|the\b|a\b|an\b)/;
+
+/** A `return` carrying a value, as opposed to a bare early `return;`. */
+const RETURNS_VALUE = /\breturn\s+[^;\s]/;
+
+function correspondence(text, file) {
+  const lines = text.split('\n');
+  const found = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = DECL.exec(lines[i]);
+    if (!m) continue;
+    const [, name, paramStr] = m;
+
+    // The comment block directly above, if any.
+    let start = i;
+    while (start > 0 && /^\s*(\/\/|\*|\/\*)/.test(lines[start - 1])) start--;
+    if (start === i) continue;
+    const block = lines.slice(start, i).join('\n');
+
+    // 1. @param names must exist in the signature. A renamed parameter leaves
+    //    the old name documented, and the doc then describes a value nobody passes.
+    const params = paramStr
+      .split(',')
+      .map((p) => p.trim().replace(/[:=].*$/, '').replace(/^\.\.\./, '').trim())
+      .filter(Boolean);
+    if (params.length > 0) {
+      for (const pm of block.matchAll(/@param\s+(?:\{[^}]*\}\s*)?\[?([A-Za-z_$][\w$]*)/g)) {
+        if (!params.includes(pm[1])) {
+          found.push(`${file}:${start + 1}  @param ${pm[1]} is not a parameter of ${name}(${params.join(', ')})`);
+        }
+      }
+    }
+
+    // 2. A stated return value must exist. This is the FLOW-3 shape: the comment
+    //    describes what it returns, the function below returns nothing.
+    if (RETURN_CLAIM.test(block)) {
+      let depth = 0, body = '', started = false;
+      for (let j = i; j < lines.length && j < i + 400; j++) {
+        for (const ch of lines[j]) {
+          if (ch === '{') { depth++; started = true; }
+          else if (ch === '}') depth--;
+        }
+        body += lines[j] + '\n';
+        if (started && depth === 0) break;
+      }
+      if (started && !RETURNS_VALUE.test(body)) {
+        found.push(`${file}:${start + 1}  comment states a return value; ${name}() returns none`);
+      }
+    }
+  }
+  return found;
+}
+
 const rows = [];
+const mismatches = [];
 let totalLines = 0, totalComment = 0;
 
 for (const f of files) {
@@ -110,6 +181,9 @@ for (const f of files) {
   totalLines += r.total;
   totalComment += r.commentLines;
   rows.push({ file: f, ...r });
+  if (/\.(js|mjs|cjs|jsx|ts|tsx)$/.test(f) && !exempt.has(f)) {
+    mismatches.push(...correspondence(text, f));
+  }
 }
 
 const over = rows
@@ -136,9 +210,21 @@ if (!QUIET) {
   console.log(`  cap: ${MAX} consecutive comment lines${exempt.size ? `, ${exempt.size} exempt` : ''}\n`);
 }
 
-if (over.length === 0) {
+if (mismatches.length > 0) {
+  for (const m of mismatches.slice(0, TOP)) console.log(`  [MISMATCH] ${m}`);
+  if (mismatches.length > TOP) console.log(`  ... and ${mismatches.length - TOP} more`);
+  console.log('');
+}
+
+if (over.length === 0 && mismatches.length === 0) {
   console.log(`OK: no comment block over ${MAX} lines. ${densityLine}`);
   process.exit(0);
+}
+
+if (over.length === 0) {
+  console.log(`FAIL: ${mismatches.length} comment(s) describe code that is not beneath them.`);
+  console.log('Move the comment to what it documents, or correct it. See CODE_INTENT_STANDARD §1.');
+  process.exit(1);
 }
 
 for (const r of over.slice(0, TOP)) {
