@@ -45,6 +45,7 @@ import { looksLikeEmptyState } from '../../core/soft-404.js';
 import { EXTRACTOR_VERSION } from '../../core/extractor-version.js';
 import { forgetWinningRung, shouldSkipDirectFetch } from '../../core/rung-memory.js';
 import { looksLikeBlockPage } from '../../core/block-page.js';
+import { fetchViaWayback } from '../../fetch/wayback-fetch.js';
 import {
   assertRedirectUrlAllowedForHost,
   assertRequestUrlAllowed,
@@ -341,7 +342,7 @@ export async function crawlWithOwnLane(
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // Direct fetch failed — exhaust every remaining FREE rung before giving
     // up (and long before anything paid is considered).
-    return freeFallbackLadder(url, config, options, started, detail, hasCredentials(target));
+    return freeFallbackLadder(url, config, options, started, detail, hasCredentials(target), target);
   }
 
   // How long the origin took is the input to adaptive pacing.
@@ -366,7 +367,7 @@ export async function crawlWithOwnLane(
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // A 403/429/503 is where a real browser most often succeeds — render
     // rungs come BEFORE Jina here (LANE-EXHAUST-1).
-    const fallback = await freeFallbackLadder(url, config, options, started, detail, hasCredentials(target));
+    const fallback = await freeFallbackLadder(url, config, options, started, detail, hasCredentials(target), target);
     if (!fallback.ok && retryAfterMs) return { ...fallback, retryAfterMs };
     return fallback;
   }
@@ -504,14 +505,14 @@ export async function crawlWithOwnLane(
 
   if (!page.text.trim()) {
     // Served HTML had no readable text — a JS shell. Same free ladder.
-    return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target));
+    return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target), target);
   }
 
   // LADDER-QUALITY-1: a bot wall served with HTTP 200. The text exists but it
   // is the wall, not the page — treat it exactly like the 403 form of the
   // same wall and try the rungs that clear it.
   if (looksLikeBlockPage(page.text)) {
-    return freeFallbackLadder(url, config, options, started, 'Served a bot-wall interstitial (HTTP 200)', hasCredentials(target));
+    return freeFallbackLadder(url, config, options, started, 'Served a bot-wall interstitial (HTTP 200)', hasCredentials(target), target);
   }
 
   emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
@@ -537,6 +538,64 @@ export async function crawlWithOwnLane(
  * Order: free local Chromium (your CPU) -> your own render service -> Jina
  * (free public). Returns null only when every rung declined.
  */
+/**
+ * WAYBACK-RUNG-1: the archive rung, gated hard.
+ *
+ * Only for an explicit `allow` posture, and only after every live rung has
+ * failed. Returns null when it does not apply, so the caller falls through to
+ * its normal failure.
+ */
+async function archiveFallback(
+  target: CrawlTarget,
+  url: string,
+  config: ResolvedConfig,
+  options: CrawlOptions,
+  started: number,
+): Promise<CrawlResult | null> {
+  if (!config.useArchiveFallback) return null;
+  // Anything other than an explicit allow means no.
+  //
+  // Currently REDUNDANT and kept deliberately: `approveCrawlPolicy` already
+  // refuses disallow and unknown before any lane runs, so in the present code
+  // path this line never fires — an ablation confirmed removing it breaks no
+  // test. It stays because this function is one refactor away from being
+  // reachable another way, and the cost of the check is nothing next to the
+  // cost of an archive rung that reads pages a site refused.
+  if (target.robotsPolicy !== 'allow') return null;
+  // A credentialed page is not in a public archive, and looking for one there
+  // would disclose the URL for nothing.
+  if (Object.keys(target.headers ?? {}).length > 0) return null;
+
+  const archived = await fetchViaWayback(url, {
+    ...(config.archiveMaxAgeDays === undefined ? {} : { maxAgeDays: config.archiveMaxAgeDays }),
+  });
+  if (!archived.ok) return null;
+
+  const page = await buildPage({
+    url,
+    html: archived.html,
+    contentType: 'text/html',
+    etag: null,
+    lastModified: null,
+    baseHost: new URL(url).hostname,
+    maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
+    rung: 'archive',
+    includeHtml: options.includeHtml ?? false,
+    maxLinks: config.limits.maxLinksPerPage,
+    maxOutboundHosts: config.limits.maxOutboundHosts,
+  });
+
+  if (page === 'quarantined') {
+    const detail = 'Archived capture tripped the prompt-injection guard.';
+    emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    return { ok: false, reason: 'quarantined', detail, lane: 'own' };
+  }
+  if (!page.text.trim() || looksLikeBlockPage(page.text)) return null;
+
+  emitUsage(config, { lane: 'own', rung: 'archive', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+  return { ok: true, pages: [page] };
+}
+
 async function freeFallbackLadder(
   url: string,
   config: ResolvedConfig,
@@ -544,6 +603,7 @@ async function freeFallbackLadder(
   started: number,
   priorDetail: string,
   credentialed: boolean,
+  target?: CrawlTarget,
 ): Promise<CrawlResult> {
   const rendered = await renderFallback(url, config, options, started);
   if (rendered) return rendered;
@@ -569,7 +629,15 @@ async function freeFallbackLadder(
     };
   }
 
-  return jinaFallback(url, config, options, started, priorDetail);
+  const viaJina = await jinaFallback(url, config, options, started, priorDetail);
+  if (viaJina.ok) return viaJina;
+
+  // Last, and only for an explicitly permitted target — see archiveFallback.
+  if (target) {
+    const archived = await archiveFallback(target, url, config, options, started);
+    if (archived) return archived;
+  }
+  return viaJina;
 }
 
 /** Does this target carry caller-supplied request headers (i.e. credentials)? */
@@ -674,7 +742,7 @@ async function jinaFallback(
 ): Promise<CrawlResult> {
   const maxTextChars = options.maxTextChars ?? config.defaults.maxTextChars;
   try {
-    const jina = await fetchViaJina(url);
+    const jina = await fetchViaJina(url, config.jinaEndpoint ? { endpoint: config.jinaEndpoint } : undefined);
     if (!jina || !jina.text.trim()) {
       emitUsage(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: 'no content' });
       return { ok: false, reason: 'unreachable', detail: priorDetail, lane: 'own' };

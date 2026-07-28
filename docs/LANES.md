@@ -18,7 +18,8 @@ It is a ladder of rungs. Each runs only when the ones above it could not finish 
 | 6 | Hash | free | Full-body + content-region digests for change detection |
 | 7 | Local render | free | Local headless Chromium (`localRender: true` + `npx playwright install chromium`), for JS-only pages |
 | 8 | Remote render | yours | Your own render service (`browserRender`), for deployments that cannot run a browser |
-| 9 | Jina Reader | free | Keyless public service; clears bot walls and JS shells the direct fetch can't |
+| 9 | Jina Reader | free | Keyless public service; clears bot walls and JS shells the direct fetch can't. `jinaEndpoint` points at your own deployment of their Apache-2.0 build if you would rather not depend on a third party's uptime |
+| 10 | Internet Archive | free | **Off by default** (`useArchiveFallback`). Only for a target whose robots posture is explicitly `allow`, and only after every live rung has failed |
 
 ### When rungs 7–9 engage
 
@@ -33,6 +34,28 @@ All three take the same path in the same order, and rung 7 runs before rung 9. A
 The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lanes/own/index.ts`) so the order can't drift between the failure paths as rungs are added. `tests/lanes/lane-exhaustion.test.ts` asserts it, including that a vendor is never called while a free rung could still have worked.
 
 One rung is skipped conditionally: **a target carrying `headers` (credentials) never reaches rung 9.** Jina is a public third-party service that fetches the URL itself, so sending it a members-only URL would disclose that URL and its query string to a party you never agreed to share it with — and it would fail regardless, because Jina has none of your credentials. Rungs 7 and 8 still run: those are your own infrastructure.
+
+### The archive rung, and why it is gated
+
+Rung 10 reads the Internet Archive when every live rung has failed. The CDX
+API is free and keyless, so it is a genuine free rung rather than another
+vendor. The restriction on it is the point:
+
+- **`disallow` — never.** The site said no. Reading an archived copy is still
+  reading it.
+- **`unknown` — never.** Everything else here fails closed on unknown, and an
+  archive is not a way to launder an unresolved posture.
+- **`allow` — yes**, once the live rungs are exhausted.
+- **A credentialed target — never.** It is not in a public archive, and
+  looking would disclose the URL for nothing.
+
+It is last by construction. An archived capture is older than the live page by
+definition, so preferring it would serve stale data silently; it runs when the
+alternative is nothing at all. `archiveMaxAgeDays` rejects captures beyond an
+age you choose.
+
+An archive fallback without these limits is simply a way to read what a site
+refused, which would make every other guard here decorative.
 
 ## The paid path (`vendor`)
 
