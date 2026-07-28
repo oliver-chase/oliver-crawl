@@ -624,7 +624,10 @@ async function jinaFallback(
 ): Promise<CrawlResult> {
   const maxTextChars = options.maxTextChars ?? config.defaults.maxTextChars;
   try {
-    const jina = await fetchViaJina(url, config.jinaEndpoint ? { endpoint: config.jinaEndpoint } : undefined);
+    const jina = await fetchViaJina(url, {
+      ...(config.jinaEndpoint ? { endpoint: config.jinaEndpoint } : {}),
+      ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+    });
     if (!jina || !jina.text.trim()) {
       emitUsage(config, { lane: 'own', rung: 'jina', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: 'no content' });
       return { ok: false, reason: 'unreachable', detail: priorDetail, lane: 'own' };

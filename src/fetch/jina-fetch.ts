@@ -41,7 +41,7 @@ export type JinaFetchResult = { title: string | null; text: string };
 // baseUrl at every call site).
 export async function fetchViaJina(
   targetUrl: string,
-  opts?: { fetchImpl?: typeof fetch; endpoint?: string },
+  opts?: { fetchImpl?: typeof fetch; endpoint?: string; timeoutMs?: number },
 ): Promise<JinaFetchResult | null> {
   const doFetch = opts?.fetchImpl ?? fetch;
   const endpoint = (opts?.endpoint || JINA_ENDPOINT).replace(/\/+$/, '');
@@ -54,7 +54,16 @@ export async function fetchViaJina(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), JINA_TIMEOUT_MS);
+  // TIMEOUT-JINA-1: honour the caller's budget. This rung ignored `timeoutMs`
+  // entirely and used its own 30s, so a caller bounding a crawl at 8 seconds
+  // still waited up to 30 here — the bound read as a guarantee and was not one.
+  // A caller cannot see which rung is running, so the one number they set has
+  // to mean something on every rung.
+  //
+  // The 30s stays as the DEFAULT, because this rung renders the page remotely
+  // and is legitimately slower than a direct fetch; it is a ceiling for callers
+  // who set nothing, not a floor that overrides them.
+  const timeoutId = setTimeout(() => controller.abort(), opts?.timeoutMs ?? JINA_TIMEOUT_MS);
   try {
     const res = await doFetch(`${endpoint.replace(/\/+$/, '')}/${target.toString()}`, {
       method: 'GET',
