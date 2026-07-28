@@ -495,14 +495,31 @@ async function archiveFallback(
  * so every failure path routes through here rather than choosing its own.
  */
 /**
- * Did the direct rung refuse because the origin redirected OFF-DOMAIN?
+ * Did the direct rung refuse because the origin moved to a DIFFERENT SITE?
  *
- * Matched on the guard's own message, which is a coupling worth naming: the
- * test throws from the real guard and asserts this recognises the result, so
- * rewording the guard fails there rather than silently turning the signal off.
+ * Decided from the URL in the refusal, not from how the guard worded it. The
+ * first version matched `Blocked off-domain ... URL` and QA showed that misses
+ * the real cases: the guard checks https and credentials BEFORE off-domain, so
+ * a redirect to `http://newowner.example.net/` is refused as "non-https" and a
+ * credentialed one as "credentialed" — the word "off-domain" never appears,
+ * and parked domains routinely 301 to plain http. Wording is the wrong thing
+ * to read when the message already carries the answer.
+ *
+ * Registrable-domain comparison, not exact host, so `site.com` ->
+ * `events.site.com` is NOT a move. That is a routine platform migration by the
+ * same publisher, and flagging it adds review load for a non-event — which
+ * matters because a consumer here is under a standing rule that per-source
+ * review load must shrink.
  */
-function isOffDomainRefusal(detail: string): boolean {
-  return /Blocked off-domain (redirect|crawl) URL/.test(detail);
+function isOffDomainRefusal(detail: string, requestedUrl: string): boolean {
+  const found = detail.match(/https?:\/\/[^\s)]+/);
+  if (!found) return false;
+  try {
+    const registrable = (host: string) => host.toLowerCase().split('.').slice(-2).join('.');
+    return registrable(new URL(found[0]).hostname) !== registrable(new URL(requestedUrl).hostname);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -514,9 +531,9 @@ function isOffDomainRefusal(detail: string): boolean {
  * won and the flag was unreachable. The archive rung had the same gap. The
  * signal has to live where the ladder decides, not on one branch of it.
  */
-function withOriginMoved(result: CrawlResult, priorDetail: string, servedBy: string): CrawlResult {
+function withOriginMoved(result: CrawlResult, priorDetail: string, servedBy: string, requestedUrl: string): CrawlResult {
   if (!result.ok || result.notModified) return result;
-  if (!isOffDomainRefusal(priorDetail)) return result;
+  if (!isOffDomainRefusal(priorDetail, requestedUrl)) return result;
   return { ...result, originMoved: { refusal: priorDetail, servedBy } };
 }
 
@@ -531,7 +548,7 @@ async function freeFallbackLadder(
 ): Promise<CrawlResult> {
   const rendered = await renderFallback(url, config, options, started);
   if (rendered) {
-    return withOriginMoved(rendered, priorDetail, rendered.ok && !rendered.notModified ? (rendered.pages[0]?.rung ?? 'render') : 'render');
+    return withOriginMoved(rendered, priorDetail, rendered.ok && !rendered.notModified ? (rendered.pages[0]?.rung ?? 'render') : 'render', url);
   }
 
   // JINA-CREDENTIAL-1 (found in audit): the Jina rung is a PUBLIC
@@ -562,7 +579,7 @@ async function freeFallbackLadder(
     // parked domain returns the new owner's content under the old URL — and
     // without this the caller sees an ordinary success. The refusal travels
     // with the page so a consumer can hold it for review.
-    return withOriginMoved(viaJina, priorDetail, 'jina');
+    return withOriginMoved(viaJina, priorDetail, 'jina', url);
   }
 
   // Last, and only for an explicitly permitted target — see archiveFallback.
@@ -571,7 +588,7 @@ async function freeFallbackLadder(
     // The archive capture is of the ORIGINAL url, so it is less wrong than a
     // live fetch of the new owner — but with archiveMaxAgeDays unset the
     // capture can post-date the sale, so it carries the flag too.
-    if (archived) return withOriginMoved(archived, priorDetail, 'archive');
+    if (archived) return withOriginMoved(archived, priorDetail, 'archive', url);
   }
   return viaJina;
 }

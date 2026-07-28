@@ -126,6 +126,34 @@ describe('a page served past an off-domain refusal is flagged', () => {
     }
   });
 
+  // QA enumerated every message the redirect guard can produce and drove each
+  // one. The first detector matched the words "off-domain", and the guard
+  // checks https and credentials BEFORE off-domain — so a parked domain that
+  // 301s to plain http was refused as "non-https" and never flagged. The
+  // decision now reads the URL in the refusal instead of its wording.
+  test.each([
+    ['off-domain over https', 'https://newowner.example.net/', true],
+    ['off-domain over http', 'http://newowner.example.net/', true],
+    ['off-domain carrying credentials', 'https://u:p@newowner.example.net/', true],
+    // Same publisher on a subdomain is a routine platform migration, not a
+    // move. Flagging it adds review load for a non-event.
+    ['a subdomain of the same site', 'https://events.site.example.com/', false],
+    ['a different port on the same host', 'https://site.example.com:8443/', false],
+  ])('%s -> flagged=%s', async (_name, location, expected) => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('r.jina.ai')) return new Response(JINA_BODY, { status: 200 });
+      return new Response(null, { status: 301, headers: { location: location as string } });
+    }) as typeof fetch;
+
+    const result = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
+      target,
+      'https://site.example.com/',
+    );
+    const flagged = Boolean(result.ok && !result.notModified && result.originMoved);
+    expect(flagged).toBe(expected);
+  });
+
   test('the detector recognises the real guard message', () => {
     // Matched on the guard's own wording, so the coupling is pinned here: a
     // reworded guard fails this rather than silently turning the signal off.
