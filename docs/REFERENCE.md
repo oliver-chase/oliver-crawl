@@ -259,6 +259,7 @@ Anything not listed here is not exported.
 | `localRender` | Free local Chromium rung |
 | `browserActions` | Click/scroll/wait before capture, on the local render rung |
 | `jinaEndpoint` | Point the reader rung at your own Apache-2.0 deployment instead of the public one |
+| `renderWhenTextBelow` | Escalate to render when a page parsed but is implausibly short — a JS page shipping only nav and footer otherwise reads as a success |
 | `useArchiveFallback` · `archiveMaxAgeDays` | Internet Archive rung — off by default, `allow` posture only |
 | `rungMemory` | Remember which rung works per host (default on) |
 | `cacheTtlMs` · `minHostIntervalMs` · `adaptiveThrottleMultiplier` | Repeat-request and politeness controls |
@@ -500,6 +501,7 @@ Anything not listed here is not exported.
 | `localRender` | Free local Chromium rung |
 | `browserActions` | Click/scroll/wait before capture, on the local render rung |
 | `jinaEndpoint` | Point the reader rung at your own Apache-2.0 deployment instead of the public one |
+| `renderWhenTextBelow` | Escalate to render when a page parsed but is implausibly short — a JS page shipping only nav and footer otherwise reads as a success |
 | `useArchiveFallback` · `archiveMaxAgeDays` | Internet Archive rung — off by default, `allow` posture only |
 | `rungMemory` | Remember which rung works per host (default on) |
 | `cacheTtlMs` · `minHostIntervalMs` · `adaptiveThrottleMultiplier` | Repeat-request and politeness controls |

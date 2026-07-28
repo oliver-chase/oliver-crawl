@@ -428,6 +428,21 @@ export type CrawlConfig = {
    * Always last: an archived copy is older than the live page by definition,
    * so it runs when the alternative is nothing at all.
    */
+  /**
+   * THIN-PAGE-1: escalate to the render rungs when a fetched page yields
+   * fewer than this many characters, even though it yielded SOME.
+   *
+   * The ladder otherwise escalates only on an empty parse, so a JavaScript
+   * page that ships a nav and a footer but no content reads as a success. One
+   * measured case returned 1,232 characters of chrome from a plain fetch and
+   * 5,519 once rendered.
+   *
+   * Opt-in with no default, because there is no way to know more content
+   * exists without rendering, and rendering every short page would be a large
+   * cost for pages that are simply short. 500–800 is a reasonable starting
+   * point. Rendering a page that was already complete costs time, never data.
+   */
+  renderWhenTextBelow?: number;
   useArchiveFallback?: boolean;
   /** Reject archived captures older than this. Unset means any age. */
   archiveMaxAgeDays?: number;

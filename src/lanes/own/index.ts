@@ -508,6 +508,27 @@ export async function crawlWithOwnLane(
     return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target), target);
   }
 
+  // THIN-PAGE-1: the page parsed and has text, but too little of it. A
+  // JavaScript page often ships its nav and footer in the HTML and nothing
+  // else, which passes an "is it empty" check while carrying no content.
+  // Only runs when a caller sets a threshold — see renderWhenTextBelow.
+  const thinThreshold = config.renderWhenTextBelow ?? 0;
+  if (thinThreshold > 0 && page.text.trim().length < thinThreshold) {
+    const rendered = await freeFallbackLadder(
+      url,
+      config,
+      options,
+      started,
+      `Fetched page had only ${page.text.trim().length} characters (threshold ${thinThreshold})`,
+      hasCredentials(target),
+      target,
+    );
+    // Keep the thin page if nothing better came back — it is still the page.
+    if (rendered.ok && !rendered.notModified && (rendered.pages[0]?.text.length ?? 0) > page.text.length) {
+      return rendered;
+    }
+  }
+
   // LADDER-QUALITY-1: a bot wall served with HTTP 200. The text exists but it
   // is the wall, not the page — treat it exactly like the 403 form of the
   // same wall and try the rungs that clear it.
