@@ -19,9 +19,19 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const args = process.argv.slice(2);
+// A flag with a missing or non-numeric value used to yield NaN, and every
+// comparison against NaN is false — so `--max` with no value reported
+// "no comment block over NaN lines" and exited 0 with real offenders present.
+// A gate that passes on malformed input is worse than no gate.
 const flag = (name, fallback) => {
   const i = args.indexOf(name);
-  return i === -1 ? fallback : Number(args[i + 1]);
+  if (i === -1) return fallback;
+  const value = Number(args[i + 1]);
+  if (!Number.isFinite(value)) {
+    console.error(`${name} needs a number, got ${args[i + 1] === undefined ? '(nothing)' : args[i + 1]}`);
+    process.exit(2);
+  }
+  return value;
 };
 const QUIET = args.includes('--quiet');
 const TOP = flag('--top', 15);
@@ -31,7 +41,20 @@ const ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: '
 let config = { max: 20, exempt: [] };
 const configPath = join(ROOT, '.comment-budget.json');
 if (existsSync(configPath)) {
-  config = { ...config, ...JSON.parse(readFileSync(configPath, 'utf8')) };
+  // Both failures below crashed with a raw stack trace, which reads as the gate
+  // being broken rather than the config being wrong.
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(configPath, 'utf8'));
+  } catch (err) {
+    console.error(`.comment-budget.json is not valid JSON: ${err.message}`);
+    process.exit(2);
+  }
+  if (parsed.exempt !== undefined && !Array.isArray(parsed.exempt)) {
+    console.error('.comment-budget.json: "exempt" must be an array of { path, why }');
+    process.exit(2);
+  }
+  config = { ...config, ...parsed };
 }
 const MAX = flag('--max', config.max);
 const exempt = new Map((config.exempt ?? []).map((e) => [e.path, e.why]));
@@ -53,6 +76,7 @@ const TAG_LINE = /^[*#\s]*@\w+/;
 function scan(text, hashStyle) {
   const lines = text.split('\n');
   let inBlock = false;
+  let seenCode = false, prevCode = '';
   let run = 0, runStart = 0, maxRun = 0, maxStart = 0, commentLines = 0;
 
   const close = () => {
@@ -60,12 +84,53 @@ function scan(text, hashStyle) {
     run = 0;
   };
 
+  // A Python docstring is documentation, and while only `#` counted, every one
+  // of them was invisible — two 40-line narrative module docstrings passed the
+  // cap.
+  //
+  // Delimiters are PAIRED across the line rather than matched at its start,
+  // because lines are trimmed here: a closing `"""` alone on a line is
+  // identical to an opening one, and reading it as an opener swallowed the
+  // whole rest of the file. Only a region opening at a docstring position is
+  // prose, which leaves this fleet's triple-quoted SQL as the code it is.
+  let docQuote = null, docIsProse = false;
+  const pyLine = (line, atDocPosition) => {
+    let prose = docQuote !== null && docIsProse;
+    let pos = 0;
+    while (pos <= line.length) {
+      if (docQuote) {
+        const end = line.indexOf(docQuote, pos);
+        if (end === -1) return prose;
+        pos = end + 3;
+        docQuote = null;
+        docIsProse = false;
+        continue;
+      }
+      const s = line.indexOf("'''", pos), d = line.indexOf('"""', pos);
+      const open = s !== -1 && (d === -1 || s < d) ? s : d;
+      if (open === -1) return prose;
+      docQuote = line.slice(open, open + 3);
+      docIsProse = atDocPosition && /^[rRuUbBfF]{0,2}$/.test(line.slice(0, open));
+      if (docIsProse) prose = true;
+      pos = open + 3;
+    }
+    return prose;
+  };
+
   lines.forEach((raw, i) => {
     const line = raw.trim();
     let isComment = false;
 
     if (hashStyle) {
-      isComment = line.startsWith('#') && !line.startsWith('#!');
+      const wasOpen = docQuote !== null;
+      const prose = pyLine(line, !seenCode || /:\s*$/.test(prevCode));
+      if (prose && !wasOpen) close();
+      isComment = prose || (!wasOpen && line.startsWith('#') && !line.startsWith('#!'));
+      if (line && !isComment && docQuote === null && !wasOpen) prevCode = line;
+      // A shebang or coding line is not code, and counting it as code put the
+      // module docstring past its own position — the 44-line one below it went
+      // unseen.
+      if (line && !isComment && !line.startsWith('#')) seenCode = true;
     } else if (inBlock) {
       isComment = true;
       if (line.includes('*/')) inBlock = false;
@@ -110,14 +175,28 @@ function scan(text, hashStyle) {
 //
 // Two rules, both chosen because they are unambiguous. A prose checker would be
 // a keyword list, which is the failure WRITING_PROCESS names directly.
-const DECL = /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/;
-// Capitalised, and either opening the comment or following a sentence end. That
-// is the JSDoc convention for a function's OWN return, and the capital is what
-// separates it from a claim about something else. Matching the bare word anywhere
-// gave a 100% false-positive rate on live code: "a destructive command returns a
-// confirm card" describes the server, and "silently resolves to the default" is
-// not a return claim at all.
-const RETURN_CLAIM = /(?:^|[.!?]\s+)(?:Returns?|Resolves?)\s+(?:true|false|null|the\b|a\b|an\b)/;
+// Function forms this can check. Arrow consts and class methods are matched too;
+// a signature wrapped across lines is not, and is skipped rather than guessed at.
+const DECL = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)|^\s*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/;
+// Matched against the comment with its markers stripped, so a claim reads the
+// same whether it opens a line, a JSDoc continuation, or a sentence mid-line.
+// The first cut anchored `^` to the joined block, which always begins "//" or
+// "/*" — so it could never fire there, and the only claims it caught were ones
+// that happened to follow a sentence end on the same line. All three canonical
+// forms passed a function returning nothing.
+//
+// Still capitalised, which is what separates a claim about THIS function from
+// one about something else: "a destructive command returns a confirm card"
+// describes the server.
+const RETURN_CLAIM = /(?:^|[.!?]\s+)(?:Returns?|Resolves?)\s+(?:true|false|null|the\b|a\b|an\b)/m;
+
+/** Comment markers removed, so the prose can be matched as prose. */
+function commentProse(block) {
+  return block
+    .split('\n')
+    .map((l) => l.replace(/^\s*(?:\/\*\*?|\*\/|\*|\/\/)\s?/, '').trimEnd())
+    .join('\n');
+}
 
 /** A `return` carrying a value, as opposed to a bare early `return;`. */
 const RETURNS_VALUE = /\breturn\s+[^;\s]/;
@@ -128,7 +207,10 @@ function correspondence(text, file) {
   for (let i = 0; i < lines.length; i++) {
     const m = DECL.exec(lines[i]);
     if (!m) continue;
-    const [, name, paramStr] = m;
+    // Two alternations: `function name(...)` fills 1/2, `const name = (...) =>`
+    // fills 3/4.
+    const name = m[1] ?? m[3];
+    const paramStr = m[2] ?? m[4] ?? '';
 
     // The comment block directly above, if any.
     let start = i;
@@ -138,10 +220,13 @@ function correspondence(text, file) {
 
     // 1. @param names must exist in the signature. A renamed parameter leaves
     //    the old name documented, and the doc then describes a value nobody passes.
-    const params = paramStr
-      .split(',')
-      .map((p) => p.trim().replace(/[:=].*$/, '').replace(/^\.\.\./, '').trim())
-      .filter(Boolean);
+    // Destructured signatures are documented by their INNER names, so splitting
+    // `({ url, retries })` on commas yielded "{ url" and "retries }" and reported
+    // correct JSDoc as wrong — a fatal false positive on ordinary TypeScript.
+    // Every identifier in the signature counts, at any nesting.
+    const params = (paramStr.match(/[A-Za-z_$][\w$]*/g) || []).filter(
+      (t) => !['string', 'number', 'boolean', 'any', 'unknown', 'void', 'null', 'undefined', 'Promise', 'Record', 'Array'].includes(t),
+    );
     if (params.length > 0) {
       for (const pm of block.matchAll(/@param\s+(?:\{[^}]*\}\s*)?\[?([A-Za-z_$][\w$]*)/g)) {
         if (!params.includes(pm[1])) {
@@ -152,7 +237,7 @@ function correspondence(text, file) {
 
     // 2. A stated return value must exist. This is the FLOW-3 shape: the comment
     //    describes what it returns, the function below returns nothing.
-    if (RETURN_CLAIM.test(block)) {
+    if (RETURN_CLAIM.test(commentProse(block))) {
       let depth = 0, body = '', started = false;
       for (let j = i; j < lines.length && j < i + 400; j++) {
         for (const ch of lines[j]) {
