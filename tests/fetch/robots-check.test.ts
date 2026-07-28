@@ -69,8 +69,18 @@ describe('evaluateRobotsForUrl (fetch layer)', () => {
     expect(r.policy).toBe('allow');
   });
 
-  test('non-2xx = unknown (fails closed)', async () => {
+  // ROBOTS-4XX-1: this asserted 403 = unknown. RFC 9309 says a 4xx means the
+  // file is UNAVAILABLE and the crawler may access — a 403 and a 404 are
+  // equivalent. The old expectation was stricter than the standard and
+  // refused four of sixty live sources that read fine once permitted.
+  test('4xx = unavailable, which permits (RFC 9309)', async () => {
     const fetchImpl = (async () => new Response('blocked', { status: 403 })) as unknown as typeof fetch;
+    const r = await evaluateRobotsForUrl('https://example.com/events', { fetchImpl });
+    expect(r.policy).toBe('allow');
+  });
+
+  test('5xx = unknown (fails closed)', async () => {
+    const fetchImpl = (async () => new Response('down', { status: 503 })) as unknown as typeof fetch;
     const r = await evaluateRobotsForUrl('https://example.com/events', { fetchImpl });
     expect(r.policy).toBe('unknown');
   });

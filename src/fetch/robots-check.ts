@@ -155,10 +155,27 @@ export async function evaluateRobotsForUrl(
     if (!res) {
       return { policy: 'unknown', reason: 'robots.txt could not be fetched', crawlDelayMs: null };
     }
-    // No robots.txt at all = crawling allowed (standard interpretation).
-    if (res.status === 404 || res.status === 410) {
-      return { policy: 'allow', reason: 'no robots.txt (site returns 404) — crawling allowed by default', crawlDelayMs: null };
+    // ROBOTS-4XX-1: RFC 9309 §2.3.1.3 — "If the crawler receives a 4xx status
+    // code, the crawler MAY access any resources." The file is UNAVAILABLE,
+    // and a 403 is equivalent to a 404 for that purpose.
+    //
+    // This previously allowed only 404/410 and treated every other 4xx as
+    // unknown, which fails closed. Measured against 60 live sources, that
+    // refused four of them outright — and each read fine once permitted,
+    // because the robots fetch was the only thing failing. Being stricter
+    // than the standard here cost data and protected nobody: a site that has
+    // not published a robots.txt has not expressed a restriction.
+    //
+    // 429 is deliberately excluded. It means rate limited, not unavailable,
+    // and reading it as permission is how a temporary block becomes a ban.
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+      return {
+        policy: 'allow',
+        reason: `robots.txt unavailable (HTTP ${res.status}) — RFC 9309 treats 4xx as no restrictions`,
+        crawlDelayMs: null,
+      };
     }
+    // 5xx and anything else: the standard says assume complete disallow.
     if (!res.ok) {
       // WHITE-LABEL-2: this said "blocking FallowBot" regardless of the
       // caller's actual user agent — wrong output in any consumer but Fallow.

@@ -13,7 +13,7 @@ The second is cost. In most crawling pipelines the fetch is cheap and the langua
 ## Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl#v0.9.1
+npm install github:oliver-chase/oliver-crawl#v0.12.0
 ```
 
 ```ts
@@ -43,6 +43,8 @@ Most pages answer a plain HTTP request, so that is what it tries first. When tha
 2. **Render it in a real browser** when the HTML arrives nearly empty because the content only appears once scripts run. Chromium runs locally; `npx playwright install chromium` once enables it.
 3. **Retry through [Jina Reader](https://jina.ai/reader)** when a site rejects anything that does not look like a person browsing. Free, no signup.
 4. **Call a paid API** (Firecrawl or Apify) for the remainder — typically sites paying a commercial service specifically to keep crawlers out.
+
+There is a fifth step, off unless you enable it: reading the page from the Internet Archive when every live attempt has failed. It runs only for sites whose robots.txt permits crawling, and never as a way around one that does not — see [LANES](docs/LANES.md).
 
 Steps 1 to 3 run on your own machine and cost nothing beyond bandwidth. Step 4 is **off unless a request explicitly asks for it**; a paid key sitting in your environment is not enough on its own, and a test fails the build if a paid service is ever reached without that opt-in.
 
@@ -252,7 +254,7 @@ The library holds no database. Persistence, scheduling, and converting pages int
 
 ## Status
 
-556 tests across 44 files. Strict TypeScript, builds to `dist/`. A separate network suite (`npm run live`, 23 checks) exercises the library against real websites, and installation is verified as a genuine git dependency. Node 20+, and runs on edge and serverless runtimes, where local rendering is unavailable.
+592 tests across 46 files. Strict TypeScript, builds to `dist/`. A separate network suite (`npm run live`, 23 checks) exercises the library against real websites, and installation is verified as a genuine git dependency. Node 20+, and runs on edge and serverless runtimes, where local rendering is unavailable.
 
 ## License
 

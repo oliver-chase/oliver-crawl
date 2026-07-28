@@ -173,97 +173,6 @@ retrying it on resume would just repeat the failure.
 already persisted those when you received them. This resumes the work, not the
 results.
 
-### Complete API surface
-
-Everything the package exports, grouped by what you would reach for it to do.
-Anything not listed here is not exported.
-
-### Crawling
-
-| Export | Purpose |
-|---|---|
-| `createCrawler(config)` | The crawler. Everything else takes one. |
-| `crawlSite(crawler, target, options)` | Multi-page crawl: seeds, discovery, budgets, resume |
-| `mapSite(crawler, target, options)` | URLs a site has, without crawling them |
-| `searchSite(crawler, target, query)` | Search **within** a site using its own search — free |
-| `searchAndCrawl(crawler, query, options)` | Web search, then read the results |
-| `searchWeb(query, config, options)` | Web search only (paid) |
-
-### Reading a result
-
-| Export | Purpose |
-|---|---|
-| `summarizeStructuredData(jsonLd)` | Is any of this JSON-LD about the page's content? |
-| `diffContent(previous, current)` | What changed between two versions — re-extract the delta, not the page |
-| `findContentImages($, pageUrl)` | Images that plausibly carry the content (flyers, posters) |
-| `pickDetailLinks(links, keywords)` | Which link probably answers a still-missing field |
-| `extractJsonLdEvent` · `extractAllJsonLdEvents` · `extractJsonLdAddress` · `formatJsonLdAddress` | schema.org readers |
-| `classifyFailure(reason, detail)` | `transient` (retry) vs `structural` (needs a fix) |
-| `looksLikeEmptyState(text)` | "No results" pages that cost a model call to learn nothing |
-| `looksLikeBlockPage(text)` | A bot-wall interstitial wearing an HTTP 200 |
-| `EXTRACTOR_VERSION` | Bump signal: re-process pages stored by an older extractor |
-
-### Change detection
-
-| Export | Purpose |
-|---|---|
-| `computeContentRegionHash(html)` | Structural hash, nav/footer-insensitive |
-| `probeCheapChangeSignal` · `cheapSignalsMatch` | Cheap pre-fetch change probe |
-| `urlDedupKey(url)` · `sameUrlResource(a, b)` | Canonical URL identity |
-
-### Discovery
-
-| Export | Purpose |
-|---|---|
-| `discoverSitemapUrls(target, options)` | Sitemap entries, with `lastmod` |
-| `discoverIcsFeed` · `candidateIcsUrls` · `googleCalendarIcsCandidates` · `parseFeedLinksFromHtml` | Calendar and feed discovery |
-| `findNextPageUrl` · `discoverPaginatedUrls` | Pagination |
-
-### Fetch rungs
-
-| Export | Purpose |
-|---|---|
-| `renderViaLocalChromium(url, enabled, actions)` | Local browser render, with optional `browserActions` |
-| `renderViaService` · `renderServiceFrom` | Your own render service |
-| `fetchViaWayback(url, options)` | Internet Archive capture — free, gated (see [LANES](LANES.md)) |
-| `extractPdfText(bytes)` | PDF text layer, via the optional `unpdf` peer |
-| `classifyContentType` · `refineKindByUrl` | What kind of document is this |
-| `safeFetch` | Fetch with the host guards applied |
-
-### Policy and safety
-
-| Export | Purpose |
-|---|---|
-| `sanitizeCrawledText` · `detectPromptInjectionSignals` | The injection guard |
-| `evaluateRobotsForUrl` · `parseRobots` · `userAgentToken` | robots.txt |
-| `assertTargetEligible` · `assertRequestUrlAllowed` · `assertRedirectUrlAllowed` · `assertRedirectUrlAllowedForHost` | Same-site and eligibility |
-| `assertHostResolvesToPublicAddress` · `assertPublicHost` · `isSafeHttpUrl` | SSRF screening |
-| `createDohLookup` · `DEFAULT_DOH_ENDPOINT` | DNS-over-HTTPS, for runtimes without `node:dns` |
-| `publishedCrawlDelayMs(host)` · `MAX_HONORED_CRAWL_DELAY_MS` | The site's own `Crawl-delay` |
-
-### Configuration and state
-
-| Export | Purpose |
-|---|---|
-| `configFromEnv(overrides)` · `resolveConfig(config)` | Config helpers |
-| `createRungMemory` · `recallWinningRung` · `rememberWinningRung` · `forgetWinningRung` · `RUNG_MEMORY_TTL_MS` | Per-host rung memory |
-| `applyRecipe` · `parseStoredRecipe` · `MAX_RECIPE_FAILURES` | Replay a stored extraction recipe |
-| `availableVendorRungs` · `availableSearchProviders` | Which paid rungs your keys enable |
-| `DEFAULT_*` constants | Defaults, for callers who want to reason about them |
-
-### Options worth knowing
-
-| Config | Effect |
-|---|---|
-| `autoRobots` | Resolve an unknown robots posture for real. **Required** for `crawlSite` on targets with no stored policy |
-| `localRender` | Free local Chromium rung |
-| `browserActions` | Click/scroll/wait before capture, on the local render rung |
-| `jinaEndpoint` | Point the reader rung at your own Apache-2.0 deployment instead of the public one |
-| `renderWhenTextBelow` | Escalate to render when a page parsed but is implausibly short — a JS page shipping only nav and footer otherwise reads as a success |
-| `useArchiveFallback` · `archiveMaxAgeDays` | Internet Archive rung — off by default, `allow` posture only |
-| `rungMemory` | Remember which rung works per host (default on) |
-| `cacheTtlMs` · `minHostIntervalMs` · `adaptiveThrottleMultiplier` | Repeat-request and politeness controls |
-
 ## Searching within a site (free)
 
 `crawler.search()` asks a search engine, which always costs money. When you
@@ -497,7 +406,7 @@ Anything not listed here is not exported.
 
 | Config | Effect |
 |---|---|
-| `autoRobots` | Resolve an unknown robots posture for real. **Required** for `crawlSite` on targets with no stored policy |
+| `autoRobots` | Resolve an unknown robots posture by fetching robots.txt. **Required** for `crawlSite` on targets with no stored `robotsPolicy`, which otherwise fail closed |
 | `localRender` | Free local Chromium rung |
 | `browserActions` | Click/scroll/wait before capture, on the local render rung |
 | `jinaEndpoint` | Point the reader rung at your own Apache-2.0 deployment instead of the public one |
