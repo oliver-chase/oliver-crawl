@@ -407,6 +407,30 @@ export type CrawlConfig = {
    * that assert an exact request sequence.
    */
   rungMemory?: boolean;
+  /**
+   * JINA-SELFHOST-1: base URL for the reader rung. Defaults to the free
+   * public `https://r.jina.ai/`.
+   *
+   * Point this at your own deployment of Jina's Apache-2.0 build
+   * (`ghcr.io/jina-ai/reader:oss`) if you would rather not depend on a third
+   * party's uptime for a rung the free ladder relies on.
+   */
+  jinaEndpoint?: string;
+  /**
+   * WAYBACK-RUNG-1: fall back to the Internet Archive when every live rung
+   * fails. Free and keyless. Off by default.
+   *
+   * Runs ONLY for targets whose robots posture is explicitly `allow` — never
+   * on `disallow`, never on `unknown`. An archive fallback is otherwise a way
+   * to read pages a site refused, which would make every other guard here
+   * decorative.
+   *
+   * Always last: an archived copy is older than the live page by definition,
+   * so it runs when the alternative is nothing at all.
+   */
+  useArchiveFallback?: boolean;
+  /** Reject archived captures older than this. Unset means any age. */
+  archiveMaxAgeDays?: number;
   limits?: {
     /** Max bytes read from any origin before truncating. Default 2 MB.
      *  Raise for genuinely huge listing pages; lower to harden further. */

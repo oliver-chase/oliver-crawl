@@ -17,6 +17,18 @@
 // dependency is off the hot path. Returns null on any failure — callers treat
 // null as "fallback did not help," never as empty content.
 
+/**
+ * JINA-SELFHOST-1 (2026-07-27): the endpoint is configurable.
+ *
+ * The public reader is free and keyless, which is why this rung exists — but
+ * it is infrastructure we do not control, and a rate limit or an outage there
+ * silently removes a rung from a ladder advertised as free. Jina publish an
+ * Apache-2.0 self-hostable build (`ghcr.io/jina-ai/reader:oss`), so a consumer
+ * who depends on this rung can run their own and point at it.
+ *
+ * Same shape as `browserRender`: ours by default, yours if you would rather
+ * not depend on someone else's uptime.
+ */
 const JINA_ENDPOINT = 'https://r.jina.ai/';
 const JINA_TIMEOUT_MS = 30_000;
 const JINA_MAX_BYTES = 600_000;
@@ -27,8 +39,12 @@ export type JinaFetchResult = { title: string | null; text: string };
 // target on its own server, so there is no SSRF surface here. The target URL
 // is still required to be public https (it's the source's already-validated
 // baseUrl at every call site).
-export async function fetchViaJina(targetUrl: string, opts?: { fetchImpl?: typeof fetch }): Promise<JinaFetchResult | null> {
+export async function fetchViaJina(
+  targetUrl: string,
+  opts?: { fetchImpl?: typeof fetch; endpoint?: string },
+): Promise<JinaFetchResult | null> {
   const doFetch = opts?.fetchImpl ?? fetch;
+  const endpoint = (opts?.endpoint || JINA_ENDPOINT).replace(/\/+$/, '');
   let target: URL;
   try {
     target = new URL(targetUrl);
@@ -40,7 +56,7 @@ export async function fetchViaJina(targetUrl: string, opts?: { fetchImpl?: typeo
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), JINA_TIMEOUT_MS);
   try {
-    const res = await doFetch(`${JINA_ENDPOINT}${target.toString()}`, {
+    const res = await doFetch(`${endpoint.replace(/\/+$/, '')}/${target.toString()}`, {
       method: 'GET',
       headers: {
         // Ask Jina for the readable content, not the raw DOM.

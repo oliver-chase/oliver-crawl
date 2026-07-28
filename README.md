@@ -168,7 +168,7 @@ createCrawler({
 
 A long crawl can be interrupted and continued. `onProgress` emits a serialisable snapshot after each page; passing it back as `resumeFrom` continues from that point instead of starting over.
 
-To learn what a site contains without reading it, `mapSite` returns its URLs from the sitemap, its declared feeds, and its homepage links — one page body fetched in total.
+To learn what a site contains without reading it, `mapSite` returns its URLs from the sitemap, its declared feeds, and its homepage links — one page body fetched in total. To find pages *about* something on a site you already know, `searchSite` submits to the site's own search form, which is free and reaches pages neither links nor a sitemap expose.
 
 ---
 
@@ -252,7 +252,7 @@ The library holds no database. Persistence, scheduling, and converting pages int
 
 ## Status
 
-509 tests across 38 files. Strict TypeScript, builds to `dist/`. A separate network suite (`npm run live`, 23 checks) exercises the library against real websites, and installation is verified as a genuine git dependency. Node 20+, and runs on edge and serverless runtimes, where local rendering is unavailable.
+551 tests across 43 files. Strict TypeScript, builds to `dist/`. A separate network suite (`npm run live`, 23 checks) exercises the library against real websites, and installation is verified as a genuine git dependency. Node 20+, and runs on edge and serverless runtimes, where local rendering is unavailable.
 
 ## License
 
