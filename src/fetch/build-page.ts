@@ -142,6 +142,8 @@ export async function buildPage(input: {
     likelyEmptyState: looksLikeEmptyState(sanitizedMarkdown.text || sanitized.text),
     candidateContentImages: findContentImages($, input.url),
     extractorVersion: EXTRACTOR_VERSION,
+    redactionCount: sanitized.redactionCount,
+    truncated: sanitized.truncated,
     structuredData: summarizeStructuredData(jsonLd),
     title,
     ...(input.includeHtml ? { html: input.html } : {}),
@@ -212,6 +214,11 @@ export async function buildTextPage(input: {
     likelyEmptyState: looksLikeEmptyState(input.text),
     candidateContentImages: [],
     extractorVersion: EXTRACTOR_VERSION,
+    // A text rung receives prose that has already been through the guard, so
+    // nothing was redacted or capped at THIS step. Reporting the upstream
+    // rung's numbers here would attribute them to the wrong stage.
+    redactionCount: 0,
+    truncated: false,
     structuredData: summarizeStructuredData([]),
     title: input.title ?? null,
     contentType: input.contentType,

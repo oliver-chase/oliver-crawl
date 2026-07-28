@@ -71,6 +71,10 @@ function assertPageShape(page: CrawlPage, expected: { rung: string; lane: string
   expect(Array.isArray(page.outboundHosts)).toBe(true);
   expect(Array.isArray(page.candidateContentImages)).toBe(true);
   expect(typeof page.likelyEmptyState).toBe('boolean');
+  // GUARD-TELEMETRY-1: present on every rung, because a consumer storing crawl
+  // provenance cannot recover either number later.
+  expect(typeof page.redactionCount).toBe('number');
+  expect(typeof page.truncated).toBe('boolean');
   expect(page.structuredData).toBeDefined();
   expect(Array.isArray(page.structuredData.contentTypes)).toBe(true);
   expect(typeof page.structuredData.hasContentData).toBe('boolean');

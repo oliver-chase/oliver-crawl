@@ -160,6 +160,21 @@ export type CrawlPage = {
    * add this retroactively with any value.
    */
   extractorVersion: string;
+  /**
+   * GUARD-TELEMETRY-1: what the guard did to this page, as distinct from
+   * whether it refused it.
+   *
+   * The sanitiser already computes both and they were discarded before the
+   * page was built. A consumer storing crawl provenance wants them: a page
+   * that was capped is a page whose tail was never seen, and a redaction count
+   * above zero means the text differs from what the origin served — both
+   * change how much you should trust a downstream extraction, and neither is
+   * recoverable afterwards.
+   *
+   * `truncated` means the text hit maxTextChars, not that anything failed.
+   */
+  redactionCount: number;
+  truncated: boolean;
   title: string | null;
   /** Raw HTML, only when the caller asked for it (`includeHtml`). Callers
    *  that feed an LLM should use `text` — it has been through the guard. */
