@@ -18,7 +18,7 @@
 // days stale in the origin repo (DEPLOY-BLOCKER-1). A Function-constructor import
 // is invisible to every tracer — resolved at real runtime, only past guards 1-2.
 
-import { assertHostResolvesToPublicAddress } from './host-policy.js';
+import { assertHostResolvesToPublicAddress, assertRedirectUrlAllowedForHost } from './host-policy.js';
 import type { DnsLookupFn } from '../core/types.js';
 
 const RENDER_TIMEOUT_MS = 20_000;
@@ -44,8 +44,15 @@ type ChromiumLike = {
   }>;
 };
 
+type RenderRoute = {
+  request: () => { url: () => string; isNavigationRequest: () => boolean };
+  abort: () => Promise<unknown>;
+  continue: () => Promise<unknown>;
+};
+
 type RenderPage = {
   goto: (u: string, o: { waitUntil: string; timeout: number }) => Promise<unknown>;
+  route: (pattern: string, handler: (route: RenderRoute) => unknown) => Promise<unknown>;
   content: () => Promise<string>;
   url: () => string;
   click: (selector: string, o: { timeout: number }) => Promise<unknown>;
@@ -139,19 +146,18 @@ export async function assertLandedSameSite(
   requestedUrl: string,
   dnsLookup?: DnsLookupFn,
 ): Promise<void> {
-  const landed = new URL(finalUrl);
   const requested = new URL(requestedUrl);
-
-  const strip = (h: string) => h.toLowerCase().replace(/^www\./, '');
-  if (strip(landed.hostname) !== strip(requested.hostname)) {
-    throw new Error(`Render redirected off-site: ${requested.hostname} -> ${landed.hostname}`);
-  }
-  if (landed.protocol !== 'https:' && landed.protocol !== 'http:') {
-    throw new Error(`Render redirected to a non-http(s) URL: ${landed.protocol}`);
-  }
-  // A same-named host can still resolve somewhere private between the policy
-  // check and the browser's own lookup.
-  await assertHostResolvesToPublicAddress(landed.hostname, dnsLookup);
+  // Delegate to the SAME guard every other rung uses rather than comparing
+  // hostnames here. The first version of this compared hostname only, and QA
+  // proved three live bypasses it missed: cross-port (a 302 from
+  // host:A to host:B returned an internal admin service), https-to-http
+  // downgrade, and a credentialed landing URL. All three are already refused
+  // by assertRedirectUrlAllowedForHost, which is why nothing should
+  // re-implement it.
+  assertRedirectUrlAllowedForHost(requested.hostname, requested.port || '', finalUrl);
+  // Then the resolution check: a same-named host can still resolve somewhere
+  // private between the policy check and the browser's own lookup.
+  await assertHostResolvesToPublicAddress(new URL(finalUrl).hostname, dnsLookup);
 }
 
 export async function renderViaLocalChromium(
@@ -169,12 +175,34 @@ export async function renderViaLocalChromium(
   try {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    // RENDER-HOP-1: validate every NAVIGATION hop, not just where the chain
+    // ended. Checking only the landing let `site -> 127.0.0.1:P -> site` render
+    // normally while the private server received a real request — the request
+    // itself is the leak, and a chain that returns home hides it completely.
+    // The direct-fetch rung validates each hop; this brings the render rung to
+    // the same standard.
+    const blockedHops: string[] = [];
+    await page.route('**/*', async (route) => {
+      const request = route.request();
+      if (!request.isNavigationRequest()) return void (await route.continue());
+      try {
+        // Same guard as the landing check, applied before the hop is made.
+        await assertLandedSameSite(request.url(), url, dnsLookup);
+        await route.continue();
+      } catch (error) {
+        blockedHops.push(`${request.url()}: ${error instanceof Error ? error.message : String(error)}`);
+        await route.abort();
+      }
+    });
+
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: RENDER_TIMEOUT_MS });
+    if (blockedHops.length > 0) throw new Error(`Render blocked a redirect hop — ${blockedHops[0]}`);
     // RENDER-REDIRECT-1: the browser followed the chain; check where it ended.
     await assertLandedSameSite(page.url(), url, dnsLookup);
     if (actions.length > 0) await runActions(page, actions, new URL(url).origin);
     // Actions can navigate too, so the check repeats after they run.
     await assertLandedSameSite(page.url(), url, dnsLookup);
+    if (blockedHops.length > 0) throw new Error(`Render blocked a redirect hop — ${blockedHops[0]}`);
     const html = await page.content();
     return html && html.length > 0 ? html : null;
   } catch {

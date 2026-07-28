@@ -24,6 +24,7 @@ function fakePage(opts: { urlSequence?: string[]; failClick?: boolean } = {}) {
     recorded,
     page: {
       goto: async () => undefined,
+      route: async () => undefined,
       content: async () => '<html></html>',
       url: () => urls[Math.min(urlIndex, urls.length - 1)]!,
       click: async (selector: string) => {

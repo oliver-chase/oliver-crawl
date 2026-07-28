@@ -25,14 +25,14 @@ describe('the browser must land where it was sent', () => {
   test('an off-site landing is refused', async () => {
     await expect(
       assertLandedSameSite('https://attacker.example.net/collect', 'https://site.example.com/x', publicDns),
-    ).rejects.toThrow(/off-site/i);
+    ).rejects.toThrow(/off-domain/i);
   });
 
   test('a subdomain is not the same site', async () => {
     // Subdomains are frequently a different publisher; only www is folded.
     await expect(
       assertLandedSameSite('https://internal.site.example.com/x', 'https://site.example.com/x', publicDns),
-    ).rejects.toThrow(/off-site/i);
+    ).rejects.toThrow(/off-domain/i);
   });
 });
 
@@ -50,5 +50,28 @@ describe('non-http destinations are refused', () => {
     await expect(
       assertLandedSameSite('file:///etc/passwd', 'https://site.example.com/x', publicDns),
     ).rejects.toThrow();
+  });
+});
+
+// Live-proven bypasses QA found in the first version of this guard, which
+// compared hostname only. All three are refused by the canonical redirect
+// guard, which is why this now delegates to it rather than re-implementing it.
+describe('the landing check matches every other rung', () => {
+  test('cross-port is refused — QA leaked an internal admin service this way', async () => {
+    await expect(
+      assertLandedSameSite('https://site.example.com:8443/x', 'https://site.example.com/x', publicDns),
+    ).rejects.toThrow(/cross-port/i);
+  });
+
+  test('an https to http downgrade is refused', async () => {
+    await expect(
+      assertLandedSameSite('http://site.example.com/x', 'https://site.example.com/x', publicDns),
+    ).rejects.toThrow();
+  });
+
+  test('a credentialed landing URL is refused', async () => {
+    await expect(
+      assertLandedSameSite('https://admin:pw@site.example.com/x', 'https://site.example.com/x', publicDns),
+    ).rejects.toThrow(/credential/i);
   });
 });
