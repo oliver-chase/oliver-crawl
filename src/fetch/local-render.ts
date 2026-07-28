@@ -165,6 +165,13 @@ export async function renderViaLocalChromium(
   enabled: boolean,
   actions: BrowserAction[] = [],
   dnsLookup?: DnsLookupFn,
+  /**
+   * RENDER-SILENT-1: called when the rung refused for a SECURITY reason rather
+   * than being unavailable. Without it, `catch { return null }` made an active
+   * redirect attack indistinguishable from "playwright is not installed" — the
+   * one failure an operator most needs to see looked like the most routine one.
+   */
+  onBlocked?: (reason: string) => void,
 ): Promise<string | null> {
   if (!enabled || !url || !hasNodeRuntime()) return null;
   const pw = await importPlaywright();
@@ -184,7 +191,26 @@ export async function renderViaLocalChromium(
     const blockedHops: string[] = [];
     await page.route('**/*', async (route) => {
       const request = route.request();
-      if (!request.isNavigationRequest()) return void (await route.continue());
+      if (!request.isNavigationRequest()) {
+        // RENDER-SUBRESOURCE-1: a page's own JavaScript can fetch a
+        // CORS-permissive service on a private address and land the response
+        // body in the DOM, which then leaves in `page.content()`. The
+        // navigation guard never saw those requests.
+        //
+        // Only the private-address check applies here, NOT same-site: real
+        // pages legitimately load images, fonts and scripts from public CDNs,
+        // and refusing those would break ordinary rendering. What is refused
+        // is a subresource pointed at an address the crawler may not reach.
+        try {
+          await assertHostResolvesToPublicAddress(new URL(request.url()).hostname, dnsLookup);
+          await route.continue();
+        } catch {
+          // Not fatal to the render — a blocked tracker or internal beacon
+          // should not lose the page. The request simply never happens.
+          await route.abort();
+        }
+        return;
+      }
       try {
         // Same guard as the landing check, applied before the hop is made.
         await assertLandedSameSite(request.url(), url, dnsLookup);
@@ -205,7 +231,11 @@ export async function renderViaLocalChromium(
     if (blockedHops.length > 0) throw new Error(`Render blocked a redirect hop — ${blockedHops[0]}`);
     const html = await page.content();
     return html && html.length > 0 ? html : null;
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    // Only security refusals are reported. A missing browser, a timeout or a
+    // dead render service are ordinary and already visible as a skipped rung.
+    if (/Blocked|redirect hop|off-domain|cross-port|credential/i.test(reason)) onBlocked?.(reason);
     return null;
   } finally {
     if (browser) await browser.close().catch(() => {});

@@ -533,7 +533,15 @@ async function renderFallback(
   // FREE rung first: local Chromium (config.localRender). Costs nothing on
   // a machine that has it; silently absent everywhere else. Only then the
   // remote render service.
-  const localHtml = await renderViaLocalChromium(url, config.localRender === true, config.browserActions ?? [], config.dnsLookup);
+  const localHtml = await renderViaLocalChromium(
+    url,
+    config.localRender === true,
+    config.browserActions ?? [],
+    config.dnsLookup,
+    // RENDER-SILENT-1: a security refusal here is the signal an operator needs.
+    (reason) =>
+      emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: reason }),
+  );
   if (localHtml) {
     const localPage = await buildPage({
       url,

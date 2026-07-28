@@ -37,3 +37,19 @@ describe('the landing guard stays wired into the render path', () => {
     expect(renderFn).toMatch(/blockedHops\.length > 0.*throw|throw new Error\(`Render blocked a redirect hop/s);
   });
 });
+
+describe('subresource requests are screened too', () => {
+  // RENDER-SUBRESOURCE-1: page JS fetching a CORS-permissive service on a
+  // private address landed the body in the DOM, which then left in
+  // page.content(). The navigation guard never saw those requests.
+  test('non-navigation requests are resolution-checked', () => {
+    expect(renderFn).toMatch(/isNavigationRequest\(\)/);
+    expect(renderFn).toMatch(/assertHostResolvesToPublicAddress\(new URL\(request\.url\(\)\)/);
+  });
+
+  test('a blocked subresource aborts the request, not the render', () => {
+    // A blocked tracker or internal beacon must not lose the page.
+    const subresourceBlock = renderFn.slice(renderFn.indexOf('isNavigationRequest'));
+    expect(subresourceBlock).toMatch(/route\.abort\(\)/);
+  });
+});
