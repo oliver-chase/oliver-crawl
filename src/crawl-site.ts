@@ -261,6 +261,13 @@ export async function crawlSite(
     };
   };
 
+  // CRAWLSITE-AUTOROBOTS-1: resolve the posture BEFORE the eligibility gate.
+  // That gate fails closed on an unknown policy, and autoRobots resolution
+  // used to happen only inside the lane — so a whole-site crawl of a target
+  // with no stored policy was refused outright, while a single-page crawl of
+  // the same URL succeeded. One request per host, cached.
+  target = await crawler.resolveTarget(target);
+
   // Eligibility is a property of the TARGET, not of any one URL — check it
   // once, and report it as a single failure rather than N identical ones.
   try {
