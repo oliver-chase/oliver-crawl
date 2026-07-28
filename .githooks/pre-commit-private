@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# OliverCode — Pre-Commit Hook (Private Repos)
+# Applies to private/internal repositories. 2 gates only.
+# Private repos contain personal data by design — no PII gate.
+# Master source: <vault-root>/Oliver/Project Repos/OliverCode/core/templates/project/pre-commit-private
+set -euo pipefail
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(git -C "$HOOK_DIR" rev-parse --show-toplevel)"
+STAGED_FILES=$(git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=ACM)
+cd "$REPO_ROOT"
+
+VIOLATIONS=0
+
+# ─── Gate 1: Secrets ──────────────────────────────────────────────────────────
+# Block commits containing API keys, tokens, JWTs, private keys.
+echo "[pre-commit] Gate 1/2: Secret scan..."
+
+SECRET_PATTERNS=(
+  '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
+  'sk-[A-Za-z0-9]{20,}'                        # OpenAI/Anthropic-style keys
+  'ghp_[A-Za-z0-9]{36}'                        # GitHub personal access tokens
+  'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+'  # JWT tokens
+  '(A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}'   # AWS access key id -- a bare AKIA... has no secret-named var to catch it
+  'xox[baprs]-[0-9A-Za-z-]{10,}'               # Slack tokens (hyphens, so the alnum rule below misses them)
+  '(sk|rk)_live_[0-9A-Za-z]{20,}'              # Stripe LIVE keys (underscore, not the sk- shape above). test keys deliberately allowed -- they appear in docs
+  'AIza[0-9A-Za-z_-]{35}'                      # Google API key
+  'npm_[0-9A-Za-z]{36}'                        # npm access token
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----'         # Private keys (RSA/EC/DSA/OPENSSH/PKCS8) — matches "BEGIN <TYPE> PRIVATE KEY"
+  '(TOKEN|SECRET|KEY|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|AUTH|CREDENTIAL|token|secret|key|password|passwd|api_?key|access_?key|auth|credential)["'\'':= ]+[A-Za-z0-9]{20,}'  # Secret-named var assigned a 20+ char alphanumeric value (a bare hex-blob pattern false-positives on every git SHA/lockfile hash)
+)
+
+for pattern in "${SECRET_PATTERNS[@]}"; do
+  if [ -n "$STAGED_FILES" ]; then
+    while IFS= read -r file; do
+      case "$file" in
+        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore) continue ;;
+      esac
+      if grep -nE -e "$pattern" "$file" 2>/dev/null; then
+        echo "  BLOCKED: $file matches secret pattern: $pattern"
+        VIOLATIONS=$((VIOLATIONS + 1))
+      fi
+    done <<< "$STAGED_FILES"
+  fi
+done
+
+if [ $VIOLATIONS -gt 0 ]; then
+  echo ""
+  echo "=========================================="
+  echo "COMMIT BLOCKED: $VIOLATIONS potential secret leak(s) found."
+  echo "If this is a false positive (test data, example), rename to match the tests/*.test.* skip patterns above or use --no-verify."
+  echo "=========================================="
+  exit 1
+fi
+
+echo "  Gate 1 passed."
+
+# ─── Gate 2: Icons / Emojis ───────────────────────────────────────────────────
+# Block ALL emojis and Unicode icons. Plain text only. No exceptions.
+# This applies to private repos too — the no-icons rule is universal.
+echo "[pre-commit] Gate 2/2: Icon/Emoji scan..."
+
+EMOJI_PATTERN='[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F1E0}-\x{1F1FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}\x{2300}-\x{23FF}\x{2B50}\x{2764}\x{1F004}\x{1F0CF}\x{2934}-\x{2935}\x{25AA}-\x{25FE}\x{2B05}-\x{2B07}\x{2B1B}-\x{2B1C}\x{3030}\x{303D}\x{3297}\x{3299}\x{00A9}\x{00AE}\x{2122}\x{2139}\x{2328}\x{23CF}\x{24C2}\x{25B6}\x{23E9}-\x{23F3}\x{23F8}-\x{23FA}\x{200D}\x{20E3}]'
+
+# perl backs this gate. Without it the scan below silently finds nothing and the gate
+# "passes" -- a fail-OPEN on the one rule this framework calls universal. Assert it.
+if ! command -v perl >/dev/null 2>&1; then
+  echo "  BLOCKED: perl not found, and Gate 2 (emoji scan) cannot run without it."
+  echo "  Install perl, or this gate would silently pass every commit."
+  exit 1
+fi
+
+# BSD grep has no -P, and `grep -nP` fails silently inside an if-condition — the gate
+# never scanned anything on stock macOS. perl handles the \x{...} ranges natively.
+if [ -n "$STAGED_FILES" ]; then
+  while IFS= read -r file; do
+    EMOJI_HITS=$(perl -CSD -ne 'print "$.: $_" if /'"$EMOJI_PATTERN"'/' "$file" 2>/dev/null || true)
+    if [ -n "$EMOJI_HITS" ]; then
+      echo "$EMOJI_HITS"
+      echo "  BLOCKED: $file contains emojis or icons."
+      echo "  Zero emojis allowed — plain text only."
+      echo "  See <vault-root>/Oliver/Project Repos/OliverCode/core/contracts/NO_ICONS_STANDARD.md"
+      exit 1
+    fi
+  done <<< "$STAGED_FILES"
+fi
+
+echo "  Gate 2 passed."
+
+# ─── All gates passed ─────────────────────────────────────────────────────────
+echo "[pre-commit] All 2 gates passed."
+exit 0
