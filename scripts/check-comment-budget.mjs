@@ -204,29 +204,20 @@ function scan(text, hashStyle) {
   return { maxRun, maxStart, commentLines, total: nonBlank };
 }
 
-// ─── Correspondence: does the comment describe the code beneath it? ─────────
+// Correspondence: does the comment describe the code beneath it? A comment can
+// pass every length rule and still document a different function: a header
+// describing a silent JWT refresh sat above a helper that hides a dropdown, 55
+// lines from what it described. Both rules below are unambiguous by design — a
+// prose checker would be a keyword list, the failure WRITING_PROCESS names.
 //
-// A comment can pass every length and density rule and still document a
-// different function. Found by reading, never by a gate: a header describing
-// "one silent refresh attempt on an expired JWT ... returns true when a new
-// access token was stored" sat above a helper that hides a dropdown, 55 lines
-// from the function it described.
-//
-// Two rules, both chosen because they are unambiguous. A prose checker would be
-// a keyword list, which is the failure WRITING_PROCESS names directly.
-// Function forms this can check. Arrow consts and class methods are matched too;
-// a signature wrapped across lines is not, and is skipped rather than guessed at.
+// Arrow consts and class methods match too. A signature wrapped across lines is
+// skipped rather than guessed at.
 const DECL = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)|^\s*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/;
-// Matched against the comment with its markers stripped, so a claim reads the
-// same whether it opens a line, a JSDoc continuation, or a sentence mid-line.
-// The first cut anchored `^` to the joined block, which always begins "//" or
-// "/*" — so it could never fire there, and the only claims it caught were ones
-// that happened to follow a sentence end on the same line. All three canonical
-// forms passed a function returning nothing.
-//
-// Still capitalised, which is what separates a claim about THIS function from
-// one about something else: "a destructive command returns a confirm card"
-// describes the server.
+// Matched against the comment with markers stripped, so a claim reads the same
+// wherever it sits. Capitalised on purpose: that is what separates a claim about
+// THIS function from one about something else — "a destructive command returns a
+// confirm card" describes the server. An earlier cut anchored `^` to the joined
+// block, which always begins with a marker, so it could never fire.
 const RETURN_CLAIM = /(?:^|[.!?]\s+)(?:Returns?|Resolves?)\s+(?:true|false|null|the\b|a\b|an\b)/m;
 
 /** Comment markers removed, so the prose can be matched as prose. */
