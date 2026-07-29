@@ -13,7 +13,7 @@ VIOLATIONS=0
 
 # ─── Gate 1: Secrets ──────────────────────────────────────────────────────────
 # Block commits containing API keys, tokens, JWTs, private keys.
-echo "[pre-commit] Gate 1/8: Secret scan..."
+echo "[pre-commit] Gate 1/9: Secret scan..."
 
 SECRET_PATTERNS=(
   '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
@@ -64,7 +64,7 @@ echo "  Gate 1 passed."
 
 # ─── Gate 2: Icons / Emojis ───────────────────────────────────────────────────
 # Block ALL emojis and Unicode icons. Plain text only. No exceptions.
-echo "[pre-commit] Gate 2/8: Icon/Emoji scan..."
+echo "[pre-commit] Gate 2/9: Icon/Emoji scan..."
 
 EMOJI_PATTERN='[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F1E0}-\x{1F1FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}\x{2300}-\x{23FF}\x{2B50}\x{2764}\x{1F004}\x{1F0CF}\x{2934}-\x{2935}\x{25AA}-\x{25FE}\x{2B05}-\x{2B07}\x{2B1B}-\x{2B1C}\x{3030}\x{303D}\x{3297}\x{3299}\x{00A9}\x{00AE}\x{2122}\x{2139}\x{2328}\x{23CF}\x{24C2}\x{25B6}\x{23E9}-\x{23F3}\x{23F8}-\x{23FA}\x{200D}\x{20E3}]'
 
@@ -95,7 +95,7 @@ echo "  Gate 2 passed."
 
 # ─── Gate 3: PII ──────────────────────────────────────────────────────────────
 # Block commits containing personal identifiers: home paths, usernames, hostnames.
-echo "[pre-commit] Gate 3/8: PII scan..."
+echo "[pre-commit] Gate 3/9: PII scan..."
 
 PII_PATTERNS=(
   '/Users/[a-z]+/'                              # macOS home directory paths
@@ -157,7 +157,7 @@ echo "  Gate 3 passed."
 # ─── Gate 4: Deleted Repository References ────────────────────────────────────
 # Block commits referencing repos that no longer exist.
 # Add project-specific deleted repo names here.
-echo "[pre-commit] Gate 4/8: Deleted repo scan..."
+echo "[pre-commit] Gate 4/9: Deleted repo scan..."
 
 DELETED_REPO_PATTERNS=(
   # Add deleted repo names here. Example:
@@ -198,7 +198,7 @@ fi
 # HTTPS alone isn't the risk -- a `gh auth login` credential can carry `workflow`
 # scope over HTTPS just fine. Check the actual credential's scopes via `gh api`,
 # don't assume from the remote URL scheme.
-echo "[pre-commit] Gate 5/8: Workflow push auth..."
+echo "[pre-commit] Gate 5/9: Workflow push auth..."
 WORKFLOW_STAGED=$(printf '%s\n' "$STAGED_FILES" | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
 if [[ -n "$WORKFLOW_STAGED" ]]; then
   HAS_WORKFLOW_SCOPE=false
@@ -223,14 +223,14 @@ echo "  Gate 5 passed."
 # ─── Optional gate: Planning doc governance ───────────────────────────────────
 PLANNING_CHECKER="$REPO_ROOT/scripts/check-planning-doc-governance.py"
 if [[ -f "$PLANNING_CHECKER" ]]; then
-  echo "[pre-commit] Gate 6/8: Planning doc governance..."
+  echo "[pre-commit] Gate 6/9: Planning doc governance..."
   if ! python3 "$PLANNING_CHECKER"; then
     echo "  BLOCKED: Planning doc governance failed."
     exit 1
   fi
   echo "  Gate 6 passed."
 else
-  echo "[pre-commit] Gate 6/8: Planning doc governance... skipped (checker not present in this repo)."
+  echo "[pre-commit] Gate 6/9: Planning doc governance... skipped (checker not present in this repo)."
 fi
 
 # ─── Gate 7: Comment budget ──────────────────────────────────────────────────
@@ -245,14 +245,14 @@ fi
 # everything costs nothing and keeps it that way.
 COMMENT_GATE="$REPO_ROOT/scripts/check-comment-budget.mjs"
 if [[ -f "$COMMENT_GATE" ]] && command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 7/8: Comment budget..."
+  echo "[pre-commit] Gate 7/9: Comment budget..."
   if ! node "$COMMENT_GATE" --quiet; then
     echo "  BLOCKED: Comment budget failed."
     exit 1
   fi
   echo "  Gate 7 passed."
 else
-  echo "[pre-commit] Gate 7/8: Comment budget... skipped (checker or node not present in this repo)."
+  echo "[pre-commit] Gate 7/9: Comment budget... skipped (checker or node not present in this repo)."
 fi
 
 # ─── Gate 8: Decision records ─────────────────────────────────────────────────
@@ -261,7 +261,7 @@ fi
 # first.
 DECISIONS_GATE="$REPO_ROOT/scripts/check-decisions.mjs"
 if [[ -f "$DECISIONS_GATE" ]] && command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 8/8: Decision records..."
+  echo "[pre-commit] Gate 8/9: Decision records..."
   if ! node "$DECISIONS_GATE" > /dev/null; then
     node "$DECISIONS_GATE" | grep "FAIL:"
     echo "  BLOCKED: Decision record integrity failed."
@@ -269,7 +269,24 @@ if [[ -f "$DECISIONS_GATE" ]] && command -v node >/dev/null 2>&1; then
   fi
   echo "  Gate 8 passed."
 else
-  echo "[pre-commit] Gate 8/8: Decision records... skipped (checker or node not present in this repo)."
+  echo "[pre-commit] Gate 8/9: Decision records... skipped (checker or node not present in this repo)."
+fi
+
+# ─── Gate 9: Backlog hygiene ───────────────────────────────────────────────
+# BACKLOG-HYGIENE-1. The written policy ("finished items are removed rather
+# than ticked") held nowhere mechanical, so a fleet repo's backlog reached
+# 15,058 lines before anyone noticed.
+BACKLOG_GATE="$REPO_ROOT/scripts/check-backlog-hygiene.mjs"
+if [[ -f "$BACKLOG_GATE" ]] && command -v node >/dev/null 2>&1; then
+  echo "[pre-commit] Gate 9/9: Backlog hygiene..."
+  if ! node "$BACKLOG_GATE" --quiet; then
+    node "$BACKLOG_GATE" --quiet
+    echo "  BLOCKED: Backlog hygiene failed."
+    exit 1
+  fi
+  echo "  Gate 9 passed."
+else
+  echo "[pre-commit] Gate 9/9: Backlog hygiene... skipped (checker or node not present in this repo)."
 fi
 
 # ─── All gates passed ─────────────────────────────────────────────────────────
