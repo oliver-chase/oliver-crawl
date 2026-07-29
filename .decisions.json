@@ -1,0 +1,7 @@
+{
+  "sourceDirs": ["src"],
+  "testDirs": ["tests"],
+  "extensions": [".ts"],
+  "docDirs": ["docs"],
+  "notDecisions": ["ISO-8859-1", "ISO-8859-15", "UTF-8", "RFC-9309"]
+}

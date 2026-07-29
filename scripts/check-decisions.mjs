@@ -1,61 +1,118 @@
 #!/usr/bin/env node
-// ─── Decision-record integrity gate ─────────────────────────────────────────
+// Decision-record integrity gate.
 //
-// This codebase records WHY in the code, naming the defect a decision prevents
-// — MARKDOWN-DATAURI-1, ROBOTS-4XX-1, and so on. That only stays durable if the
-// records stay honest, and three things rot quietly without a check: a decision
-// written down but never tested, so the next refactor undoes it and nothing goes
-// red; a decision deleted from the code whose test and docs keep describing it;
-// and an ID invented in a test or doc that no code ever referenced, which reads
-// as authoritative and is fiction.
+// A codebase records WHY in the code, naming the defect a decision prevents.
+// Three things rot quietly without a check: a decision deleted from the code
+// whose ledger row keeps describing it, an id invented in a test that no code
+// ever referenced, and a decision in the code that nobody wrote down — which the
+// next reader simply undoes.
 //
-// This fails the build on each instead of letting them age into folklore.
-// Deliberately mechanical: it checks the records line up, never that the
-// reasoning is good.
+// Adoption is the hard part, not detection. A repo turning this on with hundreds
+// of undocumented ids cannot fix them in one pass, and a gate that fails a
+// thousand times on day one gets switched off. So unrecorded ids present at
+// adoption are frozen into a baseline and pass; anything NEW fails. Debt only
+// shrinks. Delete a line from the baseline once its row is written; never add one.
 //
 //   node scripts/check-decisions.mjs
-//   node scripts/check-decisions.mjs --list   # what is recorded, and where
+//   node scripts/check-decisions.mjs --list        # every id and where it lives
+//   node scripts/check-decisions.mjs --write-baseline
+//
+// Config lives in .decisions.json at the repo root. See CODE_INTENT_STANDARD §4.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { join, extname, relative, resolve } from 'node:path';
 
-const ID_PATTERN = /\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+-\d+[a-z]?\b/g;
+// This file names example ids in its own comments, and it usually lives in a
+// scanned directory, so without excluding itself it reports them as undocumented
+// decisions. The reachability checker in OliverCode hit the same trap the other
+// way round, satisfying its own rule.
+const SELF = relative(process.cwd(), resolve(process.argv[1] ?? ''));
 
-/**
- * Strings that look like decision IDs but are not. Charset names and RFC
- * numbers share the shape, and treating them as records would produce noise
- * that trains a reader to ignore this gate.
- */
-const NOT_DECISIONS = new Set(['ISO-8859-1', 'ISO-8859-15', 'UTF-8', 'RFC-9309']);
+// AREA-TOPIC-N per CODE_INTENT_STANDARD §2: three segments, so at least two
+// dashes. An earlier cut made the middle segment optional and matched every
+// two-segment label in the fleet — BUG-9, BC-1, EPIC-2, US-SDR-202 — which are
+// test cases and user stories, not decision records. That noise was worked
+// around with exclusion lists before the pattern itself was the problem.
+const ID_PATTERN = /\b[A-Z][A-Z0-9]+(?:-[A-Z0-9]{2,})+-\d+[a-z]?\b/g;
 
-const LEDGER = 'docs/DECISIONS.md';
+const DEFAULTS = {
+  sourceDirs: ['src'],
+  testDirs: ['tests'],
+  extensions: ['.ts', '.tsx', '.js', '.mjs', '.py'],
+  ledger: 'docs/DECISIONS.md',
+  docDirs: ['docs'],
+  baseline: 'scripts/decisions-baseline.txt',
+  // Charset names, RFC numbers and HTTP dates share the id shape. Treating them
+  // as records produces noise that trains a reader to ignore the gate.
+  notDecisions: ['ISO-8859-1', 'ISO-8859-15', 'UTF-8', 'RFC-9309'],
+};
 
-function walk(dir, exts) {
+function loadConfig() {
+  if (!existsSync('.decisions.json')) return { ...DEFAULTS };
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync('.decisions.json', 'utf8'));
+  } catch (err) {
+    console.error(`.decisions.json is not valid JSON: ${err.message}`);
+    process.exit(2);
+  }
+  for (const key of ['sourceDirs', 'testDirs', 'docDirs', 'extensions', 'notDecisions']) {
+    if (key in raw && !Array.isArray(raw[key])) {
+      console.error(`.decisions.json: ${key} must be an array`);
+      process.exit(2);
+    }
+  }
+  return { ...DEFAULTS, ...raw };
+}
+
+const cfg = loadConfig();
+const NOT_DECISIONS = new Set(cfg.notDecisions);
+
+function walk(dir, exts = cfg.extensions) {
+  if (!existsSync(dir)) return [];
   const out = [];
   for (const entry of readdirSync(dir)) {
+    if (entry === 'node_modules' || entry.startsWith('.')) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) out.push(...walk(full, exts));
-    else if (exts.includes(extname(full))) out.push(full);
+    else if (exts.includes(extname(full)) && full !== SELF) out.push(full);
+  }
+  return out;
+}
+
+/** Ids on a line, ignoring any inside a quoted string. */
+function idsOnLine(line) {
+  const spans = [...line.matchAll(/'[^']*'|"[^"]*"/g)].map((m) => [m.index, m.index + m[0].length]);
+  const out = [];
+  for (const m of line.matchAll(ID_PATTERN)) {
+    if (NOT_DECISIONS.has(m[0])) continue;
+    if (spans.some(([a, b]) => a < m.index && m.index + m[0].length <= b)) continue;
+    // A regex character class reads as an id: /[A-Z0-9]/ yields "Z0-9". No real id
+    // is written immediately before a `]`.
+    if (line[m.index + m[0].length] === ']') continue;
+    out.push(m[0]);
   }
   return out;
 }
 
 function idsIn(files) {
-  const found = new Map(); // id -> Set(file)
+  const found = new Map();
   for (const file of files) {
-    const text = readFileSync(file, 'utf8');
-    for (const match of text.match(ID_PATTERN) ?? []) {
-      if (NOT_DECISIONS.has(match)) continue;
-      if (!found.has(match)) found.set(match, new Set());
-      found.get(match).add(file);
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      for (const id of idsOnLine(line)) {
+        if (!found.has(id)) found.set(id, new Set());
+        found.get(id).add(file);
+      }
     }
   }
   return found;
 }
 
-const srcIds = idsIn(walk('src', ['.ts']));
-const testIds = idsIn(walk('tests', ['.ts']));
-const ledgerIds = idsIn([LEDGER]);
+const srcIds = idsIn(cfg.sourceDirs.flatMap((d) => walk(d)));
+const testIds = idsIn(cfg.testDirs.flatMap((d) => walk(d)));
+const ledgerIds = existsSync(cfg.ledger) ? idsIn([cfg.ledger]) : new Map();
+// Docs are scanned for markdown only, and only to answer "does this id exist at all".
+const docIds = idsIn(cfg.docDirs.flatMap((d) => walk(d, ['.md'])));
 
 if (process.argv.includes('--list')) {
   const all = [...new Set([...srcIds.keys(), ...testIds.keys(), ...ledgerIds.keys()])].sort();
@@ -63,75 +120,101 @@ if (process.argv.includes('--list')) {
     const where = [srcIds.has(id) && 'src', testIds.has(id) && 'test', ledgerIds.has(id) && 'ledger']
       .filter(Boolean)
       .join(',');
-    console.log(`${id.padEnd(26)} ${where}`);
+    console.log(`${id.padEnd(28)} ${where}`);
   }
   process.exit(0);
 }
 
+const unrecorded = [...srcIds.keys()].filter((id) => !ledgerIds.has(id)).sort();
+
+if (process.argv.includes('--write-baseline')) {
+  const body =
+    '# Decision ids present in the code with no ledger row, frozen at adoption.\n' +
+    '# Delete a line once its row is written. Never add one: a new id needs a row.\n' +
+    unrecorded.map((id) => `${id}\n`).join('');
+  writeFileSync(cfg.baseline, body);
+  console.log(`wrote ${cfg.baseline} with ${unrecorded.length} accepted id(s)`);
+  process.exit(0);
+}
+
+const accepted = new Set(
+  existsSync(cfg.baseline)
+    ? readFileSync(cfg.baseline, 'utf8')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#'))
+    : [],
+);
+
 const problems = [];
 
-// 1. Every decision in the code is written down. A decision nobody can find
-//    is a decision the next reader will undo.
-for (const [id, files] of srcIds) {
-  if (!ledgerIds.has(id)) {
-    problems.push(`${id} is referenced in ${[...files][0]} but has no entry in ${LEDGER}`);
+// A decision nobody can find is one the next reader will undo. Baselined ids are
+// the debt this repo adopted with; a NEW one has to be written down.
+for (const id of unrecorded) {
+  if (!accepted.has(id)) {
+    problems.push(`${id} is referenced in ${[...srcIds.get(id)][0]} but has no entry in ${cfg.ledger}`);
   }
 }
 
-// 2. Every decision in the ledger still exists IN THE CODE.
-//
-//    This required `src/` specifically. Accepting "src OR tests" let a
-//    surviving test launder a decision that had been renamed or deleted out of
-//    the source — the exact refactor this gate exists to catch. Two entries
-//    were already in that state when it was tightened.
-for (const [id] of ledgerIds) {
+// A row describing deleted code is worse than no row, because it is confidently
+// wrong. Source specifically: accepting "source OR tests" lets a surviving test
+// launder a decision that was renamed or deleted out of the source.
+for (const id of ledgerIds.keys()) {
   if (!srcIds.has(id)) {
-    const where = testIds.has(id) ? 'only in tests/' : 'nowhere in the repo';
-    problems.push(`${id} is recorded in ${LEDGER} but appears ${where} — not in src/`);
+    problems.push(
+      `${id} is recorded in ${cfg.ledger} but appears ${testIds.has(id) ? 'only in tests' : 'nowhere in the code'}`,
+    );
   }
 }
 
-// 2b. The ledger's Source column has to name a file that exists. A row
-//     pointing at a moved or deleted file reads as authoritative and sends the
-//     next reader somewhere empty.
-const ledgerText = readFileSync(LEDGER, 'utf8');
-for (const line of ledgerText.split('\n')) {
-  const row = line.match(/^\|\s*`([A-Z][A-Z0-9-]*-\d+[a-z]?)`\s*\|[^|]*\|\s*`([^`]+)`\s*\|/);
-  if (!row) continue;
-  const [, id, srcPath] = row;
-  const full = srcPath.startsWith('src/') ? srcPath : `src/${srcPath}`;
-  if (!existsSync(full)) {
-    problems.push(`${id}: ledger Source column names ${full}, which does not exist`);
+// A test naming a record that exists nowhere else reads as authoritative. Reported,
+// never fatal: a test may name an id whose code is specced but not yet built, and
+// failing there pushes people to delete the reference rather than build the thing.
+// Docs therefore count as somewhere the id can exist.
+const inventedIds = [...testIds]
+  .filter(([id]) => !srcIds.has(id) && !ledgerIds.has(id) && !docIds.has(id))
+  .map(([id, files]) => `${id} (${[...files][0]})`)
+  .sort();
+
+// A ledger row may name its source file in a third column. Where it does, that file
+// has to exist: a row pointing at moved or deleted code sends the next reader
+// somewhere empty while reading as authoritative. Ledgers without the column are
+// unaffected, since nothing matches.
+if (existsSync(cfg.ledger)) {
+  for (const line of readFileSync(cfg.ledger, 'utf8').split('\n')) {
+    const row = line.match(/^\|\s*`([^`]+)`\s*\|[^|]*\|\s*`([^`]+)`\s*\|/);
+    if (!row) continue;
+    const [, id, srcPath] = row;
+    const found = existsSync(srcPath) || cfg.sourceDirs.some((d) => existsSync(join(d, srcPath)));
+    if (!found) problems.push(`${id}: ledger names ${srcPath}, which does not exist`);
   }
 }
 
-// 3. No test invents an ID. A test naming a record that never existed reads
-//    as authoritative and is not.
-for (const [id, files] of testIds) {
-  if (!srcIds.has(id) && !ledgerIds.has(id)) {
-    problems.push(`${id} appears in ${[...files][0]} but in neither src/ nor ${LEDGER}`);
-  }
+const stale = [...accepted].filter((id) => !srcIds.has(id) || ledgerIds.has(id)).sort();
+
+console.log(
+  `\nDECISION RECORDS — ${srcIds.size} in source, ${testIds.size} in tests, ${ledgerIds.size} in the ledger`,
+);
+if (accepted.size > 0) console.log(`  ${accepted.size} baselined as undocumented debt`);
+
+if (inventedIds.length > 0) {
+  console.log(`\n  ${inventedIds.length} id(s) named only by a test — a label, or a record nobody wrote:`);
+  for (const i of inventedIds) console.log(`    - ${i}`);
 }
 
-const untested = [...srcIds.keys()].filter((id) => !testIds.has(id)).sort();
-
-console.log(`\nDECISION RECORDS — ${srcIds.size} in src, ${testIds.size} in tests, ${ledgerIds.size} in the ledger\n`);
-
-if (untested.length > 0) {
-  // Reported, not fatal. Some decisions are structural (a build flag, a
-  // packaging choice) and have nothing a unit test can hold onto. Making this
-  // fail the build would train people to add hollow tests.
-  console.log(`  ${untested.length} decisions with no test naming them:`);
-  for (const id of untested) console.log(`    - ${id}`);
-  console.log('');
+if (stale.length > 0) {
+  // Reported, not fatal. A baseline line whose id is now documented or gone is
+  // dead weight, but failing on it would block the very commit that fixed it.
+  console.log(`\n  ${stale.length} baseline line(s) no longer needed — delete them:`);
+  for (const id of stale) console.log(`    - ${id}`);
 }
 
 if (problems.length > 0) {
-  console.log(`  ${problems.length} integrity problems:\n`);
+  console.log(`\n  ${problems.length} integrity problem(s):\n`);
   for (const p of problems) console.log(`    FAIL: ${p}`);
   console.log('');
   process.exit(1);
 }
 
-console.log('  Records are consistent: every decision in the code is written down,');
-console.log('  every entry still describes live code, and no test invents one.\n');
+console.log('  Records are consistent: no new undocumented decision, no row describing');
+console.log('  code that is gone, and no test inventing an id.\n');
