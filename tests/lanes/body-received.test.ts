@@ -11,7 +11,7 @@ import type { CrawlTarget } from '@/core/types';
 //
 // A consumer whose rule is never to lose a page wants to RETAIN the second —
 // it was read, it had nothing in it, a later parser pass may do better — and
-// log the first. Fallow was recovering that distinction by regex-matching the
+// log the first. The origin app was recovering that distinction by regex-matching the
 // detail string, which is the coupling that has silently switched several
 // signals off across this fleet. The library knows; it should say.
 
