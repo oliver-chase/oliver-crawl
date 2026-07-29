@@ -164,6 +164,16 @@ DELETED_REPO_PATTERNS=(
   # 'old-project-name'
 )
 
+# This package is public, so a name that must not appear in it cannot be listed
+# here: a tracked denylist publishes the very strings it exists to keep out. An
+# optional gitignored .private-patterns supplies them, one per line.
+if [ -f .private-patterns ]; then
+  while IFS= read -r _pattern; do
+    case "$_pattern" in ''|\#*) continue ;; esac
+    DELETED_REPO_PATTERNS+=("$_pattern")
+  done < .private-patterns
+fi
+
 if [ ${#DELETED_REPO_PATTERNS[@]} -eq 0 ]; then
   # Say what actually happened -- see the note in OliverCode's own copy of this hook.
   echo "  Gate 4 skipped: no deleted-repo patterns configured (see DELETED_REPO_PATTERNS above)."

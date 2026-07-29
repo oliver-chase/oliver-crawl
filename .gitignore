@@ -8,3 +8,6 @@ coverage/
 
 # Local agent state and worktree checkouts — never shared
 .claude/
+
+# Private strings this public repo must never contain (pre-commit gate 4).
+.private-patterns
