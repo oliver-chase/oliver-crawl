@@ -49,7 +49,7 @@ describe('an absurd Crawl-delay cannot stall the crawler', () => {
 
 describe('reasons never name another project’s crawler', () => {
   // WHITE-LABEL-2: these strings are returned to consumers. A generic package
-  // reporting "FallowBot" is simply wrong output in any other repo.
+  // reporting one vendor's bot name is simply wrong output in any other consumer.
   test('no hardcoded bot name in any reason string', () => {
     const results = [
       parseRobots('User-agent: *\nAllow: /', 'mybot', '/'),
@@ -57,6 +57,6 @@ describe('reasons never name another project’s crawler', () => {
       parseRobots('User-agent: other\nDisallow: /', 'mybot', '/'),
       parseRobots('', 'mybot', '/'),
     ];
-    for (const r of results) expect(r.reason.toLowerCase()).not.toContain('fallow');
+    for (const r of results) expect(r.reason.toLowerCase()).not.toContain('examplebot');
   });
 });

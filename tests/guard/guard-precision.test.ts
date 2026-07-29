@@ -80,7 +80,7 @@ describe('GUARD-PRECISION-3 — long opaque strings inside URLs are not payloads
 });
 
 describe('GUARD-PRECISION-4 — an email destination is still a destination', () => {
-  // Found by QA diffing this guard against the Fallow extractor it descends
+  // Found by QA diffing this guard against the extractor it descends
   // from. GUARD-PRECISION-1 narrowed tool-exfiltration to require a named
   // destination, which fixed two live false positives — but the destination
   // clause could not match across an `@`, so an emailed exfiltration was

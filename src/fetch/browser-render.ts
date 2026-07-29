@@ -13,7 +13,7 @@
 // crawl falls through to the free Jina fallback, exactly as if it did not
 // exist. That is the same degrade-gracefully contract every other rung has.
 //
-// Ported from Fallow's secure-browser-runner.ts. Only the render call itself
+// Ported from the origin app's secure-browser-runner. Only the render call itself
 // came over: that file's other ~400 lines are crawl orchestration coupled to
 // its own source registry, which the lane already handles here.
 

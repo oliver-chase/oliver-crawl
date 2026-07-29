@@ -13,7 +13,7 @@ import type { CrawlTarget } from '@/core/types';
 // indistinguishable from a fetch failure. A consumer whose standing policy is
 // "never lose a page" therefore had nothing to build a review task from and
 // could only drop it — silently, which is the outcome quarantining exists to
-// prevent. Fallow's review task needs the signals and the text to render.
+// prevent. the origin app's review task needs the signals and the text to render.
 
 const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
 const target: CrawlTarget = { baseUrl: 'https://site.example.com', robotsPolicy: 'allow', active: true };

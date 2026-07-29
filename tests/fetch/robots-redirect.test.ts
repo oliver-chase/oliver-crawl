@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import { evaluateRobotsForUrl } from '@/fetch/robots-check';
 
-// ROBOTS-REDIRECT-1, found live on an expired domain in Fallow's active list:
+// ROBOTS-REDIRECT-1, found live on an expired domain in a consumer's active list:
 // carrabassettvalley.com/robots.txt 301s to sedo.com, a domain-parking sales
 // page. The fetcher followed it off-domain and applied sedo.com's answer to
 // carrabassettvalley.com. A stranger's robots.txt governing our target is a

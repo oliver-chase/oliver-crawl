@@ -10,7 +10,7 @@ import type { StructuredSummary } from '../extract/structured-summary.js';
 //
 //   1. NO DATABASE. Nothing here imports a DB client. State that a consumer
 //      wants persisted (usage, cost, learned recipes) leaves through injected
-//      callbacks, so Fallow can write Supabase, OSG can write a Sheet, and a
+//      callbacks, so one consumer can write Supabase, another a Sheet, and a
 //      forked user can write nothing at all.
 //   2. NO ENV READS IN CORE. Config is passed in explicitly. `configFromEnv()`
 //      (src/core/config.ts) is a separate, optional convenience — a consumer
@@ -25,7 +25,7 @@ export type LaneName = 'own' | 'vendor';
 
 /**
  * A crawl target. Deliberately minimal and NOT any consumer's database row —
- * Fallow's own source registry has ~25 fields, none of which this package
+ * the origin app's own source registry has ~25 fields, none of which this package
  * needs. A consumer adapts its record into this shape at the boundary.
  */
 export type CrawlTarget = {
@@ -256,7 +256,7 @@ export type CrawlResult =
        * ORIGIN-MOVED-1: the direct fetch was REFUSED on policy grounds and a
        * fallback rung served the page anyway.
        *
-       * The case that forced this: isisasheville.com, a live Fallow source, now
+       * The case that forced this: isisasheville.com, a live source in the origin app, now
        * redirects to a Spanish medical centre — the domain was sold. The direct
        * rung correctly refuses the off-domain redirect; Jina then follows the
        * same redirect from its own IPs and returns the new owner's content, and
@@ -287,7 +287,7 @@ export type CrawlResult =
        * Without this a quarantine is indistinguishable from a fetch failure at
        * the call site, so a consumer whose policy is "never lose a page" has
        * nothing to build a review task from and drops it silently — the exact
-       * outcome quarantining exists to prevent. Fallow's review task needs the
+       * outcome quarantining exists to prevent. the origin app's review task needs the
        * signals and the text to render at all.
        *
        * The text is SANITIZED, not raw: a reviewer needs to see what the page
@@ -304,7 +304,7 @@ export type CrawlResult =
        * read and had nothing in it, which a catalogue may want to RETAIN for a
        * later parser pass rather than log as an error.
        *
-       * Fallow had to recover this by regex-matching `detail`, which is the
+       * The origin app had to recover this by regex-matching `detail`, which is the
        * coupling that has silently switched several signals off in this fleet.
        * The library knows the answer; it should say it.
        */

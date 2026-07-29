@@ -15,7 +15,7 @@
 // It reports, per URL, what this library extracted. Point your existing
 // extractor at the same list and diff the two reports. Deliberately NOT
 // coupled to any particular consumer's extractor — this library must not
-// import Fallow, or tesknota, or anything downstream.
+// import any consumer, or anything downstream.
 //
 // The output is intentionally boring: counts and hashes, not prose. Those are
 // what a diff can compare without a human reading every page.

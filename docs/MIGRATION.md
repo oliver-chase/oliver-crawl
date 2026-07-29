@@ -1,14 +1,14 @@
 # Provenance
 
-This library was extracted from Fallow's `lib/ingestion/*`. This page records what moved, what did not, and why — so a reader can tell a deliberate boundary from unfinished work.
+This library was extracted from a production events app's ingestion layer. This page records what moved, what did not, and why — so a reader can tell a deliberate boundary from unfinished work.
 
-Nothing has been removed from Fallow. The library is additive until a consumer swaps over and its own suite passes, which keeps rollback to a single revert.
+Nothing has been removed from the origin app. The library is additive until a consumer swaps over and its own suite passes, which keeps rollback to a single revert.
 
 ## Migrated (done, with tests)
 
 | Capability | Here | Notes |
 |---|---|---|
-| SSRF / DNS-rebinding guard | `fetch/host-policy.ts` | Decoupled from Fallow's 25-field database row onto `CrawlTarget`. Every origin test ported, plus coverage for the new fail-closed robots rule |
+| SSRF / DNS-rebinding guard | `fetch/host-policy.ts` | Decoupled from the origin app's 25-field database row onto `CrawlTarget`. Every origin test ported, plus coverage for the new fail-closed robots rule |
 | IP/private-range classification | `core/net-address.ts` | Existed **twice** in the origin repo (`crawl-source-policy.ts` + `input-validation.ts`) with different call sites. Consolidated to one home |
 | Prompt-injection guard | `guard/prompt-injection-guard.ts` | Unchanged |
 | JSON-LD event extraction | `extract/jsonld-event.ts` | Unchanged |
@@ -19,7 +19,7 @@ Nothing has been removed from Fallow. The library is additive until a consumer s
 | Cross-runtime SHA-256 | `core/hash.ts` | `createRandomId` dropped — not crawl-related |
 | URL safety for extracted values | `core/url-safety.ts` | Now shares `net-address` with the SSRF guard |
 | **Lane orchestration** | `index.ts`, `lanes/*` | New. Did not exist in the origin — lanes were implicit |
-| robots.txt fetching + parsing | `fetch/robots-check.ts` | Bot identity is derived from the configured User-Agent (`userAgentToken`) rather than a hardcoded `fallowbot`, so a consumer's robots group matches the agent it actually sends |
+| robots.txt fetching + parsing | `fetch/robots-check.ts` | Bot identity is derived from the configured User-Agent (`userAgentToken`) rather than a a hardcoded bot token, so a consumer's robots group matches the agent it actually sends |
 | ICS/feed discovery | `fetch/feed-discovery.ts` | Unchanged besides UA/DNS injection |
 | Pagination discovery | `extract/pagination-discovery.ts` | Unchanged |
 | Extraction recipes (REPLAY half) | `extract/extraction-recipe.ts` | `applyRecipe` + `parseStoredRecipe` only — see below |
@@ -46,22 +46,22 @@ Reviewing my own work found four real gaps, all fixed with red-capable tests:
 |---|---|
 | Extraction recipes (LEARN half) | `extraction-recipe.ts` |
 
-## Staying in Fallow permanently
+## Staying in the origin app permanently
 
-Domain logic, correctly. `event-dedup` (912 lines), `date-text-parser` (527), `promote-core` (720), `recurring-schedule`, every `*-filter.ts` and `auto-publish` all encode what Fallow means by an event — rules no other consumer shares. `ingestion-worker.ts` (1,608) is the orchestrator that *consumes* this library rather than something to move into it.
+Domain logic, correctly. `event-dedup` (912 lines), `date-text-parser` (527), `promote-core` (720), `recurring-schedule`, every `*-filter.ts` and `auto-publish` all encode what the origin app means by an event — rules no other consumer shares. `ingestion-worker.ts` (1,608) is the orchestrator that *consumes* this library rather than something to move into it.
 
 The test of whether something belongs here is simple: would a consumer in a different domain want it unchanged? Reading a page, yes. Deciding whether two rows describe the same thing, no.
 
 ## Adoption order
 
-1. **Fallow** — origin of the code; swap module-by-module, suite green at each step.
+1. **The origin app** — where the code came from; swap module-by-module, suite green at each step.
 2. **OSG** — `sdr/scripts/shared/web-research.js` (389 ln, CommonJS) duplicates the same providers. Porting it proves the package works outside its origin.
-3. **Tesknota** — no crawl code today; adopt if/when it needs one.
+3. **A notes app** — no crawl code today; adopt if/when it needs one.
 4. **Oliver Studios** — Python. Cannot consume an npm package; needs the HTTP wrapper, and only if it turns out to be worth it for one caller.
 
 ## Rules for the swap
 
-- **Copy, verify, then delete.** Fallow keeps its originals until its suite passes against this package.
+- **Copy, verify, then delete.** the origin app keeps its originals until its suite passes against this package.
 - **Pin exact versions** in consumers (`"@oliver/crawl-core": "0.1.0"`, no `^`) so a package change can never silently alter a consumer's crawl behaviour.
 - **Tests move with their module.** They are the evidence the extraction preserved behaviour — that is why the 45-test SSRF suite came over first.
 

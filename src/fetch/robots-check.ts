@@ -177,8 +177,8 @@ export async function evaluateRobotsForUrl(
     }
     // 5xx and anything else: the standard says assume complete disallow.
     if (!res.ok) {
-      // WHITE-LABEL-2: this said "blocking FallowBot" regardless of the
-      // caller's actual user agent — wrong output in any consumer but Fallow.
+      // WHITE-LABEL-2: this named one vendor's bot regardless of the
+      // caller's actual user agent — wrong output for every other consumer.
       return {
         policy: 'unknown',
         reason: `robots.txt fetch returned ${res.status} — the site may be blocking this crawler`,

@@ -49,7 +49,7 @@ import type { CrawlOptions, CrawlPage, CrawlResult, CrawlTarget } from '../../co
 // Disallow after we cached 'allow' kept being crawled for the life of the
 // process, which is the one thing robots compliance exists to prevent. Worse, a
 // transient failure cached 'unknown' permanently, and since unknown fails closed
-// a single network blip meant that host never crawled again, silently. Fallow hit
+// a single network blip meant that host never crawled again, silently. The origin app hit
 // exactly this: 125 sources sat fail-closed for four days.
 //
 // The two TTLs are deliberately asymmetric: a successful answer is cheap to

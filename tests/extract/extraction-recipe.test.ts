@@ -25,6 +25,7 @@ const RECIPE: ExtractionRecipe = {
     venueName: { selector: '.where' },
     ticketUrl: { selector: 'a.tix', attr: 'href' },
   },
+  requiredField: 'title',
   learnedFromUrl: 'https://venue.test/events',
 };
 
@@ -45,7 +46,7 @@ describe('applyRecipe', () => {
     expect(drafts).toBe(null);
   });
 
-  test('items without a title are dropped; below the minimum the page is rejected', async () => {
+  test('items missing the recipe\'s requiredField are dropped; below the minimum the page is rejected', async () => {
     const onlyOne = PAGE.replace(/<h3 class="title">Jazz Evening<\/h3>/, '').replace(/<h3 class="title">Folk Sunday<\/h3>/, '');
     const drafts = await applyRecipe(onlyOne, RECIPE);
     expect(drafts).toBe(null);

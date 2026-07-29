@@ -9,7 +9,7 @@ import type { CrawlTarget } from '@/core/types';
 // ROBOTS-TTL-1: the robots cache had no expiry, so a long-lived process could
 // (a) keep crawling a site that later added a Disallow, and (b) permanently
 // stall a host on one transient failure. (b) is the one that actually bit
-// Fallow — 125 sources fail-closed for four days.
+// The origin app — 125 sources fail-closed for four days.
 
 const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
 // robotsPolicy left unset so autoRobots has to resolve it for real.
@@ -103,7 +103,7 @@ describe('a failed robots fetch never becomes permanent', () => {
     await crawler.crawl(target, 'https://venue.example.com/b');
     expect(hits.count).toBe(1);
 
-    // The blip passes. This is the case that stalled Fallow for four days:
+    // The blip passes. This is the case that stalled the origin app for four days:
     // without expiry the host would stay dead for the life of the process.
     failing = false;
     vi.setSystemTime(Date.now() + ROBOTS_FAILURE_TTL_MS + 1000);

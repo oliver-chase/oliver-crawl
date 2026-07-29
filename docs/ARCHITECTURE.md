@@ -126,7 +126,7 @@ Breadth-first: pages a site links from its homepage are the ones it considers im
 
 | Boundary | Reason |
 |---|---|
-| **No database in the package** | Your app owns persistence. State leaves through `onUsage` / `checkBudget` / `onSignals` callbacks, so Fallow can write Postgres, another repo a spreadsheet, a fork nothing at all. |
+| **No database in the package** | Your app owns persistence. State leaves through `onUsage` / `checkBudget` / `onSignals` callbacks, so one consumer can write Postgres, another repo a spreadsheet, a fork nothing at all. |
 | **No env reads in core** | Config is passed explicitly (`configFromEnv()` is opt-in sugar), so two differently-configured crawlers can exist in one process. |
 | **Domain extraction is yours** | You get text, markdown, JSON-LD and links. The mapping from a page to your own records is defined by your schema; any version shipped here would be wrong for every consumer that did not share it. |
 | **The two paths are separate** | A reader must be able to tell which code can bill them, and the default must never spend money. |

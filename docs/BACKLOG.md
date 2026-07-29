@@ -11,7 +11,7 @@ That is a statement about this list, not about the library. Two things remain
 true and are recorded here because they are the next real decisions, not
 because they are queued work:
 
-- **One consumer is wired; two are not.** oliver-strategic-growth depends on
+- **One consumer is wired; two are not.** one consumer depends on
   this package as `@oliver/crawl-core`, pinned to a git TAG and reached through
   a single seam (`sdr/scripts/shared/page-fetch.js`). A tag, not a branch, on
   purpose: a floating ref would let a mid-session commit here change a
@@ -19,7 +19,7 @@ because they are queued work:
   data. The cost is that shipping to a consumer is deliberate work — tag, bump
   the pin, install.
 
-  Fallow and tesknota still run their own crawling code.
+  Two other consumers still run their own crawling code.
   `scripts/parity-check.mjs` gates those swaps: run it and the consumer's
   existing extractor over the same URLs, and explain every disagreement before
   changing anything. A silent extraction difference across every source does not
@@ -81,12 +81,12 @@ capabilities come from that difference, and none has a vendor equivalent:
 
 ## Measured against real sources
 
-Both extractors run over the same 60 random active Fallow sources. This was
+Both extractors run over the same 60 random active sources in the origin app. This was
 the gate on wiring any consumer, and it is answered.
 
 | | Read |
 |---|---|
-| Fallow's own cheerio runner | 59/60 |
+| the origin app's own cheerio runner | 59/60 |
 | oliver-crawl | 60/60 |
 
 Median text-length ratio across the shared URLs: **0.98** — extraction agrees.
@@ -112,7 +112,7 @@ consumer, and explain every disagreement before switching anything over.
 | 2026-07-28 | process | Two self-inflicted defects in the above, both caught reviewing my own work. A unit test enabled localRender on a page whose direct fetch succeeded, so the rung never ran and it asserted the shape of a page some other rung produced — vacuous coverage committed into the file that exists to catch vacuous coverage. And a live check named "render refuses a redirect that leaves the site" drove a URL with no cross-site redirect, asserting a security property its body never tested. Both fixed same day. Every defect this session came from ablation or from driving real infrastructure; none from the 635 unit tests. |
 | 2026-07-27 | PROBE-DNS-SEAM-1 | CLOSED. dnsLookup is now injectable, matching every other fetch path; the success path is unit-tested. Also deduplicated `sleep`, which existed in two modules. |
 | 2026-07-27 | ROBOTS-4XX-1 | FIXED. RFC 9309 treats any 4xx on robots.txt as UNAVAILABLE — the crawler may access, and a 403 equals a 404. We allowed only 404/410 and failed closed on the rest, refusing 4 of 60 live sources that read fine once permitted. 429 stays excluded: rate limited is not unavailable. Live sample went 55/60 to 60/60. |
-| 2026-07-27 | CRAWL-PARITY-1 | RESOLVED. Both extractors over the same 60 live sources: Fallow 59/60, oliver-crawl 60/60 with the same stored-policy config, median text ratio 0.98. The gap was autoRobots vs a stored policy, not extraction. |
+| 2026-07-27 | CRAWL-PARITY-1 | RESOLVED. Both extractors over the same 60 live sources: origin app 59/60, oliver-crawl 60/60 with the same stored-policy config, median text ratio 0.98. The gap was autoRobots vs a stored policy, not extraction. |
 | 2026-07-27 | THIN-PAGE-1 | FIXED. A JS page shipping only nav and footer passed the "is the parse empty" check and never escalated to render — 1,232 chars fetched vs 5,519 rendered on a live site. `renderWhenTextBelow` opts in to escalating an implausibly short page; a render that returns less is discarded, so it never loses the page it had. |
 | 2026-07-27 | docs | Every export documented in REFERENCE's API surface; seven were undocumented (fetchViaWayback, jinaEndpoint, useArchiveFallback, resolveTarget, diffContent, pickDetailLinks, findContentImages). |
 | 2026-07-27 | GUARD-PRECISION-3 | FIXED. encoded-payload spanned URL paths (`/` is in its character class), quarantining a base64 placeholder and a CDN path. Rule now evaluated URL-free; strip runs before normalisation. |
@@ -120,9 +120,9 @@ consumer, and explain every disagreement before switching anything over.
 | 2026-07-27 | MARKDOWN-DATAURI-1 | FIXED. Markdown emitted base64 data-URI image srcs, tripping the injection guard's encoded-payload rule and quarantining ordinary pages. Found by the first live parity run, not by the test suite — introduced and caught the same day. |
 | 2026-07-27 | LADDER-QUALITY-1 | FIXED. A bot-wall interstitial served with HTTP 200 (or captured by a render rung) was accepted as page content, so a security notice outranked the rung holding the real page. Rung acceptance now rejects block pages and continues the ladder. Found only by running against live sites with localRender on; ablation-verified. |
 | 2026-07-27 | parity run 1 | 20/20 read after the fix. 12/20 need no model. 4/20 only reachable via Jina and therefore lose markdown + JSON-LD; localRender as a remedy is UNVERIFIED (playwright absent here). |
-| 2026-07-27 | file created | Nine specs opened from the post-extraction audit against Fallow. None implemented. |
+| 2026-07-27 | file created | Nine specs opened from the post-extraction audit against the origin app. None implemented. |
 | 2026-07-27 | CRAWL-PDF-1 | SHIPPED, spec removed. `unpdf` is an OPTIONAL peer, not a dependency: a parser is a large hostile-input surface, and putting it in every install for the minority who crawl PDFs is the wrong trade here. Same Function-constructor import seam as playwright. Missing parser reports a `structural` failure naming the package. Found a real gap doing it — a missing parser and a scanned PDF were both classed `transient` when neither is fixed by waiting. |
-| 2026-07-27 | CRAWL-PARITY-1 | SHIPPED as `scripts/parity-check.mjs`, spec removed. Reports per-URL extraction shape (counts + hashes, not prose) so a consumer can diff it against their existing extractor on the same list. Deliberately NOT coupled to any consumer — this library must not import Fallow or tesknota. Run before any swap; explain every disagreement first. |
+| 2026-07-27 | CRAWL-PARITY-1 | SHIPPED as `scripts/parity-check.mjs`, spec removed. Reports per-URL extraction shape (counts + hashes, not prose) so a consumer can diff it against their existing extractor on the same list. Deliberately NOT coupled to any consumer — this library must not import any consumer. Run before any swap; explain every disagreement first. |
 | 2026-07-27 | PARITY-ACTIONS-1 | SHIPPED, spec removed. `browserActions` on config, local-render rung only. Bounds are library constants a caller cannot raise: 10 actions, 20s total, 5s per wait. Origin re-checked after every step — ablation-verified. Failed step skipped (a missing "Load more" means the list already loaded). Tests drive `runActions` directly: playwright is not a dependency and its import is deliberately invisible to bundlers, so the module cannot be mocked. |
 | 2026-07-27 | backlog batch | SHIPPED 5: CRAWL-VISION-1 (candidateContentImages, free half only — ranking not a verdict), CRAWL-DETAILLINK-1 (pickDetailLinks, caller supplies vocabulary), BETTER-DIFF-1 (diffContent, set-based so reordering is not a change), CRAWL-CONCURRENCY-1 (searchAndCrawl concurrency, safe because host-throttle already serialises per host; default 1). CRAWL-SESSION-1 CLOSED AS DOCUMENTED, not built — a cookie jar is a credential store and the spec itself called documenting the honest answer. |
 | 2026-07-27 | BETTER-RUNGMEMORY-1 | SHIPPED, spec removed. Per-host winning rung, 30min TTL, recorded at one chokepoint in crawl(). Store is PER CRAWLER — first cut was module-level and broke 10 tests, same defect class as HOST-CACHE-SCOPE-1. Self-heals: a failed remembered rung is forgotten and the full ladder re-runs, else a rung outage would cost the page. `rungMemory: false` opts out. |
@@ -136,11 +136,11 @@ consumer, and explain every disagreement before switching anything over.
 | 2026-07-27 | process | `npm run check` had been exiting 1 since the buildQuarantineTask cleanup left an orphan test file with no suite; masked by grepping the "Tests" line, which shows passing count and hides a failed SUITE. Read the exit code. |
 | 2026-07-27 | PARITY-HEADERS-1 + PARITY-READABILITY-1 | SHIPPED, specs removed per policy. Headers: accept-language + richer accept on the direct-fetch rung; accept-encoding left runtime-owned on purpose. Readability: paragraphs-vote-for-parent scoring as the no-semantic-tag fallback, 40% mass guardrail, ablation-verified. v0.2.0 tagged; update flow documented in EXISTING-PROJECTS.md. |
 | 2026-07-27 | VENDOR-POLICY-1 | SHIPPED same day as found: crawl() now runs eligibility+robots+same-site lane-independently; vendor-only crawls were previously entirely unvetted. Ablation-verified (4 tests red without gate). |
-| 2026-07-27 | cleanup | DELETED buildQuarantineTask + tests (remove-don't-archive): Fallow's curation-task shape, zero consumers here, belongs in Fallow at wiring time. |
+| 2026-07-27 | cleanup | DELETED buildQuarantineTask + tests (remove-don't-archive): the origin app's curation-task shape, zero consumers here, belongs in the origin app at wiring time. |
 | 2026-07-27 | external-tools honesty | Firecrawl/ScrapeGraphAI/Crawlee audited at API/architecture level, NOT full source. Their free techniques we lack are now specs: PARITY-READABILITY-1, PARITY-HEADERS-1, CRAWL-RESUME-1. |
-| 2026-07-27 | shipped | Crawl-delay honoured (ROBOTS-DELAY-1) + WHITE-LABEL-2 FallowBot strings removed from output. Structured-data signal shipped (JSONLD-SIGNAL-1). |
+| 2026-07-27 | shipped | Crawl-delay honoured (ROBOTS-DELAY-1) + WHITE-LABEL-2 vendor-branded strings removed from output. Structured-data signal shipped (JSONLD-SIGNAL-1). |
 | 2026-07-27 | beat-the-vendors | Four specs opened for things a stateless per-call API structurally cannot do: BETTER-LASTMOD-1, BETTER-RUNGMEMORY-1, BETTER-DIFF-1, BETTER-SOFT404-1. |
-| 2026-07-27 | vendor parity | Reframed around displacing the paid APIs, not just matching Fallow. Markdown + onlyMainContent SHIPPED. PARITY-MAP-1 and PARITY-ACTIONS-1 opened. Recorded that proxies/stealth and general web search are genuinely not free-achievable. |
+| 2026-07-27 | vendor parity | Reframed around displacing the paid APIs, not just matching the origin app. Markdown + onlyMainContent SHIPPED. PARITY-MAP-1 and PARITY-ACTIONS-1 opened. Recorded that proxies/stealth and general web search are genuinely not free-achievable. |
 
 ---
 

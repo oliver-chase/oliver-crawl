@@ -75,7 +75,7 @@ const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
     // GUARD-PRECISION-4: the destination may be a MAILBOX, not only a bare
     // host. An instruction to send a key "to" a mailbox at an attacker
     // domain was missed entirely, because the destination clause cannot match
-    // across the at-sign. Found by QA diffing this guard against the Fallow
+    // across the at-sign. Found by QA diffing this guard against the
     // extractor it descends from, whose own test asserts that exact case — so
     // the narrowing that fixed two live false positives had quietly dropped a
     // case the ancestor caught. The literal strings live in the test file,

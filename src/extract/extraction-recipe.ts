@@ -27,19 +27,29 @@ export type RecipeFieldRule = {
 
 export type ExtractionRecipe = {
   version: 1;
-  /** Selector for the repeating per-event node on a listing page. */
+  /** Selector for the repeating item node on a listing page. */
   itemSelector: string;
-  fields: Partial<Record<'title' | 'dateText' | 'venueName' | 'priceText' | 'ticketUrl', RecipeFieldRule>>;
+  /**
+   * Field name to selector. The names are the CONSUMER's, not this library's:
+   * a listings site wants title and price, a jobs board wants role and salary.
+   * These were once a fixed union of one consumer's event fields, which made a
+   * reusable library carry one domain's schema.
+   */
+  fields: Record<string, RecipeFieldRule>;
+  /**
+   * Field an item must yield to count. A listing row that matched the item
+   * selector but produced no name is a selector that no longer fits the page,
+   * and keeping it lets a recipe go on succeeding against a redesigned site
+   * while returning empty rows. Which field carries that weight is the
+   * consumer's call; unset means an item is dropped only when EVERY field
+   * comes back empty.
+   */
+  requiredField?: string;
   learnedFromUrl: string;
 };
 
-export type RecipeDraft = {
-  title: string;
-  dateText: string | null;
-  venueName: string | null;
-  priceText: string | null;
-  ticketUrl: string | null;
-};
+/** One extracted item, keyed by the recipe's own field names. */
+export type RecipeDraft = Record<string, string | null>;
 
 export const MAX_RECIPE_FAILURES = 2;
 /** Minimum items a recipe must yield on a listing page to be trusted. */
@@ -89,15 +99,11 @@ export async function applyRecipe(html: string, recipe: ExtractionRecipe): Promi
         const trimmed = (value || '').replace(/\s+/g, ' ').trim();
         return trimmed || null;
       };
-      const title = read(recipe.fields.title);
-      if (!title) return;
-      drafts.push({
-        title,
-        dateText: read(recipe.fields.dateText),
-        venueName: read(recipe.fields.venueName),
-        priceText: read(recipe.fields.priceText),
-        ticketUrl: read(recipe.fields.ticketUrl),
-      });
+      const draft: RecipeDraft = {};
+      for (const [name, rule] of Object.entries(recipe.fields)) draft[name] = read(rule);
+      const required = recipe.requiredField;
+      if (required ? draft[required] === null : Object.values(draft).every((v) => v === null)) return;
+      drafts.push(draft);
     });
   } catch {
     return null; // bad selector syntax — treat as a validation failure upstream

@@ -1,14 +1,14 @@
 // ─── Jina Reader fallback: the last resort in the resolution loop ───────────
 //
-// Owner directive (scale): a site that blocks Fallow's direct crawl isn't
+// Owner directive (scale): a site that blocks a direct crawl isn't
 // dropped — the system self-diagnoses and falls back. The direct crawl fails
 // on three real, common blockers:
 //   1. the site moved and off-domain-redirects to a new host,
-//   2. the host bot-walls FallowBot / browser / Googlebot UAs by IP, and
+//   2. the host bot-walls the caller's / browser / Googlebot UAs by IP, and
 //   3. the content is only there after JS runs.
 // Jina Reader (https://r.jina.ai/<url>) clears all three at once, for free and
 // with no API key: it follows redirects, renders the page, and fetches from
-// ITS OWN IPs (so an IP/fingerprint bot-wall on the origin never sees Fallow).
+// ITS OWN IPs (so an IP/fingerprint bot-wall on the origin never sees the caller).
 // Proven on Dillon Amphitheater — moved to dillonamp.com AND 403s every UA,
 // yet Jina returns its rendered July 2026 event calendar.
 //

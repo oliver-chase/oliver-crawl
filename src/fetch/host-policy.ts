@@ -15,7 +15,7 @@
 // only on SUCCESS — a transient resolver failure must not be able to poison
 // a host permanently.
 //
-// Ported from a production crawler (Fallow, lib/ingestion/crawl-source-policy
+// Ported from a production crawler (its lib/ingestion/crawl-source-policy
 // .ts) together with its 45-test suite. The one change is the input type:
 // this takes CrawlTarget, not that app's 25-field database row.
 

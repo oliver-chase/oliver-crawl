@@ -8,7 +8,7 @@ vi.mock('@/fetch/host-policy', () => ({
 
 import { parseRobots, evaluateRobotsForUrl, userAgentToken } from '@/fetch/robots-check';
 
-const UA = 'fallowbot';
+const UA = 'examplebot';
 
 describe('parseRobots', () => {
   test('empty robots.txt = allow', () => {
@@ -20,7 +20,7 @@ describe('parseRobots', () => {
     expect(parseRobots(txt, UA, '/events-concerts/').policy).toBe('allow');
   });
 
-  test('named AI-bot disallow does not affect FallowBot', () => {
+  test('named AI-bot disallow does not affect the configured bot', () => {
     const txt = 'User-agent: ClaudeBot\nDisallow: /\nUser-agent: GPTBot\nDisallow: /\nUser-agent: *\nAllow: /';
     expect(parseRobots(txt, UA, '/whatever').policy).toBe('allow');
   });
@@ -45,8 +45,8 @@ describe('parseRobots', () => {
     expect(parseRobots(txt, UA, '/events/private').policy).toBe('disallow');
   });
 
-  test('FallowBot-specific group wins over *', () => {
-    const txt = 'User-agent: *\nDisallow: /\nUser-agent: FallowBot\nAllow: /';
+  test('an agent-specific group wins over *', () => {
+    const txt = 'User-agent: *\nDisallow: /\nUser-agent: ExampleBot\nAllow: /';
     expect(parseRobots(txt, UA, '/events').policy).toBe('allow');
   });
 
@@ -137,7 +137,7 @@ describe('userAgentToken', () => {
   });
 
   test('lowercases, so robots group matching is case-insensitive', () => {
-    expect(userAgentToken('FallowBot/2.0')).toBe('fallowbot');
+    expect(userAgentToken('ExampleBot/2.0')).toBe('examplebot');
   });
 
   test('handles a bare name with no version', () => {
