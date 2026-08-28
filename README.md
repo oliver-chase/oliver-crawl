@@ -1,12 +1,18 @@
 # oliver-crawl
 
-A TypeScript library that fetches web pages and returns their main content as Markdown, built to be pointed at the same sites on a schedule without paying twice for pages that have not changed.
+`oliver-crawl` is a TypeScript library for repeatedly crawling websites safely and cheaply. It returns the useful page content as Markdown, blocks unsafe destinations, and detects unchanged pages before they trigger expensive downstream processing.
 
-Downloading HTML is the easy part. Two problems show up after that, and both are easy to underestimate until a pipeline is running every hour.
+Downloading HTML is easy. The problems start when a crawl runs every hour.
 
-**The first is safety.** A crawler requests whatever URL it is handed, and that URL is frequently chosen by somebody else — a user submission, a search result, a redirect. Point one at `169.254.169.254`, the address that serves instance metadata on most cloud providers, and it will fetch your credentials and hand them back as page text. So every hostname is resolved and checked against private address ranges before a request goes out, and checked again after every redirect.
+**The first problem is safety.** A crawler requests whatever URL it is given. That URL may come from a user submission, a search result, or a redirect. If someone points it at `169.254.169.254`, the address that serves instance metadata on most cloud providers, the crawler could retrieve credentials and return them as page content.
 
-**The second is cost.** In a pipeline that ends at a language model, the fetch is the cheap step and the model call after it is not — and that call usually runs on every page of every run, including the pages that are byte-identical to the last time you read them. A site polled hourly but updated weekly gets re-extracted around 160 times for each time it needed to be. So the library answers "did this change?" before the expensive work rather than after it, using signals that cost one request or none.
+`oliver-crawl` resolves every hostname and checks the resulting addresses against private address ranges **before every request**. It checks again after every redirect, because a redirect can send the crawler to a new destination.
+
+**The second problem is cost.** In a pipeline that sends crawled content to a language model, fetching the page is usually cheap. Processing that page with a model is not.
+
+A site checked hourly but changed weekly could trigger roughly 160 unnecessary extractions for every extraction it actually needed.
+
+`oliver-crawl` checks whether a page changed **before expensive processing happens**. It uses the cheapest signal available — sometimes with no page request at all — and skips unchanged content.
 
 ---
 
@@ -16,10 +22,14 @@ Downloading HTML is the easy part. Two problems show up after that, and both are
 npm install github:oliver-chase/oliver-crawl#v0.17.0
 ```
 
-```ts
+Then create a crawler and crawl a page:
+
+```typescript
 import { createCrawler } from '@oliver/crawl-core';
 
-const crawler = createCrawler({ userAgent: 'MyBot/1.0 (+https://mysite.com/bot)' });
+const crawler = createCrawler({
+  userAgent: 'MyBot/1.0 (+https://mysite.com/bot)'
+});
 
 const result = await crawler.crawl(
   { baseUrl: 'https://example.com', robotsPolicy: 'allow' },
@@ -31,104 +41,186 @@ if (result.ok && !result.notModified) {
 }
 ```
 
-No API key, no account, no configuration file. Pages are fetched from your own machine, so the only cost is bandwidth, and that is the default path rather than a trial mode. Node 20 or later; it also runs on edge and serverless runtimes, where local browser rendering is unavailable.
+No API key, account, or configuration file is required. Pages are fetched from your own machine, so the default path costs only bandwidth.
+
+**Requirements:** Node 20 or later. The library also runs in edge and serverless environments, where local browser rendering is unavailable.
 
 ---
 
-## How it reads a page
+## How Oliver-crawl gets a page
 
-Most pages answer a plain HTTP request, so that is what the library tries first. When a page does not come back, it escalates through four further methods, and each one exists for a specific failure the method before it cannot solve.
+Most pages work with a normal HTTP request, so `oliver-crawl` starts there. When that is not enough, it moves through progressively more capable retrieval methods, from free local options to paid services.
 
-1. **Request the page.** An ordinary HTTP GET, which works for most of the web.
-2. **Render it in a real browser.** Some sites return an HTML shell whose content only appears once JavaScript has run, so a plain fetch yields navigation and nothing else. Chromium runs locally on your own machine: `npx playwright install chromium` once, then `localRender: true` on the crawler.
-3. **Retry through Jina Reader.** Some sites reject any client that does not look like a person, regardless of what the page contains. [Jina Reader](https://jina.ai/reader) requests it from its own infrastructure and returns the text, free and with no account.
-4. **Call a paid API.** Firecrawl and Apify run commercial anti-bot infrastructure, which is what a site is paying for when it defeats the three steps above.
-5. **Read the archived copy.** When every live method has failed, the Internet Archive may still hold the page.
+1. **Request the page.** An ordinary HTTP GET works for most of the web.
+2. **Render it in a real browser.** Some sites return an HTML shell whose content only appears after JavaScript runs. A plain request gets navigation and an empty page. With `localRender: true`, Chromium renders the page locally. Install it once with `npx playwright install chromium`.
+3. **Retry through Jina Reader.** Some sites reject clients that do not look like people, regardless of what the page contains. Jina requests the page from its own infrastructure and returns the text.
+4. **Call a paid API.** Firecrawl and Apify provide commercial anti-bot infrastructure for sites that defeat the earlier methods.
+5. **Read the archived copy.** When every live method fails, the Internet Archive may still have a copy of the page.
 
-**Steps 1 to 3 run on your own machine and cost nothing beyond bandwidth.** Step 4 is off unless a request opts into it with `lanes: ['own', 'vendor']`, because the failure mode of an accidental vendor call is a bill rather than an error — a configured API key alone is deliberately not enough, and a test fails the build if a paid rung is ever reached without the opt-in. Step 5 is off unless you set `useArchiveFallback: true`, and even then it runs only for targets whose robots posture is explicitly `allow`, so it recovers a page a site was willing to serve rather than working around one it refused.
+**Steps 1–3 run on your own machine and cost nothing beyond bandwidth.**
 
-**The order is deliberate, and cost is the reason.** A 403 usually means a site has classified the request as automated traffic, not that the content is private, and a locally rendered browser clears most of those for free. Escalating to a paid API on the first rejection would spend money reading pages that step 2 handles.
+Paid APIs are deliberately opt-in:
 
-The ladder is not re-walked from the top every time. When a host is finally read by a rung further down, that rung is remembered for 30 minutes and tried first on the next page, so a site that always rejects a plain fetch does not cost one guaranteed wasted request per page. The memory is only a starting point and expires on its own, so a stale one costs an extra request rather than a lost page.
+```typescript
+lanes: ['own', 'vendor']
+```
+
+A configured API key is not enough to trigger a paid request. A test fails the build if the paid rung is reached without explicit opt-in.
+
+The archive fallback is also off by default:
+
+```typescript
+useArchiveFallback: true
+```
+
+When enabled, it only runs for targets whose robots posture is explicitly `allow`. It can recover a page the site was willing to serve; it does not bypass a site that refused the crawler.
+
+### Why the order matters
+
+A `403` often means a site has identified the request as automated traffic. A locally rendered browser can clear many of those blocks without adding an external API cost.
+
+The crawler therefore tries the cheaper methods first. Escalating to a paid API after the first rejection would spend money on pages that a local browser could often retrieve for free.
+
+The crawler also remembers which retrieval method eventually worked for each host for **30 minutes**. If a site consistently rejects ordinary requests, the next request starts at the successful rung instead of wasting another request on a method that already failed.
+
+That memory expires automatically. A stale entry may cost one extra request, but it cannot permanently prevent the crawler from finding a working method.
 
 ---
 
 ## What comes back
 
-A crawl returns extracted page objects rather than raw HTML.
+A crawl returns structured page objects rather than raw HTML.
 
-```ts
+```typescript
 const page = result.pages[0];
 
-page.markdown         // main content as Markdown, with structure intact
-page.text             // every visible word, including nav, footer and cookie banner
-page.contentKind      // 'html' | 'calendar' | 'csv' | 'json' | 'feed' | 'text' | 'pdf'
-page.structuredData   // what machine-readable data the page publishes, summarised
-page.jsonLd           // that data itself, if any
-page.links            // same-site links, for pagination and detail pages
-page.httpEtag         // pass back next run to skip an unchanged fetch
-page.extractorVersion // which extraction produced this page
+page.markdown
+page.text
+page.contentKind
+page.structuredData
+page.jsonLd
+page.links
+page.httpEtag
+page.extractorVersion
 ```
 
-**Feed a model `markdown`, not `text`.**
+Each field has a specific purpose:
 
-`text` is the whole visible page, so a model reading it pays for the navigation and the cookie banner alongside the content. `markdown` is the main content region with the page's own structure preserved, and that structure carries meaning the words alone do not.
+* **`markdown`** — the main content as Markdown, with its structure preserved.
+* **`text`** — every visible word, including navigation, footers, and cookie banners.
+* **`contentKind`** — `html`, `calendar`, `csv`, `json`, `feed`, `text`, or `pdf`.
+* **`structuredData`** — a summary of machine-readable data published by the page.
+* **`jsonLd`** — the actual structured data, when available.
+* **`links`** — same-site links for pagination and detail pages.
+* **`httpEtag`** — the server validator to send on the next run.
+* **`extractorVersion`** — the version of the extraction logic that produced the page.
 
-Plain text collapses that structure: headings disappear, tables become sequences of numbers, and navigation sits next to content with no boundary between them. Markdown keeps the hierarchy, tables, lists, and sections that tell a model what belongs together. Flatten a pricing table into plain text and it reads:
+### Give models Markdown
 
-```
+Use `markdown` when sending page content to a language model.
+
+`text` contains the entire visible page, so the model also receives navigation, cookie banners, and other page furniture.
+
+`markdown` preserves the structure of the main content. That structure carries information that plain text loses.
+
+For example, a pricing table flattened into text might become:
+
+```text
 Starter 5 seats $29 Pro 25 seats $99
 ```
 
-Which number is the seat count and which is the price? Which tier does each belong to? The page's author already answered that when they wrote it as a table, and Markdown keeps the answer where flat text discards it.
+The reader has to guess which numbers belong to which tier.
 
-One exception is worth knowing before you rely on it: `markdown` is an empty string on the text-only rungs, Jina and the vendor APIs, because those return prose with no HTML to convert. Read `text` when `markdown` is empty rather than treating the page as failed.
+Markdown preserves the table, headings, lists, and sections that tell the model how those pieces relate.
 
-`extractorVersion` exists for the same reason. Store it beside the page, and when the stored value falls behind the exported `EXTRACTOR_VERSION`, re-process — otherwise an improvement to extraction only ever reaches pages crawled after it shipped, and there is no way to apply it retroactively later.
+### One exception
 
-### When a page cannot be read
+`markdown` is an empty string when the page was retrieved through a text-only method such as Jina or a vendor API. Those services return prose without HTML to convert.
 
-Failure is returned as a value, not thrown. One unreadable page in a batch of fifty produces a result object rather than an exception that unwinds the loop and abandons the other forty-nine.
+If `markdown` is empty, use `text`. Do not treat the page as a failed crawl.
 
-```ts
+### `extractorVersion` lets you reprocess old pages
+
+Store `extractorVersion` with the page.
+
+When that stored version is older than the exported `EXTRACTOR_VERSION`, re-process the stored content. Otherwise, an improvement to the extractor only affects pages crawled after the improvement was released.
+
+---
+
+## When a page cannot be read
+
+A failed page returns a result instead of throwing an exception.
+
+That means one failure in a batch of 50 pages does not unwind the entire batch.
+
+```typescript
 if (!result.ok) {
-  result.reason;        // 'blocked' | 'unreachable' | 'empty' | 'quarantined' | 'no_lane_available'
-  result.failureClass;  // 'transient' — try later | 'structural' — needs a fix
-  result.detail;        // what happened, in words
-  result.bodyReceived;  // did an origin answer at all?
-  result.retryAfterMs;  // set when the origin sent Retry-After
+  result.reason;
+  result.failureClass;
+  result.detail;
+  result.bodyReceived;
+  result.retryAfterMs;
 }
 ```
 
-`failureClass` is the field to branch on. `transient` covers timeouts, DNS failures, 5xx responses and bot walls, all conditions that may differ in an hour. `structural` covers 404s, robots exclusions and disabled targets, where retrying changes nothing until something is fixed.
+`reason` identifies the failure:
 
-Counting consecutive `structural` failures per source is how a dead source gets retired before anyone notices it by hand. Counting `transient` ones tells you nothing, which is why the two are separated here rather than left for a caller to infer from `detail`.
+* `blocked`
+* `unreachable`
+* `empty`
+* `quarantined`
+* `no_lane_available`
+
+`failureClass` tells the caller what kind of problem it is:
+
+* **`transient`** — timeouts, DNS failures, 5xx responses, and bot walls. Try again later.
+* **`structural`** — 404s, robots exclusions, and disabled targets. Retrying will not fix the problem until something changes.
+
+This distinction makes monitoring useful. Consecutive `structural` failures can identify a source that should be retired. `transient` failures are expected to recover and should be handled differently.
+
+`retryAfterMs` is populated when the origin sends a `Retry-After` response.
 
 ---
 
 ## Design decisions
 
-### Every hostname is resolved and checked before the request goes out
+### Every hostname is checked before fetching
 
-Anyone who controls a domain controls where it points, including at `127.0.0.1` or at the cloud metadata address. A crawler that resolves and fetches on command will retrieve whatever sits there and return it as ordinary page content, which is server-side request forgery with the crawler as the confused deputy.
+A domain can point anywhere, including `127.0.0.1` or a cloud metadata address.
 
-So resolution happens first and the request is refused if the name lands on a private address. Every address in the DNS answer is checked rather than only the first, since a name can resolve to several. The check runs again after each redirect, because a redirect is a second destination the same attacker also chose.
+`oliver-crawl` resolves the hostname before making the request and refuses private addresses. It checks **every address** returned by DNS, not just the first one.
 
-`isSafeHttpUrl` is exported for the same check on URLs you are about to hand to something else.
+It repeats the check after every redirect because a redirect is another destination chosen by the remote site.
 
-### Every page is filtered for prompt injection before it reaches you
+The same protection is available through the exported `isSafeHttpUrl` function for URLs you are about to pass to another component.
 
-A web page can carry instructions addressed to whatever AI reads it next, the "ignore your previous instructions" family, and a crawler that returns them intact has delivered an attack into your extraction step.
+### Every page is checked for prompt injection
 
-Every page passes a prompt-injection filter before it is returned, including pages retrieved through the paid APIs and data files such as calendar feeds. A page that trips the filter comes back with `reason: 'quarantined'` and is not handed over.
+Web pages can contain instructions aimed at the AI that will read them, such as attempts to override the AI's existing instructions.
 
-Quarantine carries evidence with it, in `result.quarantine`: the signals that fired, the page title, and the sanitised text. Without that, a quarantine is indistinguishable from a fetch failure at the call site, and a pipeline whose rule is "never silently lose a page" has nothing to build a review task from.
+`oliver-crawl` filters every page before returning it, including content retrieved through paid APIs and data files such as calendar feeds.
 
-### The library says when a language model is unnecessary
+A page that triggers the filter returns:
 
-Many pages already publish a machine-readable description of themselves. Reading that is free, exact, and cannot hallucinate, so the useful question before every extraction is whether a model is needed at all.
+```typescript
+reason: 'quarantined'
+```
 
-```ts
+It is not passed through to the caller.
+
+The result also contains:
+
+```typescript
+result.quarantine
+```
+
+This includes the signals that triggered the filter, the page title, and sanitized text. That gives the calling system enough information to create a review task instead of silently losing the page.
+
+### The library identifies when a model is unnecessary
+
+Many pages already publish structured data. That data is free to read, exact, and does not require a language model.
+
+```typescript
 if (page.structuredData.hasContentData) {
   useJsonLd(page.jsonLd);
 } else {
@@ -136,175 +228,310 @@ if (page.structuredData.hasContentData) {
 }
 ```
 
-Testing `jsonLd.length > 0` yourself gives the wrong answer, which is the reason this field exists. Most structured data in the wild describes the site rather than the page: a retailer publishes `WebSite`, `Organization` and `BreadcrumbList` on every page, including the ones with no product on them. `hasContentData` counts only the types that describe content — `Product`, `Article`, `Recipe`, `Event`, `JobPosting` and the rest — and ignores site furniture.
+Checking only whether `jsonLd` exists is insufficient. A site may publish `WebSite`, `Organization`, and `BreadcrumbList` on every page even when the page has no useful content data.
 
-### An unchanged page is detected before it is downloaded
+`hasContentData` looks for content types such as `Product`, `Article`, `Recipe`, `Event`, and `JobPosting` while ignoring that site-level metadata.
 
-A site polled hourly is fetched 24 times a day, and almost every one of those fetches returns a page identical to the one before it. Three mechanisms cut that down, and they are tried cheapest first.
+### Unchanged pages are detected before expensive processing
 
-```ts
+A site checked hourly is fetched 24 times a day, and most of those fetches return a page identical to the one before it.
+
+`oliver-crawl` uses three increasingly expensive signals:
+
+1. **Sitemap `lastmod`** — if the sitemap says the page has not changed, the page is never requested.
+2. **HTTP validators** — the server can return `304 Not Modified` without sending the page again.
+3. **Content comparison** — if the page was downloaded but its content is identical, downstream processing is skipped.
+
+```typescript
 const run = await crawlSite(crawler, target, {
   useSitemap: true,
   priorLastmod: saved.lastmod,
   priorValidators: saved.validators,
 });
 
-run.skippedByLastmod;  // sitemap says unchanged — never requested
-run.notModified;       // server answered 304 — nothing downloaded
-run.unchanged;         // downloaded, identical content — skip re-processing
+run.skippedByLastmod;
+run.notModified;
+run.unchanged;
 ```
 
-The sitemap saves the most, because it reports which of a site's pages changed in a single request, where asking each page individually costs one request per page. The result is that a weekly-changing site polled hourly settles at roughly one real fetch and one extraction per week.
+The sitemap saves the most because it can report which pages changed in a single request. Asking every page individually costs one request per page.
 
-`run.validators` and `run.lastmod` are what you store to make the next run cheap. Pass them back as `priorValidators` and `priorLastmod`; nothing is persisted by the library itself.
+A site that changes weekly but is checked hourly can therefore settle at roughly one real fetch and one extraction per week.
+
+Store:
+
+```typescript
+run.validators
+run.lastmod
+```
+
+and pass them into the next run as `priorValidators` and `priorLastmod`.
+
+The library does not persist this information itself.
 
 ---
 
 ## Crawling a site
 
-`crawlSite` walks a site rather than a single URL, and how far it reaches is set explicitly.
+`crawlSite` handles multiple pages. You decide how far it can go.
 
-```ts
+```typescript
 import { crawlSite } from '@oliver/crawl-core';
 
-const run = await crawlSite(crawler, { baseUrl: 'https://testsite.com' }, {
-  followLinks: true,
-  maxDepth: 2,
-  maxPages: 50,
-});
+const run = await crawlSite(
+  crawler,
+  { baseUrl: 'https://testsite.com' },
+  {
+    followLinks: true,
+    maxDepth: 2,
+    maxPages: 50,
+  }
+);
 ```
 
-| Option | Reaches |
-|---|---|
-| `followLinks` | Every page reachable by same-site links, to `maxDepth` |
-| `useSitemap` | Whatever `/sitemap.xml` lists |
-| `followPagination` | "Next page" links only, for paginated listings |
+| Option             | What it reaches                                           |
+| ------------------ | --------------------------------------------------------- |
+| `followLinks`      | Same-site pages reachable through links, up to `maxDepth` |
+| `useSitemap`       | URLs listed in `/sitemap.xml`                             |
+| `followPagination` | Pages reached through "Next page" pagination links        |
 
-With none of them set, one URL yields one page.
+With none enabled, one URL produces one page.
 
-Requests go out one at a time, because parallel requests to a small site are how a crawler gets itself blocked, and any `Crawl-delay` published in the site's robots.txt is honoured. Pages are never fetched twice — including URLs that redirect to the same destination and URLs differing only by a trailing slash or a tracking parameter — so a site whose navigation links every page to every other page still terminates.
+### Crawling is deliberately polite
 
-```ts
+Requests are made one at a time. The crawler honors `Crawl-delay` from `robots.txt`.
+
+It also prevents duplicate work. URLs that redirect to the same destination and URLs that differ only by a trailing slash or tracking parameter are treated as the same page.
+
+That means a site whose navigation links every page to every other page still terminates.
+
+Configure request pacing with:
+
+```typescript
 createCrawler({
-  minHostIntervalMs: 500,          // minimum gap between requests to one host
-  adaptiveThrottleMultiplier: 2,   // slow sites are given proportionally more room
-  cacheTtlMs: 60_000,              // same URL twice in a minute costs one request
+  minHostIntervalMs: 500,
+  adaptiveThrottleMultiplier: 2,
+  cacheTtlMs: 60_000,
 });
 ```
 
-`adaptiveThrottleMultiplier` waits the host's own average response latency multiplied by this value. Latency is the origin telling you how loaded it is, and a fixed delay cannot hear that; the setting can only ever make the crawler more polite, never less.
+`adaptiveThrottleMultiplier` uses the host's average response latency to determine how long to wait. A slow site receives more breathing room; the setting can only make the crawler slower.
 
-`Retry-After` is obeyed. Bound a long run with `maxDurationMs` rather than a page count alone: fifty pages at thirty seconds each is a twenty-five minute run, which a `maxPages` limit does not express.
+`Retry-After` is always honored.
 
-A long crawl can also be interrupted and continued. `onProgress` emits a serialisable snapshot after each page, and passing that snapshot back as `resumeFrom` continues from where it stopped instead of starting over.
+For long crawls, use `maxDurationMs` as well as `maxPages`. Fifty pages taking 30 seconds each is a 25-minute run, which a page-count limit does not capture.
 
-Two narrower entry points cover the cases where a full crawl is the wrong tool. `mapSite` returns a site's URLs from its sitemap, its declared feeds and its homepage links, reading the listing documents and the homepage once, which is enough to learn what a site contains before deciding to read any of it. `searchSite` submits to the site's own search form, which is free and reaches pages that neither links nor a sitemap expose.
+### Resume an interrupted crawl
+
+Long crawls can be stopped and continued.
+
+`onProgress` emits a serializable snapshot after each page. Pass that snapshot back through `resumeFrom` to continue from where the crawl stopped.
+
+### Map or search a site without crawling everything
+
+Two narrower entry points handle discovery.
+
+**`mapSite`** finds a site's URLs from its sitemap, declared feeds, and homepage links. It reads the listing documents and homepage once so you can understand the site's structure before deciding which pages to crawl.
+
+**`searchSite`** submits a query to the site's own search form. This is free and can find pages that neither links nor a sitemap expose.
 
 ---
 
 ## Beyond HTML
 
-Feeds, calendars, CSV and JSON are fetched rather than refused, and `contentKind` tells you which one you are holding.
+`oliver-crawl` can fetch feeds, calendars, CSV, and JSON files. `contentKind` tells you what you received.
 
-```ts
+```typescript
 if (page.contentKind === 'csv') {
   myCsvParser(page.text);
 }
 ```
 
-These arrive in `text` exactly as the server sent them, decoded but otherwise unmodified. The library does not parse them, because the shape they should become is defined by your schema and not by the file: a CSV of inventory rows and a CSV of survey responses are the same format and completely different data.
+These files are returned in `text` exactly as the server sent them, decoded but otherwise unmodified.
 
-Fetching them at all is the point. A site's own data file is usually more accurate and more stable than the page rendering it, and a calendar feed in particular is the difference between reading a venue's schedule and scraping a guess at it.
+The library does not parse them into application-specific objects because the correct schema belongs to your application. An inventory CSV and a survey-response CSV use the same file format but represent completely different data.
 
-Images, video and other binaries are refused, since running an HTML parser over a JPEG produces confident nonsense. PDFs are read if the optional `unpdf` package is installed; without it the crawl reports a failure naming the package rather than skipping the document silently.
+Fetching these files is useful because a site's own data source is often more accurate and stable than the HTML page that displays it. A calendar feed, for example, can provide the actual schedule instead of requiring you to infer it from a rendered page.
 
-Where a page's substance sits inside an image rather than its text — a scanned menu, a poster, a specification sheet — `page.candidateContentImages` ranks the images worth examining, best first. Identifying them is free and included; reading them needs a vision model and is yours to run.
+### Images and PDFs
+
+Images, video, and other binary files are refused. Running an HTML parser over a JPEG would produce meaningless output.
+
+PDFs are supported when the optional `unpdf` package is installed. Without it, the crawl returns a failure that identifies the missing package rather than silently skipping the document.
+
+For pages where the useful content is inside an image — such as a scanned menu, poster, or specification sheet — the crawler provides:
+
+```typescript
+page.candidateContentImages
+```
+
+This ranks the images most worth examining.
+
+Identifying those images is included in the crawl. Actually reading them requires a vision model, which your application can choose to run.
 
 ---
 
 ## Search
 
-Fetching a page you already know about is free. Finding pages you do not know about is a different surface with a different cost, because every reliable search API charges for queries, so `crawler.search()` needs a provider key while reading pages never does.
+Fetching a URL you already know about does not require a search provider.
 
-```ts
-const found = await crawler.search('industrial flow meter suppliers');
+Finding URLs you do not know about does.
+
+Search providers charge for queries, so `crawler.search()` requires a provider key while ordinary page crawling does not.
+
+```typescript
+const found = await crawler.search(
+  'industrial flow meter suppliers'
+);
 
 if (found.ok) {
-  found.results;   // [{ url, title, snippet }]
-  found.provider;  // which provider answered
+  found.results;
+  found.provider;
 } else {
-  found.reason;    // 'no_provider_configured' | 'no_results' | 'budget_refused' | 'error'
+  found.reason;
 }
 ```
 
-Search reports why it came back empty rather than returning a bare empty array, because "no provider is configured" and "this query has no results" call for opposite responses from a caller.
+Possible failure reasons are:
 
-To read the results rather than list them, `searchAndCrawl` runs the search and crawls what it finds:
+* `no_provider_configured`
+* `no_results`
+* `budget_refused`
+* `error`
 
-```ts
+The result explains why a search returned nothing. `no_provider_configured` requires configuration; `no_results` means the query produced no matches.
+
+### Search and crawl together
+
+`searchAndCrawl` searches for pages and then crawls the results:
+
+```typescript
 import { searchAndCrawl } from '@oliver/crawl-core';
 
-const found = await searchAndCrawl(crawler, 'industrial flow meter suppliers');
+const found = await searchAndCrawl(
+  crawler,
+  'industrial flow meter suppliers'
+);
+
 found.pages;
 found.skipped;
 ```
 
-Those URLs pass through the same hostname screening as any other. A search provider returns results from sites you have not vetted, so handing them straight to a fetcher would reintroduce exactly the request-forgery exposure the screening exists to close.
+Search results pass through the same hostname safety checks as every other URL. Search providers return sites you have not vetted, so their results cannot be sent directly to a fetcher without reintroducing the request-forgery risk the crawler is designed to prevent.
 
 ---
 
 ## Configuration
 
-Everything is optional except `userAgent`, and the environment variables mirror the constructor.
+Everything is optional except `userAgent`. Environment variables mirror the constructor options.
 
 ```bash
 OLIVER_CRAWL_USER_AGENT="MyBot/1.0 (+https://mysite.com/bot)"
-OLIVER_CRAWL_LOCAL_RENDER=1     # enable the free local-Chromium rung
-OLIVER_CRAWL_AUTO_ROBOTS=1      # resolve an unknown robots posture by fetching robots.txt
-OLIVER_CRAWL_FIRECRAWL_KEY=...  # or FIRECRAWL_API_KEY
-OLIVER_CRAWL_SERPER_KEY=...     # or SERPER_API_KEY
+OLIVER_CRAWL_LOCAL_RENDER=1
+OLIVER_CRAWL_AUTO_ROBOTS=1
+OLIVER_CRAWL_FIRECRAWL_KEY=...
+OLIVER_CRAWL_SERPER_KEY=...
 ```
 
-```ts
+Or configure the crawler directly:
+
+```typescript
 createCrawler({
   userAgent: 'MyBot/1.0',
-  onUsage: (event) => myMetrics.record(event),   // one event per external call
-  checkBudget: () => spentToday < myCap,         // consulted before every paid call
-  renderWhenTextBelow: 600,                      // escalate a suspiciously thin page
-  limits: { maxBodyBytes: 5_000_000 },
+  onUsage: (event) => myMetrics.record(event),
+  checkBudget: () => spentToday < myCap,
+  renderWhenTextBelow: 600,
+  limits: {
+    maxBodyBytes: 5_000_000
+  },
 });
 ```
 
-`onUsage` and `checkBudget` are the two halves of spend control: the first reports what each external call cost, and the second vetoes a paid call before it happens. Both exist so the library never needs to know what your database or your budget is.
+### Cost controls
 
-`autoRobots` is off by default because a consumer that already tracks robots posture in its own records should stay the source of truth, and adding a silent network call per target would be a surprise. Turned on, the crawler resolves an unknown posture itself and caches the answer per host for the process lifetime, so it costs one request per host rather than one per page.
+`onUsage` reports every external call and its cost.
 
-Pages behind a login are reachable with credentials you already hold: `headers` on a target are sent to that target's own host and nowhere else, so a redirect cannot walk a bearer token to another origin. The library never acquires, stores or refreshes them.
+`checkBudget` is consulted before every paid call and can veto it.
 
-The library holds no database. Persistence, scheduling, and turning pages into your own domain objects stay in your application, which is what lets it drop into an existing codebase without bringing a framework along with it.
+Together, they let your application control spending without requiring the crawler to know anything about your metrics system or budget.
+
+### Robots
+
+`autoRobots` is off by default.
+
+Applications that already track robots posture can remain the source of truth, and enabling automatic resolution would add an unexpected network request for each unknown target.
+
+When enabled, the crawler fetches `robots.txt` for an unknown host and caches the result for the lifetime of the process. That means one request per host rather than one per page.
+
+### Authenticated pages
+
+You can provide credentials you already hold through `headers` on a target.
+
+Those headers are sent only to that target's own host. A redirect cannot carry a bearer token to another origin.
+
+The library never acquires, stores, or refreshes credentials.
+
+### No database or application framework
+
+`oliver-crawl` does not maintain a database.
+
+Your application owns persistence, scheduling, and conversion of crawled pages into your own domain objects. The library provides the crawling layer without imposing a larger application framework.
 
 ---
 
 ## Documentation
 
-| | |
-|---|---|
-| **[ADOPTING.md](docs/ADOPTING.md)** | Starting from a new project |
-| **[EXISTING-PROJECTS.md](docs/EXISTING-PROJECTS.md)** | Replacing crawling code you already run |
-| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Request flow, module map, design boundaries |
-| **[LANES.md](docs/LANES.md)** | The retrieval ladder, rung by rung |
-| **[REFERENCE.md](docs/REFERENCE.md)** | Every option and return field |
-| **[MIGRATION.md](docs/MIGRATION.md)** | Provenance: what moved here, from where |
-| **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** | Failures you will hit, listed by symptom |
-| **[DECISIONS.md](docs/DECISIONS.md)** | Why the code is the way it is, indexed by the defect each choice prevents |
-| **[BACKLOG.md](docs/BACKLOG.md)** | Known gaps — read before assuming a capability exists |
+| Document                                                                                                   | Purpose                                         |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| [`ADOPTING.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/ADOPTING.md)                   | Starting from a new project                     |
+| [`EXISTING-PROJECTS.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/EXISTING-PROJECTS.md) | Replacing existing crawling code                |
+| [`ARCHITECTURE.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/ARCHITECTURE.md)           | Request flow, module map, and design boundaries |
+| [`LANES.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/LANES.md)                         | The retrieval ladder, rung by rung              |
+| [`REFERENCE.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/REFERENCE.md)                 | Every option and return field                   |
+| [`MIGRATION.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/MIGRATION.md)                 | What moved here and where it came from          |
+| [`TROUBLESHOOTING.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/TROUBLESHOOTING.md)     | Failures organized by symptom                   |
+| [`DECISIONS.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/DECISIONS.md)                 | Why the code works the way it does              |
+| [`BACKLOG.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/BACKLOG.md)                     | Known gaps and planned work                     |
+
+---
 
 ## Status
 
-Strict TypeScript, building to `dist/`. `npm run check` runs the typecheck, the unit suite, the decision-record gate and the comment-budget gate; `npm run live` exercises the library against real websites over the network. Installation is verified as a genuine git dependency rather than a local path.
+`oliver-crawl` is strict TypeScript and builds to `dist/`.
 
-Node 20 or later. Edge and serverless runtimes are supported, with local browser rendering unavailable there.
+Run:
+
+```bash
+npm run check
+```
+
+This runs:
+
+* Type checking
+* Unit tests
+* The decision-record gate
+* The comment-budget gate
+
+For network-based testing, run:
+
+```bash
+npm run live
+```
+
+This exercises the library against real websites.
+
+Installation is also tested as a genuine Git dependency rather than a local path.
+
+**Requirements:** Node 20 or later. Edge and serverless runtimes are supported, although local browser rendering is unavailable in those environments.
 
 ## License
 
 MIT
+
+---
+
+## About
+
+TypeScript web crawler that screens every URL before fetching it, returns clean Markdown, identifies when a page's structured data makes an LLM call unnecessary, and skips unchanged pages on re-crawl.
+
+Free by default. Paid APIs are used only when explicitly requested.
