@@ -107,7 +107,7 @@ if (result.ok && result.originMoved) {
 }
 ```
 
-This is what a sold or parked domain looks like: the redirect is refused, a
+What a sold or parked domain looks like: the redirect is refused, a
 fallback follows it from its own IPs, and the new owner's content comes back
 under your URL. Refusing outright would be wrong — an off-domain redirect is
 routinely a real migration — so the crawl succeeds and tells you, rather than
