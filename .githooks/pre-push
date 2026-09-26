@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# OliverCode — Pre-Push Hook (all repos)
+# 2 gates on what's about to leave the machine: force-push / history rewrite
+# to an existing remote ref, and secrets in the commits actually being pushed.
+# Master source: <vault-root>/Oliver/Project Repos/OliverCode/core/templates/project/pre-push
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+ZERO_SHA="0000000000000000000000000000000000000000"
+PUSH_INPUT="$(cat)"
+VIOLATIONS=0
+
+SECRET_PATTERNS=(
+  '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'
+  'sk-[A-Za-z0-9]{20,}'
+  'ghp_[A-Za-z0-9]{36}'
+  'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+'
+  '(A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}'
+  'xox[baprs]-[0-9A-Za-z-]{10,}'
+  '(sk|rk)_live_[0-9A-Za-z]{20,}'
+  'AIza[0-9A-Za-z_-]{35}'
+  'npm_[0-9A-Za-z]{36}'
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  '(TOKEN|SECRET|KEY|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|AUTH|CREDENTIAL|token|secret|key|password|passwd|api_?key|access_?key|auth|credential)["'\'':= ]+[A-Za-z0-9]{20,}'
+)
+
+echo "[pre-push] Gate 1/2: force-push / history-rewrite check..."
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+  [ "$local_sha" = "$ZERO_SHA" ] && continue    # deleting a ref -- nothing to check
+  [ "$remote_sha" = "$ZERO_SHA" ] && continue   # new ref -- nothing to rewrite
+  if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+    if [ "${ALLOW_FORCE_PUSH:-}" != "1" ]; then
+      echo "  BLOCKED: $remote_ref would be force-pushed (history rewrite) -- $remote_sha is not an ancestor of $local_sha."
+      echo "  If this is deliberate: ALLOW_FORCE_PUSH=1 git push ..."
+      VIOLATIONS=$((VIOLATIONS + 1))
+    fi
+  fi
+done <<< "$PUSH_INPUT"
+
+if [ $VIOLATIONS -gt 0 ]; then
+  echo "PUSH BLOCKED: $VIOLATIONS force-push/history-rewrite issue(s)."
+  exit 1
+fi
+echo "  Gate 1 passed."
+
+echo "[pre-push] Gate 2/2: Secret scan on push range..."
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+  [ "$local_sha" = "$ZERO_SHA" ] && continue
+  if [ "$remote_sha" = "$ZERO_SHA" ]; then
+    range="$local_sha"          # new branch -- scan every commit it introduces
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  DIFF="$(git diff "$range" -- . 2>/dev/null || true)"
+  [ -z "$DIFF" ] && continue
+  for pattern in "${SECRET_PATTERNS[@]}"; do
+    HIT="$(printf '%s\n' "$DIFF" | grep -nE -e "$pattern" | grep -E '^[0-9]+:\+' || true)"
+    if [ -n "$HIT" ]; then
+      echo "$HIT"
+      echo "  BLOCKED: $remote_ref push range matches secret pattern: $pattern"
+      VIOLATIONS=$((VIOLATIONS + 1))
+    fi
+  done
+done <<< "$PUSH_INPUT"
+
+if [ $VIOLATIONS -gt 0 ]; then
+  echo "PUSH BLOCKED: $VIOLATIONS potential secret leak(s) in the push range."
+  exit 1
+fi
+echo "  Gate 2 passed."
+echo "[pre-push] All gates passed."
+exit 0

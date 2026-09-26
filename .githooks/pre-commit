@@ -343,7 +343,11 @@ echo "  Gate 10 passed."
 # ─── Gate 11: Writing clarity (asd-ste100) ────────────────────────────────────
 # SKILL.md and CLAUDE.md are agent-parsed instructions, not human-read prose --
 # a dense sentence in one caused a real skill-matching bug (SKILLS-PLACEMENT.md's
-# ACT-3). Strict mode: full default ste-lint, no rule disabled.
+# ACT-3). Strict mode: full default ste-lint, no rule disabled, except a repo's own
+# named per-file exemptions (see .githooks/ste-exemptions below) for a documented,
+# checked false positive -- e.g. a real sheet-column name colliding with a real
+# CLI-subcommand name under synonym-rotation's whole-file scope, where renaming
+# either would misdescribe the real thing it names.
 #
 # The linter is a personal vendor install (npx skills add danyuchn/asd-ste100-skill),
 # not vendored in-repo -- skip cleanly on a machine or clone that lacks it rather
@@ -353,18 +357,67 @@ for candidate in "$HOME/.claude/skills/asd-ste100/scripts/ste-lint.py" "$HOME/.a
   [ -f "$candidate" ] && STE_LINT="$candidate" && break
 done
 
+# ste-lint.py counts sentence length one physical line at a time, so a hard-wrapped
+# paragraph never trips the long-sentence cap (STE-JOIN-1 in OliverCode's
+# docs/DECISIONS.md). ste-lint-joined.py joins soft-wrapped lines first and keeps the
+# line numbers. sync-hooks installs it beside this hook. OliverCode's own hook reads
+# the template copy.
+STE_JOIN=""
+for candidate in "$HOOK_DIR/ste-lint-joined.py" "$REPO_ROOT/core/templates/project/ste-lint-joined.py"; do
+  [ -f "$candidate" ] && STE_JOIN="$candidate" && break
+done
+
+# path:rule pairs exempted from strict mode, one per accepted case. Lives outside
+# this file (sync-hooks overwrites this file wholesale) in a plain per-repo file so
+# an exemption survives every future hook sync untouched.
+STE_EXEMPTIONS=""
+STE_EXEMPTIONS_FILE="$REPO_ROOT/.githooks/ste-exemptions"
+[ -f "$STE_EXEMPTIONS_FILE" ] && STE_EXEMPTIONS="$(cat "$STE_EXEMPTIONS_FILE")"
+
 if [ -z "$STE_LINT" ] || ! command -v python3 >/dev/null 2>&1; then
   echo "[pre-commit] Gate 11/11: Writing clarity (asd-ste100)... skipped (ste-lint.py or python3 not found on this machine)."
 else
   echo "[pre-commit] Gate 11/11: Writing clarity (asd-ste100)..."
   CLARITY_FAILED=0
+  HAVE_JQ=0
+  command -v jq >/dev/null 2>&1 && HAVE_JQ=1
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
       case "${file##*/}" in
         SKILL.md|CLAUDE.md) [ -f "$file" ] || continue ;;
         *) continue ;;
       esac
-      python3 "$STE_LINT" "$file" || CLARITY_FAILED=1
+      if [ -z "$STE_JOIN" ]; then
+        echo "  BLOCKED: $file needs ste-lint-joined.py, which is missing from $HOOK_DIR."
+        echo "  Without it, hard-wrapped prose passes the long-sentence cap unchecked."
+        echo "  Run: olivercode sync-hooks"
+        exit 1
+      fi
+      disable_rules=""
+      while IFS=: read -r ex_path ex_rule; do
+        [ -z "$ex_path" ] && continue
+        [ "$ex_path" = "$file" ] && disable_rules="${disable_rules:+$disable_rules,}$ex_rule"
+      done <<< "$STE_EXEMPTIONS"
+      lint_args=(--json)
+      [ -n "$disable_rules" ] && lint_args=(--disable "$disable_rules" --json)
+      # Decide pass/fail from --json first, so a clean file (the common case) costs
+      # one summary line instead of ste-lint's full per-finding dump -- that dump
+      # was repeating in full on every commit for every staged file regardless of
+      # whether it was actually blocking, real token waste on any commit touching
+      # more than a couple of SKILL.md/CLAUDE.md files.
+      JSON_OUT="$(python3 "$STE_JOIN" "$STE_LINT" "${lint_args[@]}" "$file" 2>&1)" && EXIT_CODE=0 || EXIT_CODE=$?
+      if [ "$EXIT_CODE" -ne 0 ]; then
+        CLARITY_FAILED=1
+        # Re-run in plain mode so the failing file gets full fix-it detail.
+        if [ -n "$disable_rules" ]; then
+          python3 "$STE_JOIN" "$STE_LINT" --disable "$disable_rules" "$file" || true
+        else
+          python3 "$STE_JOIN" "$STE_LINT" "$file" || true
+        fi
+      elif [ "$HAVE_JQ" -eq 1 ]; then
+        soft=$(printf '%s' "$JSON_OUT" | jq -r '.count')
+        echo "  $file: $soft soft violation(s) (0 hard) -- not blocking."
+      fi
     done <<< "$STAGED_FILES"
   fi
   if [ "$CLARITY_FAILED" -eq 1 ]; then
