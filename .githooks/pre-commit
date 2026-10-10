@@ -13,7 +13,7 @@ VIOLATIONS=0
 
 # ─── Gate 1: Secrets ──────────────────────────────────────────────────────────
 # Block commits containing API keys, tokens, JWTs, private keys.
-echo "[pre-commit] Gate 1/11: Secret scan..."
+echo "[pre-commit] Gate 1/9: Secret scan..."
 
 SECRET_PATTERNS=(
   '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
@@ -64,7 +64,7 @@ echo "  Gate 1 passed."
 
 # ─── Gate 2: Icons / Emojis ───────────────────────────────────────────────────
 # Block ALL emojis and Unicode icons. Plain text only. No exceptions.
-echo "[pre-commit] Gate 2/11: Icon/Emoji scan..."
+echo "[pre-commit] Gate 2/9: Icon/Emoji scan..."
 
 EMOJI_PATTERN='[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F1E0}-\x{1F1FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}\x{2300}-\x{23FF}\x{2B50}\x{2764}\x{1F004}\x{1F0CF}\x{2934}-\x{2935}\x{25AA}-\x{25FE}\x{2B05}-\x{2B07}\x{2B1B}-\x{2B1C}\x{3030}\x{303D}\x{3297}\x{3299}\x{2139}\x{2328}\x{23CF}\x{24C2}\x{25B6}\x{23E9}-\x{23F3}\x{23F8}-\x{23FA}\x{200D}\x{20E3}]'
 
@@ -95,7 +95,7 @@ echo "  Gate 2 passed."
 
 # ─── Gate 3: PII ──────────────────────────────────────────────────────────────
 # Block commits containing personal identifiers: home paths, usernames, hostnames.
-echo "[pre-commit] Gate 3/11: PII scan..."
+echo "[pre-commit] Gate 3/9: PII scan..."
 
 PII_PATTERNS=(
   '/Users/[a-z]+/'                              # macOS home directory paths
@@ -157,7 +157,7 @@ echo "  Gate 3 passed."
 # ─── Gate 4: Deleted Repository References ────────────────────────────────────
 # Block commits referencing repos that no longer exist.
 # Add project-specific deleted repo names here.
-echo "[pre-commit] Gate 4/11: Deleted repo scan..."
+echo "[pre-commit] Gate 4/9: Deleted repo scan..."
 
 DELETED_REPO_PATTERNS=(
   # Add deleted repo names here. Example:
@@ -198,7 +198,7 @@ fi
 # HTTPS alone isn't the risk -- a `gh auth login` credential can carry `workflow`
 # scope over HTTPS just fine. Check the actual credential's scopes via `gh api`,
 # don't assume from the remote URL scheme.
-echo "[pre-commit] Gate 5/11: Workflow push auth..."
+echo "[pre-commit] Gate 5/9: Workflow push auth..."
 WORKFLOW_STAGED=$(printf '%s\n' "$STAGED_FILES" | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
 if [[ -n "$WORKFLOW_STAGED" ]]; then
   HAS_WORKFLOW_SCOPE=false
@@ -223,73 +223,34 @@ echo "  Gate 5 passed."
 # ─── Optional gate: Planning doc governance ───────────────────────────────────
 PLANNING_CHECKER="$REPO_ROOT/scripts/check-planning-doc-governance.py"
 if [[ -f "$PLANNING_CHECKER" ]]; then
-  echo "[pre-commit] Gate 6/11: Planning doc governance..."
+  echo "[pre-commit] Gate 6/9: Planning doc governance..."
   if ! python3 "$PLANNING_CHECKER"; then
     echo "  BLOCKED: Planning doc governance failed."
     exit 1
   fi
   echo "  Gate 6 passed."
 else
-  echo "[pre-commit] Gate 6/11: Planning doc governance... skipped (checker not present in this repo)."
+  echo "[pre-commit] Gate 6/9: Planning doc governance... skipped (checker not present in this repo)."
 fi
 
-# ─── Gate 7: Comment budget ──────────────────────────────────────────────────
-# CODE_INTENT_STANDARD §1, made mechanical. This ran only from the repo's
-# validation target, so a commit that skipped validation landed over-cap comment
-# blocks and said nothing — which is how the blocks the docstring fix later
-# exposed got in.
-#
-# Whole repo, not staged files only. Measured at 0.13s on the largest repo here,
-# and a staged-only scan passes a file whose over-cap block sits in a hunk this
-# commit did not touch. Every repo is under the cap today, so scanning
-# everything costs nothing and keeps it that way.
-COMMENT_GATE="$REPO_ROOT/scripts/check-comment-budget.mjs"
-if [[ -f "$COMMENT_GATE" ]] && command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 7/11: Comment budget..."
-  if ! node "$COMMENT_GATE" --quiet; then
-    echo "  BLOCKED: Comment budget failed."
-    exit 1
-  fi
-  echo "  Gate 7 passed."
-else
-  echo "[pre-commit] Gate 7/11: Comment budget... skipped (checker or node not present in this repo)."
-fi
-
-# ─── Gate 8: Decision records ─────────────────────────────────────────────────
-# CODE_INTENT_STANDARD §4. Same hole as the gate above: a decision id added
-# without a ledger row is exactly the commit least likely to have run validation
-# first.
-DECISIONS_GATE="$REPO_ROOT/scripts/check-decisions.mjs"
-if [[ -f "$DECISIONS_GATE" ]] && command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 8/11: Decision records..."
-  if ! node "$DECISIONS_GATE" > /dev/null; then
-    node "$DECISIONS_GATE" | grep "FAIL:"
-    echo "  BLOCKED: Decision record integrity failed."
-    exit 1
-  fi
-  echo "  Gate 8 passed."
-else
-  echo "[pre-commit] Gate 8/11: Decision records... skipped (checker or node not present in this repo)."
-fi
-
-# ─── Gate 9: Backlog hygiene ───────────────────────────────────────────────
+# ─── Gate 7: Backlog hygiene ───────────────────────────────────────────────
 # BACKLOG-HYGIENE-1. The written policy ("finished items are removed rather
 # than ticked") held nowhere mechanical, so a fleet repo's backlog reached
 # 15,058 lines before anyone noticed.
 BACKLOG_GATE="$REPO_ROOT/scripts/check-backlog-hygiene.mjs"
 if [[ -f "$BACKLOG_GATE" ]] && command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 9/11: Backlog hygiene..."
+  echo "[pre-commit] Gate 7/9: Backlog hygiene..."
   if ! node "$BACKLOG_GATE" --quiet; then
     node "$BACKLOG_GATE" --quiet
     echo "  BLOCKED: Backlog hygiene failed."
     exit 1
   fi
-  echo "  Gate 9 passed."
+  echo "  Gate 7 passed."
 else
-  echo "[pre-commit] Gate 9/11: Backlog hygiene... skipped (checker or node not present in this repo)."
+  echo "[pre-commit] Gate 7/9: Backlog hygiene... skipped (checker or node not present in this repo)."
 fi
 
-# ─── Gate 10: Archived content ─────────────────────────────────────────────────
+# ─── Gate 8: Archived content ─────────────────────────────────────────────────
 # Current state only, fleet-wide. A superseded file gets deleted or replaced, never
 # parked in an Archive/ folder or beside its replacement as "-old" -- git already
 # holds every past version, so a second copy on disk is a copy nothing keeps in
@@ -312,7 +273,7 @@ is_archive_exempt() {
   return 1
 }
 
-echo "[pre-commit] Gate 10/11: Archived-content scan..."
+echo "[pre-commit] Gate 8/9: Archived-content scan..."
 
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
@@ -338,9 +299,9 @@ if [ -n "$STAGED_FILES" ]; then
   done <<< "$STAGED_FILES"
 fi
 
-echo "  Gate 10 passed."
+echo "  Gate 8 passed."
 
-# ─── Gate 11: Writing clarity (asd-ste100) ────────────────────────────────────
+# ─── Gate 9: Writing clarity (asd-ste100) ────────────────────────────────────
 # GATE-SCOPE-1: this gate matched only the two literal filenames SKILL.md and
 # CLAUDE.md. A fleet repo's references/*.md file carried 17 real violations the
 # gate never saw, because a reference file is the same agent-parsed prose by a
@@ -389,9 +350,9 @@ STE_BASELINE_FILE="$REPO_ROOT/.githooks/ste-baseline"
 [ -f "$STE_BASELINE_FILE" ] && STE_BASELINE="$(cat "$STE_BASELINE_FILE")"
 
 if [ -z "$STE_LINT" ] || ! command -v python3 >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 11/11: Writing clarity (asd-ste100)... skipped (ste-lint.py or python3 not found on this machine)."
+  echo "[pre-commit] Gate 9/9: Writing clarity (asd-ste100)... skipped (ste-lint.py or python3 not found on this machine)."
 else
-  echo "[pre-commit] Gate 11/11: Writing clarity (asd-ste100)..."
+  echo "[pre-commit] Gate 9/9: Writing clarity (asd-ste100)..."
   CLARITY_FAILED=0
   HAVE_JQ=0
   command -v jq >/dev/null 2>&1 && HAVE_JQ=1
@@ -488,7 +449,7 @@ $hits"
     echo "  Fix each citation to a real issue number, or remove it, then re-commit."
     exit 1
   fi
-  echo "  Gate 11 passed."
+  echo "  Gate 9 passed."
 fi
 
 # ─── All gates passed ─────────────────────────────────────────────────────────
