@@ -598,4 +598,4 @@ MIT
 
 ---
 
-**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ADOPTING](ADOPTING.md) · [LANES](LANES.md) · [ARCHITECTURE](ARCHITECTURE.md) · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [DECISIONS](DECISIONS.md) — why the code is the way it is · [README](../README.md) · [ADOPTING](ADOPTING.md) · [LANES](LANES.md) · [ARCHITECTURE](ARCHITECTURE.md)

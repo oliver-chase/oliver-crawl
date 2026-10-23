@@ -491,7 +491,8 @@ Your application owns persistence, scheduling, and conversion of crawled pages i
 | [`MIGRATION.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/MIGRATION.md)                 | What moved here and where it came from          |
 | [`TROUBLESHOOTING.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/TROUBLESHOOTING.md)     | Failures organized by symptom                   |
 | [`DECISIONS.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/DECISIONS.md)                 | Why the code works the way it does              |
-| [`BACKLOG.md`](https://github.com/oliver-chase/oliver-crawl/blob/main/docs/BACKLOG.md)                     | Known gaps and planned work                     |
+
+Open work lives in the `oliver-crawl` GitHub Project (see `docs/backlog-config.json`), not a markdown file.
 
 ---
 

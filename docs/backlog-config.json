@@ -1,0 +1,44 @@
+{
+  "_comment": "oliver-chase/oliver-crawl's own real backlog config, read by OliverCode's config-driven backlog-management skill. Not a secret -- repo name, project number, and field IDs are all discoverable via `git remote -v` and `gh project view` anyway. Named in this repo's own CLAUDE.md -- never restate an ID anywhere else.",
+  "repoOwner": "oliver-chase",
+  "repoName": "oliver-crawl",
+  "projectOwner": "oliver-chase",
+  "projectNumber": 17,
+  "projectId": "PVT_kwHOCyeGV84BoaIm",
+  "fields": {
+    "status": {
+      "id": "PVTSSF_lAHOCyeGV84BoaImzhm6ZQs",
+      "options": {
+        "Backlog": "be15a23c",
+        "Ready": "a42b856d",
+        "In Progress": "0f046c1a",
+        "Complete": "6d9e2bd8"
+      }
+    },
+    "priority": {
+      "id": "PVTSSF_lAHOCyeGV84BoaImzhm6Zew",
+      "options": {
+        "P0": "00ec2430",
+        "P1": "04b1294c",
+        "P2": "4a037875"
+      }
+    },
+    "size": {
+      "id": "PVTSSF_lAHOCyeGV84BoaImzhm6Zfg",
+      "options": {
+        "XS": "4f38c66a",
+        "S": "289a2755",
+        "M": "2610234c",
+        "L": "70a25e6f",
+        "XL": "586f1343"
+      }
+    },
+    "workType": {
+      "id": "PVTSSF_lAHOCyeGV84BoaImzhm6Zhk",
+      "options": {
+        "Epic": "d745b368",
+        "Story": "888abb71"
+      }
+    }
+  }
+}

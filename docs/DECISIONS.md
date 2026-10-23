@@ -12,9 +12,9 @@ wrong.
 
 **Where the detail lives.** The source comment carries the full reasoning, next
 to the code it governs. This file is the index: one line each, plus where to
-look. Measurements from a specific run belong in [BACKLOG](BACKLOG.md)'s tracker
-with their date, never restated here — a number in two places is wrong the
-moment one changes.
+look. Measurements from a specific run belong in the `oliver-crawl` GitHub
+Project with their date, never restated here — a number in two places is
+wrong the moment one changes.
 
 | ID | What it protects | Source | Test |
 |---|---|---|---|

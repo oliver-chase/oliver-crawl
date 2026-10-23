@@ -108,4 +108,4 @@ Set `browserRender` to point at your own rendering service if you need JavaScrip
 
 ---
 
-**See also:** [README](../README.md) · [ADOPTING](ADOPTING.md) — first-time setup · [EXISTING-PROJECTS](EXISTING-PROJECTS.md) — replacing a live crawler · [REFERENCE](REFERENCE.md) — every option and field · [BACKLOG](BACKLOG.md) — known gaps
+**See also:** [README](../README.md) · [ADOPTING](ADOPTING.md) — first-time setup · [EXISTING-PROJECTS](EXISTING-PROJECTS.md) — replacing a live crawler · [REFERENCE](REFERENCE.md) — every option and field
