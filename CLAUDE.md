@@ -21,6 +21,6 @@ Comment density runs above the fleet guideline by design — see `.comment-budge
 exported types and functions are the contract a consumer reads, so their fields carry the
 decisions. Block length is what actually fails.
 
-Open work lives in the `oliver-crawl` GitHub Project, named in `docs/backlog-config.json` —
-`backlog-management` governs it. `docs/BACKLOG.md` no longer exists; resolved entries were
-deleted (git log is the archive) and the one genuinely open item was filed as an issue.
+Open work lives in the `oliver-crawl` GitHub Project. `docs/backlog-config.json` names it.
+`backlog-management` governs it. `docs/BACKLOG.md` no longer exists. Git log holds the
+resolved entries it used to carry. The one genuinely open item is now an issue on the Project.
