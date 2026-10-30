@@ -2,7 +2,7 @@
 # OliverCode — Pre-Commit Hook (Private Repos)
 # Applies to private/internal repositories. 4 gates.
 # Private repos contain personal data by design — no PII gate.
-# Master source: <vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/pre-commit-private
+# Master source: OliverCode/core/templates/project/pre-commit-private
 set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -79,7 +79,7 @@ if [ -n "$STAGED_FILES" ]; then
       echo "$EMOJI_HITS"
       echo "  BLOCKED: $file contains emojis or icons."
       echo "  Zero emojis allowed — plain text only."
-      echo "  See <vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts/NO_ICONS_STANDARD.md"
+      echo "  See OliverCode/core/contracts/NO_ICONS_STANDARD.md"
       exit 1
     fi
   done <<< "$STAGED_FILES"
