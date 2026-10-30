@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # OliverCode — Universal Pre-Commit Hook (Public Repos)
 # Applies to ALL public repositories. Block = no commit.
-# Master source: <vault-root>/Oliver/Project Repos/OliverCode/core/templates/project/pre-commit
+# Master source: <vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/pre-commit
 set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -85,7 +85,7 @@ if [ -n "$STAGED_FILES" ]; then
       echo "$EMOJI_HITS"
       echo "  BLOCKED: $file contains emojis or icons."
       echo "  Zero emojis allowed — plain text only."
-      echo "  See <vault-root>/Oliver/Project Repos/OliverCode/core/contracts/NO_ICONS_STANDARD.md"
+      echo "  See <vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts/NO_ICONS_STANDARD.md"
       exit 1
     fi
   done <<< "$STAGED_FILES"
@@ -147,7 +147,7 @@ if [ $VIOLATIONS -gt 0 ]; then
   echo "=========================================="
   echo "COMMIT BLOCKED: $VIOLATIONS PII violation(s) found."
   echo "Use <vault-root> placeholders for paths. Remove personal identifiers."
-  echo "See <vault-root>/Oliver/Project Repos/OliverCode/core/contracts/FILE_LOCATION_STANDARD.md"
+  echo "See <vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts/FILE_LOCATION_STANDARD.md"
   echo "=========================================="
   exit 1
 fi

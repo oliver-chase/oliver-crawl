@@ -2,7 +2,7 @@
 # OliverCode — Pre-Push Hook (all repos)
 # 2 gates on what's about to leave the machine: force-push / history rewrite
 # to an existing remote ref, and secrets in the commits actually being pushed.
-# Master source: <vault-root>/Oliver/Project Repos/OliverCode/core/templates/project/pre-push
+# Master source: <vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/pre-push
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
