@@ -47,8 +47,11 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
       # the scan (a loose filter had exempted
       # any line containing the literal from every pattern).
       ANON_META='<meta name="supabase-anon-key" content="eyJ'
-      if grep -nE -e "$pattern" "$file" 2>/dev/null | grep -vF "$ANON_META" | grep -qE .; then
-        grep -nE -e "$pattern" "$file" 2>/dev/null | grep -vF "$ANON_META" | head -3
+      # Captured, never piped into `grep -q` or `head`: an early exit there sends SIGPIPE
+      # upstream, pipefail turns it into 141, and a large file with a secret passed.
+      hits=$(grep -nE -e "$pattern" "$file" 2>/dev/null | grep -vF "$ANON_META" || true)
+      if [ -n "$hits" ]; then
+        printf '%s\n' "$hits" | sed -n '1,3p'
         echo "  BLOCKED: $file matches secret pattern: $pattern"
         VIOLATIONS=$((VIOLATIONS + 1))
       fi
