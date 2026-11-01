@@ -208,7 +208,7 @@ function scan(text, hashStyle) {
 // pass every length rule and still document a different function: a header
 // describing a silent JWT refresh sat above a helper that hides a dropdown, 55
 // lines from what it described. Both rules below are unambiguous by design — a
-// prose checker would be a keyword list, the failure WRITING_PROCESS names.
+// prose checker would be a keyword list, which prose can pass while saying nothing.
 //
 // Arrow consts and class methods match too. A signature wrapped across lines is
 // skipped rather than guessed at.
