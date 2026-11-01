@@ -5,7 +5,14 @@
 set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(git -C "$HOOK_DIR" rev-parse --show-toplevel)"
+# Git sets GIT_DIR when it runs a hook in a linked worktree, and `git -C <dir>` then takes
+# <dir> as the work tree, so every repo path would point inside .githooks. Git runs a hook
+# from the work-tree root, so in that case the root comes from the current directory.
+if [ -n "${GIT_DIR:-}" ]; then
+  REPO_ROOT="$(git rev-parse --show-toplevel)"
+else
+  REPO_ROOT="$(git -C "$HOOK_DIR" rev-parse --show-toplevel)"
+fi
 # A commit checks only what it stages, so a clean commit says nothing about the rest of the tree.
 # `validate.sh --tree` sets this to run every gate over every tracked file.
 if [ "${OLIVERCODE_SCAN_TREE:-}" = 1 ]; then
@@ -250,8 +257,9 @@ fi
 BACKLOG_GATE="$REPO_ROOT/scripts/check-backlog-hygiene.mjs"
 if [[ -f "$BACKLOG_GATE" ]] && command -v node >/dev/null 2>&1; then
   echo "[pre-commit] Gate 7/9: Backlog hygiene..."
+  # The checker prints its findings even with --quiet. A second run here exited the
+  # hook under `set -e` before the BLOCKED line, and the block below never ran.
   if ! node "$BACKLOG_GATE" --quiet; then
-    node "$BACKLOG_GATE" --quiet
     echo "  BLOCKED: Backlog hygiene failed."
     exit 1
   fi
