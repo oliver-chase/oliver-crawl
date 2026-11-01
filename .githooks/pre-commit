@@ -55,7 +55,7 @@ if [ $VIOLATIONS -gt 0 ]; then
   echo ""
   echo "=========================================="
   echo "COMMIT BLOCKED: $VIOLATIONS potential secret leak(s) found."
-  echo "If this is a false positive (test data, example), rename to match the tests/*.test.* skip patterns above or use --no-verify."
+  echo "If this is a false positive (test data, example), rename it to match the tests/*.test.* skip patterns above. Otherwise remove the value from the staged file."
   echo "=========================================="
   exit 1
 fi
