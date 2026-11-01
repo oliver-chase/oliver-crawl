@@ -243,7 +243,9 @@ else
       # was repeating in full on every commit for every staged file regardless of
       # whether it was actually blocking, real token waste on any commit touching
       # more than a couple of SKILL.md/CLAUDE.md files.
-      JSON_OUT="$(python3 "$STE_JOIN" "$STE_LINT" "${lint_args[@]}" "$file" 2>&1)" && EXIT_CODE=0 || EXIT_CODE=$?
+      # stderr stays out of JSON_OUT: a stray warning there made jq fail below, and under
+      # `set -e` that ended the hook with no message. A failing file is re-run in plain mode.
+      JSON_OUT="$(python3 "$STE_JOIN" "$STE_LINT" "${lint_args[@]}" "$file" 2>/dev/null)" && EXIT_CODE=0 || EXIT_CODE=$?
       if [ "$EXIT_CODE" -ne 0 ]; then
         CLARITY_FAILED=1
         # Re-run in plain mode so the failing file gets full fix-it detail.
