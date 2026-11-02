@@ -25,7 +25,7 @@ cd "$REPO_ROOT"
 VIOLATIONS=0
 # ─── Gate 1: Secrets ──────────────────────────────────────────────────────────
 # Block commits containing API keys, tokens, JWTs, private keys.
-echo "[pre-commit] Gate 1/10: Secret scan..."
+echo "[pre-commit] Gate 1/9: Secret scan..."
 
 SECRET_PATTERNS=(
   '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
@@ -79,7 +79,7 @@ echo "  Gate 1 passed."
 
 # ─── Gate 2: Icons / Emojis ───────────────────────────────────────────────────
 # Block ALL emojis and Unicode icons. Plain text only. No exceptions.
-echo "[pre-commit] Gate 2/10: Icon/Emoji scan..."
+echo "[pre-commit] Gate 2/9: Icon/Emoji scan..."
 
 EMOJI_PATTERN='[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F1E0}-\x{1F1FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}\x{2300}-\x{23FF}\x{2B50}\x{2764}\x{1F004}\x{1F0CF}\x{2934}-\x{2935}\x{25AA}-\x{25FE}\x{2B05}-\x{2B07}\x{2B1B}-\x{2B1C}\x{3030}\x{303D}\x{3297}\x{3299}\x{2139}\x{2328}\x{23CF}\x{24C2}\x{25B6}\x{23E9}-\x{23F3}\x{23F8}-\x{23FA}\x{200D}\x{20E3}]'
 
@@ -110,7 +110,7 @@ echo "  Gate 2 passed."
 
 # ─── Gate 3: PII ──────────────────────────────────────────────────────────────
 # Block commits containing personal identifiers: home paths, usernames, hostnames.
-echo "[pre-commit] Gate 3/10: PII scan..."
+echo "[pre-commit] Gate 3/9: PII scan..."
 
 PII_PATTERNS=(
   '/Users/[a-z]+/'                              # macOS home directory paths
@@ -175,7 +175,7 @@ echo "  Gate 3 passed."
 # (a bare PAT/password with no workflow scope) or an SSH key with no workflow
 # grant. Check the actual credential's scopes via `gh api`, don't assume from
 # the remote URL scheme.
-echo "[pre-commit] Gate 4/10: Workflow push auth..."
+echo "[pre-commit] Gate 4/9: Workflow push auth..."
 WORKFLOW_STAGED=$(printf '%s\n' "$STAGED_FILES" | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
 if [[ -n "$WORKFLOW_STAGED" ]]; then
   HAS_WORKFLOW_SCOPE=false
@@ -197,25 +197,12 @@ fi
 
 echo "  Gate 4 passed."
 
-# ─── Gate 5: Planning doc governance ──────────────────────────────────────────
-PLANNING_CHECKER="$REPO_ROOT/scripts/check-planning-doc-governance.py"
-if [[ -f "$PLANNING_CHECKER" ]]; then
-  echo "[pre-commit] Gate 5/10: Planning doc governance..."
-  if ! python3 "$PLANNING_CHECKER"; then
-    echo "  BLOCKED: Planning doc governance failed."
-    exit 1
-  fi
-  echo "  Gate 5 passed."
-else
-  echo "[pre-commit] Gate 5/10: Planning doc governance... skipped (checker not present in this repo)."
-fi
-
-# ─── Gate 6: Archived content ─────────────────────────────────────────────────
+# ─── Gate 5: Archived content ─────────────────────────────────────────────────
 # A repo holds current state only. A superseded file gets deleted or replaced, never
 # parked in an Archive/ folder or beside its replacement as "-old" -- git already
 # holds every past version, so a second copy on disk is a copy nothing keeps in sync,
 # and the reader cannot tell which one is live.
-echo "[pre-commit] Gate 6/10: Archived-content scan..."
+echo "[pre-commit] Gate 5/9: Archived-content scan..."
 
 # Matched as a whole PATH SEGMENT, never a substring: a file legitimately titled
 # "Legacy Modernization Intelligence" is prose about legacy systems, not an archive.
@@ -260,9 +247,9 @@ if [ -n "$STAGED_FILES" ]; then
   done <<< "$STAGED_FILES"
 fi
 
-echo "  Gate 6 passed."
+echo "  Gate 5 passed."
 
-# ─── Gate 7: Skill citations ──────────────────────────────────────────────────
+# ─── Gate 6: Skill citations ──────────────────────────────────────────────────
 # GATE-SCOPE-1: matched by path shape (`*/SKILL.md`, `*/CLAUDE.md`, `*/references/*.md`),
 # never by bare filename, so a reference file gets the same check as a skill file.
 # See docs/DECISIONS.md.
@@ -273,7 +260,7 @@ echo "  Gate 6 passed."
 # any network, auth, or rate-limit problem skips the check silently rather
 # than blocking a commit on infrastructure the content gate does not own.
 # See docs/DECISIONS.md.
-echo "[pre-commit] Gate 7/10: Skill citations..."
+echo "[pre-commit] Gate 6/9: Skill citations..."
 CITATION_FAILED=0
 CITED_NUMS=""
 if [ -n "$STAGED_FILES" ]; then
@@ -305,22 +292,24 @@ if [ "$CITATION_FAILED" -eq 1 ]; then
   echo "  Fix each citation to a real issue number, or remove it, then re-commit."
   exit 1
 fi
-echo "  Gate 7 passed."
+echo "  Gate 6 passed."
 
-# ─── Gate 8: Size ratchet ─────────────────────────────────────────────────────
+# ─── Gate 7: Size ratchet ─────────────────────────────────────────────────────
 # SIZE-RATCHET-1. A repo's total line count may fall but never rise past its baseline in
 # docs/SIZE-BASELINE.json, so new work cannot quietly rebuild what a cleanup removed. The count
 # is skills/audit/scripts/size.sh --total over the staged tree, the same counter `olivercode size`
 # uses. A baseline with "lines": null, or no baseline file, skips the gate.
 #
-# A story that must grow the repo raises "lines" in the same commit. This gate reads the staged
-# baseline and trusts the value it finds. The commit-msg hook is what requires a story reference,
-# and no gate can check that the raise is justified, so the rule is procedure plus a reference.
-echo "[pre-commit] Gate 8/10: Size ratchet..."
+# A story that must grow the repo raises "lines" in the same commit, by at most raiseCapPercent
+# of the committed baseline (default 2). This gate prints the raise and passes it. A pre-commit
+# gate cannot read the commit message, so the commit-msg hook refuses a raise over the cap unless
+# the message carries a "Size: L" or "Size: XL" line copied from the story.
+echo "[pre-commit] Gate 7/9: Size ratchet..."
 SIZE_JSON="$(git show ":docs/SIZE-BASELINE.json" 2>/dev/null || true)"
-size_field() {
-  printf '%s\n' "$SIZE_JSON" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
+size_field_of() {
+  printf '%s\n' "$2" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
 }
+size_field() { size_field_of "$1" "$SIZE_JSON"; }
 SIZE_BASE="$(size_field lines)"
 SIZE_PCT="$(size_field allowancePercent)"
 SIZE_COUNTER=""
@@ -328,9 +317,9 @@ for candidate in scripts/size.sh skills/audit/scripts/size.sh; do
   if [ -f "$candidate" ]; then SIZE_COUNTER="$candidate"; break; fi
 done
 if [ -z "$SIZE_JSON" ]; then
-  echo "  Gate 8 skipped (no docs/SIZE-BASELINE.json; bootstrap adds one)."
+  echo "  Gate 7 skipped (no docs/SIZE-BASELINE.json; bootstrap adds one)."
 elif [ -z "$SIZE_BASE" ]; then
-  echo "  Gate 8 skipped (docs/SIZE-BASELINE.json has no line count yet; run olivercode size --lower to set it)."
+  echo "  Gate 7 skipped (docs/SIZE-BASELINE.json has no line count yet; run olivercode size --lower to set it)."
 elif [ -z "$SIZE_COUNTER" ]; then
   echo "  BLOCKED: docs/SIZE-BASELINE.json sets a baseline but this repo has no scripts/size.sh to count lines."
   echo "  Run olivercode bootstrap to add it, or remove the baseline file."
@@ -341,6 +330,12 @@ else
   SIZE_EXTRA=$(( SIZE_BASE * SIZE_PCT / 100 ))
   if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
     echo "  docs/SIZE-BASELINE.json is part of this commit, so its baseline of $SIZE_BASE lines is trusted."
+    SIZE_HEAD_BASE="$(size_field_of lines "$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)")"
+    if [ -n "$SIZE_HEAD_BASE" ] && [ "$SIZE_BASE" -gt "$SIZE_HEAD_BASE" ]; then
+      SIZE_CAP_PCT="$(size_field raiseCapPercent)"
+      SIZE_CAP=$(( SIZE_HEAD_BASE * ${SIZE_CAP_PCT:-2} / 100 ))
+      echo "  This commit raises the baseline by $(( SIZE_BASE - SIZE_HEAD_BASE )) lines (cap $SIZE_CAP without an L or XL story)."
+    fi
   fi
   if [ $(( (SIZE_TOTAL - SIZE_BASE) * 100 )) -gt $(( SIZE_BASE * SIZE_PCT )) ]; then
     echo "  BLOCKED: the repo would hold $SIZE_TOTAL lines, over its baseline of $SIZE_BASE by more than the $SIZE_PCT% allowance ($SIZE_EXTRA lines)."
@@ -348,13 +343,13 @@ else
     git diff --cached --numstat --no-renames --diff-filter=ACM \
       | awk -F'\t' '$1 != "-" && $1 - $2 > 0 { print $1 - $2 "\t" $3 }' | sort -rn | sed -n 1,3p \
       | while IFS="$(printf '\t')" read -r grown path; do echo "    +$grown  $path"; done
-    echo "  Remove lines, or raise \"lines\" in docs/SIZE-BASELINE.json in this commit with the story number in the message."
+    echo "  Remove lines, or raise \"lines\" in docs/SIZE-BASELINE.json in this commit with the story number in the message. A raise over the cap also needs a \"Size: L\" or \"Size: XL\" line."
     exit 1
   fi
-  echo "  Gate 8 passed ($SIZE_TOTAL lines, baseline $SIZE_BASE)."
+  echo "  Gate 7 passed ($SIZE_TOTAL lines, baseline $SIZE_BASE)."
 fi
 
-# ─── Gate 9: Owner identifiers ────────────────────────────────────────────────
+# ─── Gate 8: Owner identifiers ────────────────────────────────────────────────
 # OWNER-ID-1. A shipped file cannot name the people or accounts behind the repo. The gate derives
 # the identifiers itself, so no hand-kept list exists: the names and email local parts of
 # `git log` authors, the owner segment of the origin remote, and the string values of account and
@@ -365,7 +360,7 @@ fi
 # Every staged file is scanned, markdown and tests included, except local data: the built-in
 # paths below and the "localData" globs in docs/IDENTIFIER-GATE.json, each declared with a
 # reason. Fewer than one derivable identifier skips the gate.
-echo "[pre-commit] Gate 9/10: Owner identifiers..."
+echo "[pre-commit] Gate 8/9: Owner identifiers..."
 ID_CONFIG="$(git show ":docs/IDENTIFIER-GATE.json" 2>/dev/null || true)"
 id_array() {
   printf '%s\n' "$ID_CONFIG" | tr '\n' ' ' \
@@ -403,7 +398,7 @@ trap 'rm -f "$ID_LIST"' EXIT
   | grep -vxE 'claude|github|anthropic|noreply|no-reply|copilot|dependabot|renovate|root|user|users|test|tests|admin|unknown|none|null|example|local|localhost|bot|runner' \
   | sort -u > "$ID_LIST" || true
 if [ ! -s "$ID_LIST" ]; then
-  echo "  Gate 9 skipped (no owner identifier can be derived from git or docs/IDENTIFIER-GATE.json)."
+  echo "  Gate 8 skipped (no owner identifier can be derived from git or docs/IDENTIFIER-GATE.json)."
 else
   ID_LOCAL="$(id_array localData)"
   ID_HITS=0
@@ -431,17 +426,17 @@ else
     echo "  Replace it with a placeholder such as my-shop, or list the file under \"localData\" in docs/IDENTIFIER-GATE.json with a reason."
     exit 1
   fi
-  echo "  Gate 9 passed ($(wc -l < "$ID_LIST" | tr -d ' ') identifiers derived)."
+  echo "  Gate 8 passed ($(wc -l < "$ID_LIST" | tr -d ' ') identifiers derived)."
 fi
 
-# ─── Gate 10: Duplicate text ──────────────────────────────────────────────────
+# ─── Gate 9: Duplicate text ───────────────────────────────────────────────────
 # DUPLICATION-HOOK-1. A passage of 15 words or more may live in one markdown file only, so a rule
 # keeps one home across docs, skills, references and templates. The shared check
 # (scripts/duplication_check.py, shipped to adopted repos by bootstrap; OliverCode keeps it at
 # scripts/lib/duplication_check.py) reads every tracked markdown file and reports each passage that
 # a staged file shares with another file, naming both. Files outside the commit are judged as they
 # stand, so an old duplicate between two untouched files blocks nothing here; validate.sh reports it.
-echo "[pre-commit] Gate 10/10: Duplicate text..."
+echo "[pre-commit] Gate 9/9: Duplicate text..."
 DUP_CHECKER=""
 for candidate in scripts/duplication_check.py scripts/lib/duplication_check.py; do
   if [ -f "$candidate" ]; then DUP_CHECKER="$candidate"; break; fi
@@ -451,11 +446,11 @@ while IFS= read -r dup_file; do
   case "$dup_file" in *.md) DUP_FILES+=("$dup_file") ;; esac
 done <<< "$STAGED_FILES"
 if [ ${#DUP_FILES[@]} -eq 0 ]; then
-  echo "  Gate 10 passed (no staged markdown)."
+  echo "  Gate 9 passed (no staged markdown)."
 elif [ -z "$DUP_CHECKER" ]; then
-  echo "  Gate 10 skipped (no scripts/duplication_check.py; run olivercode bootstrap to add it)."
+  echo "  Gate 9 skipped (no scripts/duplication_check.py; run olivercode bootstrap to add it)."
 elif ! command -v python3 >/dev/null 2>&1; then
-  echo "  Gate 10 skipped (python3 is not installed)."
+  echo "  Gate 9 skipped (python3 is not installed)."
 else
   DUP_OUT="$(python3 "$DUP_CHECKER" --root "$REPO_ROOT" --staged-only "${DUP_FILES[@]}" 2>&1)" && DUP_RC=0 || DUP_RC=$?
   if [ "$DUP_RC" -ne 0 ]; then
@@ -464,7 +459,7 @@ else
     echo "  Keep the rule in one file and point the other at it, or declare a deliberate reuse in DECLARED_MARKERS with a reason."
     exit 1
   fi
-  echo "  Gate 10 passed (${#DUP_FILES[@]} staged markdown file(s) checked)."
+  echo "  Gate 9 passed (${#DUP_FILES[@]} staged markdown file(s) checked)."
 fi
 
 # ─── All gates passed ─────────────────────────────────────────────────────────

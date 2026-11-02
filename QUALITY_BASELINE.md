@@ -3,9 +3,6 @@
 This repository uses **shared, strict-managed quality files**.
 
 Canonical source-of-truth (outside project docs):
-- `OliverCode/core/templates/project/.github/workflows/qa-hygiene.yml`
-- `OliverCode/core/templates/project/.github/workflows/governance-secrets-gate.yml`
-- `OliverCode/core/templates/project/.github/workflows/dependency-review.yml`
 - `OliverCode/core/templates/project/.github/CODEOWNERS`
 - `OliverCode/core/templates/project/.github/pull_request_template.md`
 - `OliverCode/core/templates/project/QUALITY_BASELINE.md`
