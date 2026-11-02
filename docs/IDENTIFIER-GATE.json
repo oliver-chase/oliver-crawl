@@ -1,0 +1,6 @@
+{
+  "_comment": "Read by the owner-identifiers pre-commit gate. configGlobs lists config files whose account and shop values count as identifiers. localData lists files that may hold an identifier, each with its reason in localDataReasons.",
+  "configGlobs": [],
+  "localData": [],
+  "localDataReasons": {}
+}

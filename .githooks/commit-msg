@@ -23,8 +23,20 @@ if [ -e "$HOOK_DIR/commit-msg.optout" ]; then
   exit 0
 fi
 
-# Git drops comment lines from the final message, so a reference inside one does not count.
-MESSAGE="$(grep -v '^#' "$MSG_FILE" || true)"
+# What git keeps depends on how the message was made, and the hook receives the file before
+# git cleans it. With -m or -F, git keeps every line, so a message that opens with "#53 fix" keeps
+# its reference. With an editor, git writes a template of comment lines (the first begins
+# "Please enter the commit message") and drops each comment line from the final message, so a
+# reference inside one does not count. The hook reads that template marker to tell the two apart.
+COMMENT_CHAR="$(git config --get core.commentChar 2>/dev/null || true)"
+case "$COMMENT_CHAR" in ""|auto) COMMENT_CHAR="#" ;; esac
+if grep -qF "$COMMENT_CHAR Please enter the commit message" "$MSG_FILE"; then
+  MESSAGE="$(awk -v c="$COMMENT_CHAR" '
+    $0 == c " ------------------------ >8 ------------------------" { exit }
+    index($0, c) != 1 { print }' "$MSG_FILE")"
+else
+  MESSAGE="$(cat "$MSG_FILE")"
+fi
 SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}')"
 
 # Merge, revert and autosquash commits carry the message of work that already has a reference.
@@ -39,9 +51,11 @@ if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
   exit 0
 fi
 
-# A reference is # and digits that end the token: "(#53)", "Story: #53" or "org/repo#53".
-# A hex colour such as #123abc does not count.
-if printf '%s\n' "$MESSAGE" | grep -Eq '#[0-9]+([^[:alnum:]_]|$)'; then
+# A reference is a standalone # and a positive number that ends the token: "(#53)", "#53 fix",
+# "Story: #53" or "org/repo#53". A hex colour such as #123abc, "Fix 5#3", "&#39;" and "#0" do not count.
+TOKEN_END='([^[:alnum:]_]|$)'
+NUMBER='#0*[1-9][0-9]*'
+if printf '%s\n' "$MESSAGE" | grep -Eq "(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_END}|[[:alnum:]_.-]+/[[:alnum:]_.-]+${NUMBER}${TOKEN_END}"; then
   exit 0
 fi
 
