@@ -23,9 +23,47 @@ if [ -e "$HOOK_DIR/commit-msg.optout" ]; then
   exit 0
 fi
 
-# Git drops comment lines from the final message, so a reference inside one does not count.
-MESSAGE="$(grep -v '^#' "$MSG_FILE" || true)"
+# What git keeps depends on how the message was made, and the hook receives the file before
+# git cleans it. With -m or -F, git keeps every line, so a message that opens with "#53 fix" keeps
+# its reference. With an editor, git writes a template of comment lines (the first begins
+# "Please enter the commit message") and drops each comment line from the final message, so a
+# reference inside one does not count. The hook reads that template marker to tell the two apart.
+COMMENT_CHAR="$(git config --get core.commentChar 2>/dev/null || true)"
+case "$COMMENT_CHAR" in ""|auto) COMMENT_CHAR="#" ;; esac
+if grep -qF "$COMMENT_CHAR Please enter the commit message" "$MSG_FILE"; then
+  MESSAGE="$(awk -v c="$COMMENT_CHAR" '
+    $0 == c " ------------------------ >8 ------------------------" { exit }
+    index($0, c) != 1 { print }' "$MSG_FILE")"
+else
+  MESSAGE="$(cat "$MSG_FILE")"
+fi
 SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}')"
+
+# SIZE-RAISE-1. A commit that raises "lines" in docs/SIZE-BASELINE.json by more than
+# raiseCapPercent of the committed value (default 2) must declare a story sized L or XL with a
+# "Size: L" or "Size: XL" line, copied from that story's Size field. Without the cap an edit to
+# the baseline defeats the size ratchet, because the ratchet trusts the staged baseline. The cap is
+# read from HEAD so the same commit cannot change it, and the check runs before the merge, revert
+# and first-commit exits below so no message prefix skips it.
+if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
+  baseline_field() {
+    printf '%s\n' "$2" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
+  }
+  NEW_LINES="$(baseline_field lines "$(git show ":docs/SIZE-BASELINE.json" 2>/dev/null || true)")"
+  OLD_JSON="$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)"
+  OLD_LINES="$(baseline_field lines "$OLD_JSON")"
+  CAP_PCT="$(baseline_field raiseCapPercent "$OLD_JSON")"
+  if [ -n "$NEW_LINES" ] && [ -n "$OLD_LINES" ] && [ "$NEW_LINES" -gt "$OLD_LINES" ]; then
+    CAP=$(( OLD_LINES * ${CAP_PCT:-2} / 100 ))
+    RAISE=$(( NEW_LINES - OLD_LINES ))
+    if [ "$RAISE" -gt "$CAP" ] && ! printf '%s\n' "$MESSAGE" | grep -Eiq '^[[:space:]]*size:[[:space:]]*(L|XL)[[:space:]]*$'; then
+      echo "[commit-msg] BLOCKED: this commit raises the size baseline by $RAISE lines, over the cap of $CAP."
+      echo "  A raise that large needs a story sized L or XL. Add a line \"Size: L\" or \"Size: XL\" copied from the story's Size field,"
+      echo "  or split the work so each commit stays inside the cap (docs/GATES.md, \"Size ratchet\")."
+      exit 1
+    fi
+  fi
+fi
 
 # Merge, revert and autosquash commits carry the message of work that already has a reference.
 # The first commit of a repo has no story to name yet.
@@ -39,14 +77,15 @@ if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
   exit 0
 fi
 
-# A reference is # and digits that end the token: "(#53)", "Story: #53" or "org/repo#53".
-# A hex colour such as #123abc does not count.
-if printf '%s\n' "$MESSAGE" | grep -Eq '#[0-9]+([^[:alnum:]_]|$)'; then
-  exit 0
+# A reference is a standalone # and a positive number that ends the token: "(#53)", "#53 fix",
+# "Story: #53" or "org/repo#53". A hex colour such as #123abc, "Fix 5#3", "&#39;" and "#0" do not count.
+TOKEN_END='([^[:alnum:]_]|$)'
+NUMBER='#0*[1-9][0-9]*'
+if ! printf '%s\n' "$MESSAGE" | grep -Eq "(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_END}|[[:alnum:]_.-]+/[[:alnum:]_.-]+${NUMBER}${TOKEN_END}"; then
+  echo "[commit-msg] BLOCKED: the commit message names no story."
+  echo "  Add the story number, for example \"Fix the sync (#53)\" or a line \"Story: #53\"."
+  echo "  Merge, revert, fixup/squash commits and a repo's first commit are exempt."
+  echo "  To turn the check off for a repo, the owner creates $HOOK_DIR/commit-msg.optout (docs/GATES.md)."
+  exit 1
 fi
-
-echo "[commit-msg] BLOCKED: the commit message names no story."
-echo "  Add the story number, for example \"Fix the sync (#53)\" or a line \"Story: #53\"."
-echo "  Merge, revert, fixup/squash commits and a repo's first commit are exempt."
-echo "  To turn the check off for a repo, the owner creates $HOOK_DIR/commit-msg.optout (docs/GATES.md)."
-exit 1
+exit 0

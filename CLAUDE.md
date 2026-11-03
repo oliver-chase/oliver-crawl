@@ -5,9 +5,12 @@
 
 # oliver-crawl — Agent Rules
 
-Run `npm run check` before commit — it is this repo's canonical validation and runs
-typecheck, tests, the comment budget, and the decisions ledger. The framework's default
-validate.sh filename does not exist here, so do not go looking for it.
+Run `bash scripts/validate.sh` before commit — it is this repo's canonical validation. It runs
+the commit gates, the structure contract check, the repo-local gates and `npm run check`
+(typecheck, tests, the comment budget, and the decisions ledger), and it exits non-zero when any
+of them fails.
+
+Read `docs/repo-structure-contract.md` and `docs/backlog-config.json` before working here.
 
 **This repo is public, and a consumer's deploy depends on it staying that way.** A
 downstream app installs it as a git dependency, and npm resolves a GitHub dependency to
