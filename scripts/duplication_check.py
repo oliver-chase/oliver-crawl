@@ -9,12 +9,17 @@ the repo root. The same file ships to adopted repos as scripts/duplication_check
 no repo keeps a private copy. The commit hook runs it with --staged-only over the staged
 markdown files, checking each against the whole tracked tree.
 
+A repo declares its own deliberate reuse in docs/DUPLICATION-ALLOW.json:
+{"markers": {"<lowercase words of the shared passage>": "<why it repeats>"}}. An entry with no reason
+declares nothing, and an unreadable file declares nothing.
+
     python3 duplication_check.py [--root DIR] [--staged-only FILE ...]
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -68,8 +73,17 @@ DECLARED_MARKERS: dict[str, str] = {
 }
 
 
-def _declared(snippet: str) -> bool:
-    return any(marker in snippet for marker in DECLARED_MARKERS)
+def _repo_markers(repo_root: Path) -> list[str]:
+    """The markers a repo declares in docs/DUPLICATION-ALLOW.json. Only an entry with a reason counts."""
+    try:
+        data = json.loads((repo_root / "docs" / "DUPLICATION-ALLOW.json").read_text(encoding="utf-8"))
+        return [m.lower() for m, why in data["markers"].items() if isinstance(why, str) and why.strip()]
+    except (OSError, ValueError, KeyError, AttributeError):
+        return []
+
+
+def _declared(snippet: str, repo_markers: list[str] = ()) -> bool:
+    return any(marker in snippet for marker in (*DECLARED_MARKERS, *repo_markers))
 
 
 def _tracked_md(repo_root: Path) -> list[str]:
@@ -127,6 +141,7 @@ def check_all(repo_root: Path, staged: set[str] | None = None) -> list[str]:
     """Findings across every tracked markdown file. With `staged`, only pairs that include a
     staged file are reported, so a commit is judged on what it adds to the existing tree."""
     failures: list[str] = []
+    repo_markers = _repo_markers(repo_root)
 
     files = _tracked_md(repo_root)
     # file -> word list, file -> window-hash -> earliest start index
@@ -166,7 +181,7 @@ def check_all(repo_root: Path, staged: set[str] | None = None) -> list[str]:
         spans_a = _merge_spans(starts_by_file.get(a, []))
         for start, end in spans_a:
             snippet = " ".join(file_words[a][start:end])
-            if _declared(snippet):
+            if _declared(snippet, repo_markers):
                 continue
             display = snippet if len(snippet) <= 160 else snippet[:157] + "..."
             failures.append(
