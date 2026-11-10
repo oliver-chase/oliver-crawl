@@ -21,15 +21,18 @@ export function __clearPageCacheForTests(): void {
   CACHE.clear();
 }
 
-function keyFor(url: string, lanes: string[] | undefined): string {
-  // The lane set is part of the key: a result served by the free lane is not
-  // interchangeable with one a caller asked the paid lane for.
-  return `${(lanes ?? ['own']).join(',')}|${url}`;
+/**
+ * Everything besides the URL that changes what a crawl returns: the lane set (a free result is not
+ * interchangeable with a paid one), the output options, the user agent, and the request headers, so a
+ * page fetched with one caller's credentials is never replayed to a caller without them.
+ */
+function keyFor(url: string, lanes: string[] | undefined, variant: string): string {
+  return `${(lanes ?? ['own']).join(',')}|${variant}|${url}`;
 }
 
-export function readPageCache(url: string, lanes: string[] | undefined, ttlMs: number): CrawlResult | null {
+export function readPageCache(url: string, lanes: string[] | undefined, ttlMs: number, variant: string): CrawlResult | null {
   if (!ttlMs || ttlMs <= 0) return null;
-  const key = keyFor(url, lanes);
+  const key = keyFor(url, lanes, variant);
   const hit = CACHE.get(key);
   if (!hit) return null;
   if (hit.expiresAt <= Date.now()) {
@@ -39,7 +42,7 @@ export function readPageCache(url: string, lanes: string[] | undefined, ttlMs: n
   return hit.result;
 }
 
-export function writePageCache(url: string, lanes: string[] | undefined, ttlMs: number, result: CrawlResult): void {
+export function writePageCache(url: string, lanes: string[] | undefined, ttlMs: number, result: CrawlResult, variant: string): void {
   if (!ttlMs || ttlMs <= 0) return;
   // Never cache a failure (it may be transient and must stay retryable) or a
   // 304 (its meaning depends on the validators the CALLER sent, so replaying
@@ -51,5 +54,5 @@ export function writePageCache(url: string, lanes: string[] | undefined, ttlMs: 
     const oldest = CACHE.keys().next().value;
     if (oldest !== undefined) CACHE.delete(oldest);
   }
-  CACHE.set(keyFor(url, lanes), { result, expiresAt: Date.now() + ttlMs });
+  CACHE.set(keyFor(url, lanes, variant), { result, expiresAt: Date.now() + ttlMs });
 }

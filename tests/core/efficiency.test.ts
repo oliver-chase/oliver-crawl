@@ -151,3 +151,34 @@ describe('single-page retry', () => {
     expect(calls).toBe(0);
   });
 });
+
+describe('the page cache does not cross credentials or output options', () => {
+  test('a page fetched with a credential is not served to a crawl without it', async () => {
+    const seen: Array<string | null> = [];
+    globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      seen.push((init?.headers as Record<string, string>)?.authorization ?? null);
+      return page();
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns, cacheTtlMs: 60_000 });
+    const url = 'https://venue.example.com/members';
+    await crawler.crawl({ ...target, headers: { authorization: 'Bearer test-token' } }, url);
+    await crawler.crawl(target, url);
+    expect(seen).toEqual(['Bearer test-token', null]);
+  });
+
+  test('a page cached without html is fetched again when html is requested', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return page();
+    }) as typeof fetch;
+
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns, cacheTtlMs: 60_000 });
+    await crawler.crawl(target, 'https://venue.example.com/x');
+    const withHtml = await crawler.crawl(target, 'https://venue.example.com/x', { includeHtml: true });
+    expect(calls).toBe(2);
+    if (!withHtml.ok || withHtml.notModified) throw new Error('expected pages');
+    expect(withHtml.pages[0]!.html).toBeTruthy();
+  });
+});

@@ -276,3 +276,21 @@ describe('link targets stay valid Markdown', () => {
     expect(md('<main><p>See <a href="/a_(b) c">the page</a> now.</p></main>')).toBe('See [the page](/a_%28b%29%20c) now.');
   });
 });
+
+describe('regions that wrap content', () => {
+  test('a page with several articles keeps all of them', () => {
+    const out = md('<body><article><h2>First show</h2><p>Doors at seven.</p></article><article><h2>Second show</h2><p>Doors at eight.</p></article></body>');
+    expect(out).toContain('First show');
+    expect(out).toContain('Second show');
+  });
+
+  test('a page wrapped in one form keeps its content', () => {
+    const out = md('<body><form action="/page"><h1>Season</h1><p>Opening night is in June.</p><p>Tickets are on sale now.</p><p>Doors open an hour early.</p></form></body>');
+    expect(out).toContain('Opening night is in June.');
+  });
+
+  test('a search form is still dropped', () => {
+    const out = md('<body><main><p>Real content for the page body.</p><form><input name="q"><button>Go</button></form></main></body>');
+    expect(out).toBe('Real content for the page body.');
+  });
+});

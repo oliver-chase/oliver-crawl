@@ -104,7 +104,13 @@ export function createCrawler(config: CrawlConfig): Crawler {
 
       // A repeat of the same URL in the cache window costs nothing. Only
       // successful non-304 results are ever stored — see core/page-cache.ts.
-      const cached = readPageCache(url, lanes, ttl);
+      const cacheVariant = JSON.stringify([
+        resolved.userAgent,
+        options.includeHtml ?? false,
+        options.maxTextChars ?? null,
+        Object.entries(target.headers ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+      ]);
+      const cached = readPageCache(url, lanes, ttl, cacheVariant);
       if (cached) return cached;
 
       // Retry lives HERE for single-page callers, and crawlSite passes 0
@@ -138,7 +144,7 @@ export function createCrawler(config: CrawlConfig): Crawler {
                 }
               }
             }
-            writePageCache(url, lanes, ttl, result);
+            writePageCache(url, lanes, ttl, result, cacheVariant);
             return result;
           }
 

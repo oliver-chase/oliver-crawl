@@ -13,19 +13,25 @@ const success = { ok: true, notModified: false, pages: [], lane: 'own' } as unkn
 
 describe('writePageCache', () => {
   test('does not cache a failure', () => {
-    writePageCache('https://a.example.com/x', undefined, 60_000, failure);
-    expect(readPageCache('https://a.example.com/x', undefined, 60_000)).toBeNull();
+    writePageCache('https://a.example.com/x', undefined, 60_000, failure, 'v');
+    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'v')).toBeNull();
   });
 
   test('does not cache a 304', () => {
-    writePageCache('https://a.example.com/x', undefined, 60_000, notModified);
-    expect(readPageCache('https://a.example.com/x', undefined, 60_000)).toBeNull();
+    writePageCache('https://a.example.com/x', undefined, 60_000, notModified, 'v');
+    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'v')).toBeNull();
+  });
+
+  test('a different variant is a different entry', () => {
+    writePageCache('https://a.example.com/x', undefined, 60_000, success, 'with-credentials');
+    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'anonymous')).toBeNull();
+    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'with-credentials')).toBe(success);
   });
 
   test('replays a success inside its lifetime and nothing when the lifetime is zero', () => {
-    writePageCache('https://a.example.com/x', undefined, 60_000, success);
-    expect(readPageCache('https://a.example.com/x', undefined, 60_000)).toBe(success);
-    writePageCache('https://a.example.com/y', undefined, 0, success);
-    expect(readPageCache('https://a.example.com/y', undefined, 60_000)).toBeNull();
+    writePageCache('https://a.example.com/x', undefined, 60_000, success, 'v');
+    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'v')).toBe(success);
+    writePageCache('https://a.example.com/y', undefined, 0, success, 'v');
+    expect(readPageCache('https://a.example.com/y', undefined, 60_000, 'v')).toBeNull();
   });
 });

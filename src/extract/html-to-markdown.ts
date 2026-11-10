@@ -17,7 +17,16 @@ import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { AnyNode } from 'domhandler';
 
 /** Regions that are page furniture, never content. */
-const CHROME_SELECTOR = 'nav, header, footer, aside, script, style, noscript, template, svg, form';
+const CHROME_SELECTOR = 'nav, header, footer, aside, script, style, noscript, template, svg';
+
+/**
+ * A form that collects input is page furniture. A form that wraps the whole page (the pattern some
+ * server frameworks emit) holds the content, so it is kept: it has several paragraphs or headings,
+ * or a long body of text.
+ */
+function isInputForm($form: Cheerio<AnyNode>): boolean {
+  return $form.find('p, h1, h2, h3').length < 3 && $form.text().length < 1500;
+}
 
 /** Escape the characters that would otherwise be read as markdown syntax. */
 function escapeInline(text: string): string {
@@ -45,10 +54,10 @@ function collapse(text: string): string {
  * (silently stale data).
  */
 export function selectMainRegion($: CheerioAPI): Cheerio<AnyNode> {
-  for (const tag of ['main', 'article']) {
-    const found = $(tag).first();
-    if (found.length > 0) return found as Cheerio<AnyNode>;
-  }
+  const main = $('main').first();
+  if (main.length > 0) return main as Cheerio<AnyNode>;
+  // One article is the page's content. Several are a listing, and the first alone would drop the rest.
+  if ($('article').length === 1) return $('article').first() as Cheerio<AnyNode>;
   const scored = scoreContentParent($);
   if (scored) return scored;
   return $('body') as Cheerio<AnyNode>;
@@ -83,6 +92,8 @@ function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
     // chrome element, the later chrome strip cannot undo it (it removes
     // chrome inside the scope, not the scope's own ancestors).
     if ($p.closest(CHROME_SELECTOR).length > 0) return;
+    const $form = $p.closest('form');
+    if ($form.length > 0 && isInputForm($form as Cheerio<AnyNode>)) return;
 
     const text = $p.text().trim();
     if (text.length < 25) return; // too short to be prose
@@ -128,6 +139,9 @@ export function htmlToMarkdown($: CheerioAPI, options: { maxChars?: number } = {
   // Clone before stripping — see the note above.
   const scope = region.clone();
   scope.find(CHROME_SELECTOR).remove();
+  scope.find('form').each((_, form) => {
+    if (isInputForm($(form) as Cheerio<AnyNode>)) $(form).remove();
+  });
 
   const blocks: string[] = [];
   renderChildren($, scope, blocks, { listDepth: 0 });

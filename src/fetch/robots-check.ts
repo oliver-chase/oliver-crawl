@@ -162,7 +162,7 @@ export async function evaluateRobotsForUrl(
     clearTimeout(timeoutId);
   }
 
-  const parsed = parseRobots(body, userAgentToken(userAgent), target.pathname || '/');
+  const parsed = parseRobots(body, userAgentToken(userAgent), (target.pathname || '/') + target.search);
   return redirectedOffDomainTo
     ? { ...parsed, reason: `${parsed.reason} (robots.txt now served from ${redirectedOffDomainTo} — this source may have moved)` }
     : parsed;

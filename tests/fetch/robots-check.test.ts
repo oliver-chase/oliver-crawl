@@ -141,3 +141,16 @@ describe('user-agent group matching', () => {
     expect(parseRobots(robots, 'mybot', '/').policy).toBe('disallow');
   });
 });
+
+describe('rules that match the query string', () => {
+  const robots = 'User-agent: *\nDisallow: /*?print=\n';
+  const fetchImpl = (async () => new Response(robots, { status: 200 })) as unknown as typeof fetch;
+
+  test('a URL whose query matches a Disallow pattern is refused', async () => {
+    expect((await evaluateRobotsForUrl('https://example.com/page?print=1', { fetchImpl })).policy).toBe('disallow');
+  });
+
+  test('the same path without that query is allowed', async () => {
+    expect((await evaluateRobotsForUrl('https://example.com/page', { fetchImpl })).policy).toBe('allow');
+  });
+});
