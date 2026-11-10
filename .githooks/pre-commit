@@ -464,7 +464,9 @@ for number, line in enumerate(sys.stdin, 1):
       case "$id_file" in $id_glob) id_skip=1; break ;; esac
     done <<< "$ID_LOCAL"
     [ "$id_skip" = 1 ] && continue
-    id_found="$(git show ":$id_file" 2>/dev/null | python3 -c "$ID_MATCHER" "$ID_LIST" "$ID_SELF" || true)"
+    # grep finds the candidates fast and reads the whole file, so git show never gets SIGPIPE; python re-reads only a file
+    # that has a candidate, with the project's own names removed.
+    id_found="$(git show ":$id_file" 2>/dev/null | grep -iwF -f "$ID_LIST" >/dev/null && git show ":$id_file" 2>/dev/null | python3 -c "$ID_MATCHER" "$ID_LIST" "$ID_SELF" || true)"
     if [ -n "$id_found" ]; then
       while IFS= read -r id_line; do
         echo "  $id_file:${id_line%%:*} names the owner: ${id_line#*:}"
