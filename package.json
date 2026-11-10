@@ -1,0 +1,47 @@
+{
+  "name": "@oliver/crawl-core",
+  "version": "0.18.0",
+  "description": "Governed web crawling: a self-hosted crawler lane with SSRF guards and prompt-injection sanitising, plus an optional vendor-API lane. Use either, or both.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oliver-chase/oliver-crawl.git"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "scripts/parity-check.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/check-imports.mjs && tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test && npm run check:decisions && npm run check:comments",
+    "check:comments": "node scripts/check-comment-budget.mjs --quiet",
+    "check:decisions": "node scripts/check-decisions.mjs",
+    "live": "npm run build && node scripts/live-check.mjs"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

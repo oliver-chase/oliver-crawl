@@ -1,0 +1,612 @@
+import { describe, expect, test } from 'vitest';
+import { createCrawler } from '@/index';
+import { crawlSite } from '@/crawl-site';
+import type { CrawlTarget } from '@/core/types';
+import { publicDns } from '../helpers';
+
+// The multi-page orchestrator. Everything it does that a single page cannot
+// decide for itself: which URLs, how many, retry policy, dedup, and reporting
+// per-URL outcomes without one bad page sinking the run.
+
+const target: CrawlTarget = {
+  name: 'Venue',
+  baseUrl: 'https://venue.example.com',
+  robotsPolicy: 'allow',
+  active: true,
+};
+
+const page = (body: string) =>
+  new Response(`<html><head><title>T</title></head><body><main>${body}</main></body></html>`, {
+    status: 200,
+    headers: { 'content-type': 'text/html' },
+  });
+
+function crawler() {
+  return createCrawler({ userAgent: 'T/1', dnsLookup: publicDns });
+}
+
+describe('crawlSite — seeds', () => {
+  test('crawls every seed and returns one result for the run', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => page(`Content of ${String(input)}`)) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/a', 'https://venue.example.com/b'],
+    });
+
+    expect(result.pages).toHaveLength(2);
+    expect(result.failures).toHaveLength(0);
+    expect(result.truncated).toBe(false);
+    expect(result.startedAt).toBeTruthy();
+    expect(result.finishedAt).toBeTruthy();
+  });
+
+  test('falls back to the target baseUrl when no seeds are given', async () => {
+    globalThis.fetch = (async () => page('Base page content.')) as typeof fetch;
+    const result = await crawlSite(crawler(), target);
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0]!.url).toContain('venue.example.com');
+  });
+
+  test('an off-site seed is reported as its own failure, others still crawl', async () => {
+    globalThis.fetch = (async () => page('Fine.')) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://evil.example.net/x', 'https://venue.example.com/ok'],
+    });
+
+    expect(result.pages).toHaveLength(1);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]!.url).toBe('https://evil.example.net/x');
+    expect(result.failures[0]!.reason).toBe('blocked');
+  });
+
+  test('an ineligible target fails once, not once per seed', async () => {
+    let fetched = false;
+    globalThis.fetch = (async () => {
+      fetched = true;
+      return page('x');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), { ...target, robotsPolicy: 'disallow' }, {
+      seeds: ['https://venue.example.com/a', 'https://venue.example.com/b', 'https://venue.example.com/c'],
+    });
+
+    expect(result.failures).toHaveLength(1);
+    expect(result.pages).toHaveLength(0);
+    expect(fetched).toBe(false);
+  });
+});
+
+describe('crawlSite — budget and dedup', () => {
+  test('stops at maxPages and reports truncated', async () => {
+    globalThis.fetch = (async () => page('Content.')) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/1', 'https://venue.example.com/2', 'https://venue.example.com/3'],
+      maxPages: 2,
+    });
+
+    expect(result.pages).toHaveLength(2);
+    expect(result.truncated).toBe(true);
+  });
+
+  test('a duplicate seed is fetched once', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return page('Content.');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/same', 'https://venue.example.com/same'],
+    });
+
+    expect(calls).toBe(1);
+    expect(result.pages).toHaveLength(1);
+  });
+
+  test('304s count toward the page budget but are not failures', async () => {
+    globalThis.fetch = (async () => new Response(null, { status: 304 })) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/a', 'https://venue.example.com/b'],
+      priorValidators: {
+        'https://venue.example.com/a': { etag: 'W/"1"' },
+        'https://venue.example.com/b': { etag: 'W/"2"' },
+      },
+    });
+
+    expect(result.notModified).toHaveLength(2);
+    expect(result.pages).toHaveLength(0);
+    expect(result.failures).toHaveLength(0);
+  });
+});
+
+describe('crawlSite — retries', () => {
+  test('retries a transient failure and succeeds on the second attempt', async () => {
+    let attempt = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('r.jina.ai')) return new Response('', { status: 500 });
+      attempt++;
+      if (attempt === 1) return new Response('boom', { status: 503 });
+      return page('Recovered on retry.');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/flaky'], maxRetries: 1, retryBackoffMs: 0 });
+
+    expect(result.pages).toHaveLength(1);
+    expect(result.failures).toHaveLength(0);
+  });
+
+  // Retrying a policy refusal produces the identical refusal — spending the
+  // budget on it is pure waste, so it must not be retried at all.
+  test('does NOT retry a terminal (policy) failure', async () => {
+    let policyChecks = 0;
+    globalThis.fetch = (async () => {
+      policyChecks++;
+      return page('never reached');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://elsewhere.example.net/x'],
+      maxRetries: 3,
+      retryBackoffMs: 0,
+    });
+
+    expect(result.failures).toHaveLength(1);
+    expect(policyChecks).toBe(0);
+  });
+
+  test('maxRetries: 0 means try once', async () => {
+    let calls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('r.jina.ai')) return new Response('', { status: 500 });
+      calls++;
+      return new Response('down', { status: 503 });
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/x'], maxRetries: 0 });
+
+    expect(calls).toBe(1);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]!.reason).toBe('unreachable');
+  });
+
+  test('one failing page does not sink the run', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('r.jina.ai')) return new Response('', { status: 500 });
+      if (url.includes('/bad')) return new Response('down', { status: 500 });
+      return page('Good page.');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/good', 'https://venue.example.com/bad'],
+      maxRetries: 0,
+    });
+
+    expect(result.pages).toHaveLength(1);
+    expect(result.failures).toHaveLength(1);
+  });
+});
+
+describe('crawlSite — pagination', () => {
+  test('follows next-page links up to the budget', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/events')) {
+        return page('Page one. <a href="/events/page/2">Next</a>');
+      }
+      if (url.endsWith('/events/page/2')) {
+        return page('Page two. <a href="/events/page/3">Next</a>');
+      }
+      return page('Page three, last.');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      followPagination: true,
+      maxPages: 3,
+    });
+
+    expect(result.pages).toHaveLength(3);
+    expect(result.pages.map((p) => p.url)).toEqual([
+      'https://venue.example.com/events',
+      'https://venue.example.com/events/page/2',
+      'https://venue.example.com/events/page/3',
+    ]);
+  });
+
+  test('pagination is off by default', async () => {
+    globalThis.fetch = (async () => page('Only page. <a href="/events/page/2">Next</a>')) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/events'] });
+    expect(result.pages).toHaveLength(1);
+  });
+
+  test('a next-page link that loops back is not re-crawled', async () => {
+    let calls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls++;
+      const url = String(input);
+      if (url.endsWith('/events')) return page('One. <a href="/events/page/2">Next</a>');
+      // page 2 points back at page 1 — a real pattern, and an infinite loop
+      // if the orchestrator did not dedup.
+      return page('Two. <a href="/events">Next</a>');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      followPagination: true,
+      maxPages: 10,
+    });
+
+    expect(calls).toBe(2);
+    expect(result.pages).toHaveLength(2);
+    expect(result.truncated).toBe(false);
+  });
+
+  test('an off-site next link is ignored, not an error', async () => {
+    globalThis.fetch = (async () => page('One. <a href="https://other.example.net/page/2">Next</a>')) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      followPagination: true,
+    });
+
+    expect(result.pages).toHaveLength(1);
+    expect(result.failures).toHaveLength(0);
+  });
+});
+
+describe('crawlSite — validator round-trip (re-crawl efficiency)', () => {
+  test('returns fresh validators for every crawled page and fires onSignals', async () => {
+    globalThis.fetch = (async () =>
+      new Response('<html><head><title>T</title></head><body><main>Fresh content.</main></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html', etag: 'W/"v2"', 'last-modified': 'Thu, 02 Jan 2025 00:00:00 GMT' },
+      })) as typeof fetch;
+
+    let signalled: { id: string; validators: Record<string, unknown> } | null = null;
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      targetId: 'source-42',
+      onSignals: (id, validators) => {
+        signalled = { id, validators };
+      },
+    });
+
+    const v = result.validators['https://venue.example.com/events'];
+    expect(v).toMatchObject({ etag: 'W/"v2"', lastModified: 'Thu, 02 Jan 2025 00:00:00 GMT' });
+    expect(v!.bodySha256).toMatch(/^[0-9a-f-]{16,}$/);
+    expect(signalled).not.toBeNull();
+    expect(signalled!.id).toBe('source-42');
+    expect(signalled!.validators['https://venue.example.com/events']).toBeTruthy();
+  });
+
+  test('a 304 carries the prior validators forward instead of dropping them', async () => {
+    globalThis.fetch = (async () => new Response(null, { status: 304 })) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      priorValidators: { 'https://venue.example.com/events': { etag: 'W/"v1"' } },
+    });
+
+    // Without this, one unchanged crawl would wipe the stored validator and
+    // the NEXT run would pay a full fetch again — the opposite of the point.
+    expect(result.validators['https://venue.example.com/events']).toMatchObject({ etag: 'W/"v1"' });
+    expect(result.notModified).toEqual(['https://venue.example.com/events']);
+  });
+
+  test('a throwing onSignals sink does not break the crawl', async () => {
+    globalThis.fetch = (async () =>
+      new Response('<html><body><main>Content.</main></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      })) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      onSignals: () => {
+        throw new Error('sink exploded');
+      },
+    });
+    expect(result.pages).toHaveLength(1);
+  });
+});
+
+describe('crawlSite — sinks, limits and keys', () => {
+  const okPage = () => new Response('<html><body><main>Content here for the venue.</main></body></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+
+  test('an onSignals sink that rejects does not raise an unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', listener);
+    try {
+      globalThis.fetch = (async () => okPage()) as typeof fetch;
+      await crawlSite(crawler(), target, {
+        seeds: ['https://venue.example.com/events'],
+        onSignals: async () => {
+          throw new Error('async sink exploded');
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    } finally {
+      process.off('unhandledRejection', listener);
+    }
+    expect(unhandled).toEqual([]);
+  });
+
+  test('pages a resumed run already collected count against maxPages', async () => {
+    globalThis.fetch = (async () => okPage()) as typeof fetch;
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/a', 'https://venue.example.com/b', 'https://venue.example.com/c'],
+      maxPages: 3,
+      resumeFrom: { queue: ['https://venue.example.com/a', 'https://venue.example.com/b', 'https://venue.example.com/c'], visited: [], depths: {}, collected: 2 },
+    });
+    expect(result.pages).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+  });
+
+  test('a 404 is requested once even when retries are allowed', async () => {
+    let requests = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).startsWith('https://venue.example.com')) requests += 1;
+      return new Response('Not found', { status: 404 });
+    }) as typeof fetch;
+    const result = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/gone'], maxRetries: 3, retryBackoffMs: 0 });
+    expect(result.failures).toHaveLength(1);
+    expect(requests).toBe(1);
+  });
+});
+
+describe('crawlSite — unchanged-content detection (CRAWL-UNCHANGED-1)', () => {
+  // Most small sites send NO ETag. The content-region hash is what makes
+  // their re-crawls cheap: the fetch is unavoidable, the expensive
+  // downstream work (extraction, LLM) is not.
+  test('flags a page whose content-region hash matches last run', async () => {
+    const body = '<html><head><title>T</title></head><body><main>Stable event copy.</main></body></html>';
+    globalThis.fetch = (async () =>
+      new Response(body, { status: 200, headers: { 'content-type': 'text/html' } })) as typeof fetch;
+
+    const first = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/events'] });
+    const firstHash = first.validators['https://venue.example.com/events']!.contentRegionSha256;
+    expect(firstHash).toBeTruthy();
+    expect(first.unchanged).toEqual([]);
+
+    const second = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      priorValidators: { 'https://venue.example.com/events': { contentRegionSha256: firstHash } },
+    });
+
+    expect(second.unchanged).toEqual(['https://venue.example.com/events']);
+    expect(second.pages).toHaveLength(1); // still fetched — only the origin can prevent that
+  });
+
+  test('a real content change is NOT flagged unchanged', async () => {
+    let call = 0;
+    globalThis.fetch = (async () => {
+      call++;
+      const main = call === 1 ? 'Original copy.' : 'Completely different copy now.';
+      return new Response(`<html><head><title>T</title></head><body><main>${main}</main></body></html>`, {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    }) as typeof fetch;
+
+    const first = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/events'] });
+    const second = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      priorValidators: {
+        'https://venue.example.com/events': {
+          contentRegionSha256: first.validators['https://venue.example.com/events']!.contentRegionSha256,
+        },
+      },
+    });
+
+    expect(second.unchanged).toEqual([]);
+  });
+});
+
+describe('crawlSite — sitemap-derived seeds', () => {
+  test('uses the site sitemap when no seeds are given', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/sitemap.xml')) {
+        return new Response(
+          `<urlset>
+            <url><loc>https://venue.example.com/events/a</loc></url>
+            <url><loc>https://venue.example.com/events/b</loc></url>
+          </urlset>`,
+          { status: 200, headers: { 'content-type': 'application/xml' } },
+        );
+      }
+      return page('Discovered page.');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, { useSitemap: true, maxPages: 5 });
+
+    expect(result.pages.map((p) => p.url).sort()).toEqual([
+      'https://venue.example.com/events/a',
+      'https://venue.example.com/events/b',
+    ]);
+  });
+
+  test('falls back to baseUrl when the site has no sitemap', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/sitemap.xml')) return new Response('nope', { status: 404 });
+      return page('Base page.');
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, { useSitemap: true });
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0]!.url).toContain('venue.example.com');
+  });
+
+  test('explicit seeds win over sitemap discovery', async () => {
+    let sitemapFetched = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/sitemap.xml')) {
+        sitemapFetched = true;
+        return new Response('<urlset></urlset>', { status: 200, headers: { 'content-type': 'application/xml' } });
+      }
+      return page('Explicit seed page.');
+    }) as typeof fetch;
+
+    await crawlSite(crawler(), target, { useSitemap: true, seeds: ['https://venue.example.com/chosen'] });
+    expect(sitemapFetched).toBe(false);
+  });
+});
+
+describe('crawlSite — hash comparability across rungs (CRAWL-HASH-1)', () => {
+  // The bug: contentRegionSha256 was filled on text-only rungs with a hash of
+  // the extracted TEXT, which is not comparable with the HTML-derived
+  // structural hash. A page fetched normally one run and via Jina the next
+  // would report a false content change.
+  test('same content via different rungs is NOT reported as changed', async () => {
+    const body = '<html><head><title>T</title></head><body><main>Identical event copy across rungs.</main></body></html>';
+
+    // Run 1: normal fetch (HTML rung -> structural hash present).
+    globalThis.fetch = (async () =>
+      new Response(body, { status: 200, headers: { 'content-type': 'text/html' } })) as typeof fetch;
+    const first = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/events'] });
+    const v1 = first.validators['https://venue.example.com/events']!;
+    expect(v1.contentRegionSha256).toBeTruthy();
+    expect(v1.textSha256).toBeTruthy();
+
+    // Run 2: direct fetch fails, Jina serves the SAME text (text-only rung ->
+    // no structural hash). Comparison must fall back to the text hash.
+    const jinaText = first.pages[0]!.text;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('r.jina.ai')) {
+        return new Response(
+          `Title: T\nURL Source: https://venue.example.com/events\n\nMarkdown Content:\n${jinaText} ` +
+            'Padding so the fallback clears its own minimum-content guard for this test. '.repeat(4),
+          { status: 200 },
+        );
+      }
+      return new Response('down', { status: 503 });
+    }) as typeof fetch;
+
+    const second = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/events'],
+      priorValidators: { 'https://venue.example.com/events': v1 },
+      maxRetries: 0,
+    });
+
+    expect(second.pages[0]!.rung).toBe('jina');
+    // Structural hash is empty on this rung — honest, not a lookalike.
+    expect(second.validators['https://venue.example.com/events']!.contentRegionSha256).toBe('');
+    // And it must NOT have been compared against the structural hash.
+    expect(second.pages[0]!.textSha256).toBeTruthy();
+  });
+});
+
+describe('crawlSite — whole-site discovery from one URL (followLinks)', () => {
+  // The question this answers: "I gave it testsite.com — do I get /calendar,
+  // /menu and /locations too?" Without followLinks: no, one page.
+  const site: Record<string, string> = {
+    'https://venue.example.com/': '<a href="/calendar">Calendar</a><a href="/menu">Menu</a><a href="/locations">Locations</a>',
+    'https://venue.example.com/calendar': '<a href="/calendar/august">August</a>',
+    'https://venue.example.com/menu': 'Our menu.',
+    'https://venue.example.com/locations': 'Where to find us.',
+    'https://venue.example.com/calendar/august': 'August events.',
+  };
+
+  function serveSite() {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input).replace(/\/$/, '') || 'https://venue.example.com';
+      const key = site[String(input)] !== undefined ? String(input) : `${url}`;
+      const body = site[key] ?? site[`${key}/`];
+      if (body === undefined) return new Response('not found', { status: 404 });
+      return page(body);
+    }) as typeof fetch;
+  }
+
+  test('one seed with followLinks reaches every linked page', async () => {
+    serveSite();
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/'],
+      followLinks: true,
+      maxPages: 10,
+    });
+
+    const urls = result.pages.map((p) => p.url).sort();
+    expect(urls).toContain('https://venue.example.com/calendar');
+    expect(urls).toContain('https://venue.example.com/menu');
+    expect(urls).toContain('https://venue.example.com/locations');
+    // depth 2 reaches a page linked from a section page
+    expect(urls).toContain('https://venue.example.com/calendar/august');
+  });
+
+  test('without followLinks, one seed means ONE page', async () => {
+    serveSite();
+    const result = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/'] });
+    expect(result.pages).toHaveLength(1);
+  });
+
+  test('maxDepth bounds how far it travels', async () => {
+    serveSite();
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/'],
+      followLinks: true,
+      maxDepth: 1,
+      maxPages: 10,
+    });
+
+    const urls = result.pages.map((p) => p.url);
+    expect(urls).toContain('https://venue.example.com/calendar');
+    // /calendar/august is two hops from the seed — beyond maxDepth 1.
+    expect(urls).not.toContain('https://venue.example.com/calendar/august');
+  });
+
+  test('excludePatterns keep known-useless paths out', async () => {
+    serveSite();
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/'],
+      followLinks: true,
+      maxPages: 10,
+      excludePatterns: [/\/menu/],
+    });
+
+    expect(result.pages.map((p) => p.url)).not.toContain('https://venue.example.com/menu');
+  });
+
+  test('a site where every page links every other page still terminates', async () => {
+    // Classic nav-on-every-page shape — an infinite loop without dedup.
+    globalThis.fetch = (async () =>
+      page('<a href="/a">A</a><a href="/b">B</a><a href="/">Home</a>')) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/'],
+      followLinks: true,
+      maxPages: 20,
+    });
+
+    expect(result.pages.length).toBeLessThanOrEqual(3);
+    expect(result.truncated).toBe(false);
+  });
+});
+
+describe('crawlSite — redirect convergence (CRAWL-DEDUP-1)', () => {
+  // Found in a live run: /index and / are the same page on most sites, but
+  // dedup keyed only on the REQUESTED url, so both were crawled and stored.
+  test('two URLs redirecting to the same page yield ONE page', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/index')) {
+        return new Response(null, { status: 301, headers: { location: 'https://venue.example.com/' } });
+      }
+      const r = page('The one true homepage.');
+      Object.defineProperty(r, 'url', { value: 'https://venue.example.com/' });
+      return r;
+    }) as typeof fetch;
+
+    const result = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/', 'https://venue.example.com/index'],
+    });
+
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0]!.url).toBe('https://venue.example.com/');
+  });
+});

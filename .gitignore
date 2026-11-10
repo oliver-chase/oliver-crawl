@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+coverage/
+
+# Local agent state and worktree checkouts — never shared
+.claude/
+
+# Private strings this public repo must never contain (pre-commit gate 4).
+.private-patterns
+
+scratch/
+
+.secrets/

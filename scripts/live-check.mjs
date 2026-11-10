@@ -1,0 +1,461 @@
+#!/usr/bin/env node
+// ─── Live validation ────────────────────────────────────────────────────────
+//
+// Exercises every feature against REAL websites. The unit suite proves the
+// logic; this proves the logic survives contact with actual origins —
+// real redirects, real charsets, real robots.txt, real 304s.
+//
+//   npm run live
+//
+// Deliberately kept OUT of `npm test`: it needs network, it is slower, and a
+// third-party site being down is not a reason to fail a build. Run it before
+// a release or after touching the fetch path.
+//
+// Targets are chosen for stability and permissiveness — long-lived
+// standards/documentation sites that are used to being crawled. Politeness
+// settings here are deliberately conservative.
+
+import { createCrawler, crawlSite, discoverSitemapUrls, mapSite, searchAndCrawl } from '../dist/index.js';
+import { renderViaLocalChromium } from '../dist/fetch/local-render.js';
+import { lookup } from 'node:dns/promises';
+
+const dns = async (h) => (await lookup(h, { all: true })).map((r) => ({ address: r.address, family: r.family }));
+
+const crawler = createCrawler({
+  userAgent: 'OliverCrawl-LiveCheck/0.1 (+https://github.com/oliver-chase/oliver-crawl)',
+  dnsLookup: dns,
+  minHostIntervalMs: 500,
+  adaptiveThrottleMultiplier: 2,
+});
+
+let passed = 0;
+let failed = 0;
+let skipped = 0;
+const failures = [];
+
+/**
+ * A paid key that is out of credits is not a code regression, and neither is
+ * a third-party outage — the same reasoning that keeps this script out of
+ * `npm test`. Throw this to report SKIP instead of FAIL.
+ */
+class Unavailable extends Error {}
+
+/** Provider quota/auth responses, which say nothing about our code. */
+function skipIfProviderUnavailable(detail) {
+  if (/HTTP (400|401|402|403|429|432)/.test(detail)) {
+    throw new Unavailable(detail);
+  }
+}
+
+async function check(name, fn) {
+  process.stdout.write(`  ${name} ... `);
+  try {
+    const detail = await fn();
+    console.log(`PASS${detail ? ` (${detail})` : ''}`);
+    passed++;
+  } catch (error) {
+    if (error instanceof Unavailable) {
+      console.log(`SKIP (${error.message})`);
+      skipped++;
+      return;
+    }
+    console.log('FAIL');
+    failed++;
+    failures.push(`${name}: ${error.message}`);
+  }
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+const IANA = { baseUrl: 'https://www.iana.org', robotsPolicy: 'allow', active: true };
+const RFC = { baseUrl: 'https://www.rfc-editor.org', robotsPolicy: 'allow', active: true };
+
+console.log('\nLIVE VALIDATION — real sites, real network\n');
+
+console.log('Core fetch');
+await check('single page crawl', async () => {
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/about');
+  assert(r.ok, `not ok: ${r.detail}`);
+  assert(!r.notModified, 'unexpected 304 on a fresh crawl');
+  assert(r.pages[0].text.length > 200, 'suspiciously little text');
+  assert(r.pages[0].title, 'no title extracted');
+  return `${r.pages[0].text.length} chars, rung=${r.pages[0].rung}`;
+});
+
+await check('follows a real redirect', async () => {
+  // http -> https and/or apex -> www is near-universal.
+  const r = await crawler.crawl(RFC, 'https://www.rfc-editor.org/rfc/rfc2616');
+  assert(r.ok, `not ok: ${r.detail}`);
+  return r.pages[0].url;
+});
+
+await check('a binary content-type is refused, never mis-parsed', async () => {
+  // Since CRAWL-FEED-1 text-ish documents ARE read, so this asserts the half
+  // that must stay refused: HTML-parsing an image produces confident nonsense.
+  // A URL that really exists and really is an image (200 image/vnd.microsoft
+  // .icon), so this fails on the content-type gate — not on a 404, which
+  // would pass for the wrong reason and prove nothing.
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/favicon.ico');
+  assert(!r.ok, `an image URL was accepted: kind=${r.ok ? r.pages[0].contentKind : ''}`);
+  assert(r.reason === 'empty', `expected a content-type refusal, got ${r.reason}: ${r.detail}`);
+  assert(/Unsupported content-type/.test(r.detail), `wrong refusal: ${r.detail}`);
+  return r.detail.slice(0, 44);
+});
+
+console.log('\nSecurity guards');
+await check('refuses a private-resolving host (SSRF)', async () => {
+  const localCrawler = createCrawler({
+    userAgent: 'OliverCrawl-LiveCheck/0.1',
+    dnsLookup: async () => [{ address: '127.0.0.1', family: 4 }],
+  });
+  const r = await localCrawler.crawl(IANA, 'https://www.iana.org/about');
+  assert(!r.ok && r.reason === 'blocked', 'a private-resolving host was NOT blocked');
+  return r.detail.slice(0, 48);
+});
+
+await check('refuses an off-domain URL', async () => {
+  const r = await crawler.crawl(IANA, 'https://www.rfc-editor.org/');
+  assert(!r.ok && r.reason === 'blocked', 'off-domain URL was not blocked');
+  return 'blocked';
+});
+
+await check('refuses unknown robots posture (fails closed)', async () => {
+  const r = await crawler.crawl({ baseUrl: 'https://www.iana.org' }, 'https://www.iana.org/about');
+  assert(!r.ok && r.reason === 'blocked', 'unknown robots did not fail closed');
+  return 'fail-closed';
+});
+
+await check('autoRobots resolves a real robots.txt', async () => {
+  const auto = createCrawler({ userAgent: 'OliverCrawl-LiveCheck/0.1', dnsLookup: dns, autoRobots: true });
+  const r = await auto.crawl({ baseUrl: 'https://www.iana.org' }, 'https://www.iana.org/about');
+  assert(r.ok, `autoRobots did not permit a crawlable page: ${r.detail}`);
+  return 'resolved and allowed';
+});
+
+console.log('\nRe-crawl efficiency');
+await check('conditional GET yields a real 304', async () => {
+  const first = await crawlSite(crawler, IANA, { seeds: ['https://www.iana.org/about'], maxPages: 1 });
+  const v = first.validators['https://www.iana.org/about'];
+  assert(v, 'no validators returned');
+  if (!v.etag && !v.lastModified) return 'origin sent no validators (cannot exercise)';
+
+  const second = await crawlSite(crawler, IANA, {
+    seeds: ['https://www.iana.org/about'],
+    priorValidators: { 'https://www.iana.org/about': v },
+    maxPages: 1,
+  });
+  assert(second.notModified.length === 1, `expected a 304, got ${second.pages.length} fetched pages`);
+  return 'free 304 on re-crawl';
+});
+
+await check('content hash detects an unchanged page', async () => {
+  const first = await crawlSite(crawler, RFC, { seeds: ['https://www.rfc-editor.org/'], maxPages: 1 });
+  const v = first.validators['https://www.rfc-editor.org/'];
+  assert(v, 'no validators');
+  const second = await crawlSite(crawler, RFC, {
+    seeds: ['https://www.rfc-editor.org/'],
+    priorValidators: { 'https://www.rfc-editor.org/': { ...v, etag: null, lastModified: null } },
+    maxPages: 1,
+  });
+  // Either a 304 (origin validators) or an unchanged flag (content hash).
+  assert(second.notModified.length + second.unchanged.length > 0, 'neither 304 nor unchanged detected');
+  return second.notModified.length ? '304' : 'content-hash unchanged';
+});
+
+console.log('\nDiscovery');
+await check('sitemap discovery on a real site', async () => {
+  const found = await discoverSitemapUrls(RFC, { userAgent: 'OliverCrawl-LiveCheck/0.1', maxUrls: 5, dnsLookup: dns });
+  assert(found.urls.length > 0, `no sitemap URLs: ${found.reason}`);
+  assert(found.urls.every((u) => u.includes('rfc-editor.org')), 'a non-same-site URL survived filtering');
+  return `${found.urls.length} urls`;
+});
+
+await check('sitemap lastmod is captured from a real site', async () => {
+  // BETTER-LASTMOD-1: one request answers "which pages changed" for the whole
+  // site. Real sitemaps vary — many publish no lastmod at all — so this
+  // asserts the SHAPE is right and reports whether this origin publishes it.
+  const found = await discoverSitemapUrls(RFC, { userAgent: 'OliverCrawl-LiveCheck/0.1', maxUrls: 10, dnsLookup: dns });
+  assert(found.entries.length > 0, `no sitemap entries: ${found.reason}`);
+  assert(found.entries.length === found.urls.length, 'entries and urls disagree');
+  assert(found.entries.every((e) => typeof e.url === 'string'), 'entry missing url');
+  assert(found.entries.every((e) => e.lastmod === null || typeof e.lastmod === 'string'), 'bad lastmod type');
+  const withMod = found.entries.filter((e) => e.lastmod).length;
+  return `${found.entries.length} entries, ${withMod} with lastmod`;
+});
+
+await check('mapSite lists a real site cheaply', async () => {
+  // PARITY-MAP-1: answers "what pages exist" without crawling them.
+  const map = await mapSite(crawler, RFC, { maxUrls: 25 });
+  assert(map.urls.length > 1, `too few urls: ${map.urls.length}`);
+  assert(map.urls.every((u) => u.includes('rfc-editor.org')), 'an off-site URL survived');
+  assert(new Set(map.urls).size === map.urls.length, 'duplicate urls returned');
+  return `${map.urls.length} urls (sitemap ${map.sources.sitemap}, links ${map.sources.homepageLinks}), ${map.feeds.length} feeds`;
+});
+
+await check('whole-site link following from ONE seed', async () => {
+  const run = await crawlSite(crawler, RFC, {
+    seeds: ['https://www.rfc-editor.org/'],
+    followLinks: true,
+    maxDepth: 1,
+    maxPages: 4,
+    maxDurationMs: 30_000,
+  });
+  assert(run.pages.length > 1, `one seed yielded only ${run.pages.length} page(s)`);
+  const urls = run.pages.map((p) => p.url);
+  assert(new Set(urls).size === urls.length, 'duplicate pages returned');
+  return `${run.pages.length} unique pages`;
+});
+
+await check('time budget stops a run cleanly', async () => {
+  const started = Date.now();
+  const run = await crawlSite(crawler, RFC, {
+    seeds: ['https://www.rfc-editor.org/'],
+    followLinks: true,
+    maxPages: 50,
+    maxDurationMs: 3_000,
+  });
+  const elapsed = Date.now() - started;
+  assert(elapsed < 20_000, `budget ignored: ran ${elapsed}ms`);
+  assert(run.pages.length > 0, 'stopped without gathering anything');
+  return `${run.pages.length} pages in ${elapsed}ms`;
+});
+
+console.log('\nExtraction');
+await check('JSON-LD is read when a site publishes it', async () => {
+  // Not every page has it; this asserts the field exists and is well-formed.
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/');
+  assert(r.ok, r.detail);
+  assert(Array.isArray(r.pages[0].jsonLd), 'jsonLd is not an array');
+  return `${r.pages[0].jsonLd.length} node(s)`;
+});
+
+await check('links and outbound hosts are separated correctly', async () => {
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/');
+  assert(r.ok, r.detail);
+  const page = r.pages[0];
+  assert(page.links.every((l) => l.url.includes('iana.org')), 'an off-site URL leaked into same-site links');
+  assert(page.outboundHosts.every((h) => !h.includes('www.iana.org')), 'same-site host leaked into outbound');
+  return `${page.links.length} same-site, ${page.outboundHosts.length} outbound hosts`;
+});
+
+await check('markdown preserves real page structure', async () => {
+  // VENDOR-PARITY-1: the free lane must produce what a caller would otherwise
+  // pay Firecrawl for. Asserts structure survived, not just that a string came
+  // back — flattened text would still be non-empty.
+  const r = await crawler.crawl(RFC, 'https://www.rfc-editor.org/');
+  assert(r.ok, r.detail);
+  const { markdown, text } = r.pages[0];
+  assert(markdown.length > 200, `markdown suspiciously short: ${markdown.length}`);
+  assert(/^#{1,6} /m.test(markdown), 'no headings survived');
+  assert(/\[[^\]]+\]\([^)]+\)/.test(markdown), 'no links survived');
+  return `${markdown.length} md chars vs ${text.length} text`;
+});
+
+await check('markdown drops page chrome', async () => {
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/about');
+  assert(r.ok, r.detail);
+  const { markdown, text } = r.pages[0];
+  // The nav appears in flat text but must not appear in the main region.
+  assert(markdown.length > 0, 'no markdown produced');
+  assert(markdown.length < text.length * 3, 'markdown implausibly larger than text');
+  return `${markdown.length} chars, chrome-scoped`;
+});
+
+await check('structured-data summary reflects a real page', async () => {
+  // JSONLD-SIGNAL-1: the field a caller uses to decide whether to pay for an
+  // LLM at all, so it has to be right on real markup, not just fixtures.
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/');
+  assert(r.ok, r.detail);
+  const s = r.pages[0].structuredData;
+  assert(Array.isArray(s.types) && Array.isArray(s.contentTypes), 'summary shape wrong');
+  assert(typeof s.hasContentData === 'boolean', 'hasContentData missing');
+  assert(s.nodeCount >= 0, 'nodeCount missing');
+  // hasContentData must agree with contentTypes — a caller branches on it.
+  assert(s.hasContentData === s.contentTypes.length > 0, 'hasContentData disagrees with contentTypes');
+  return `${s.nodeCount} nodes, content=${s.hasContentData}, types=[${s.types.join(',')}]`;
+});
+
+await check('a real non-HTML document is read, not refused', async () => {
+  // CRAWL-FEED-1: the fetch rung used to refuse anything but html/plain, so
+  // a discovered feed could never be fetched. rfc-editor serves .txt.
+  const r = await crawler.crawl(RFC, 'https://www.rfc-editor.org/rfc/rfc2616.txt');
+  assert(r.ok, `not ok: ${r.detail}`);
+  const p = r.pages[0];
+  assert(p.text.length > 500, `suspiciously short: ${p.text.length}`);
+  // A data document has no HTML-derived fields — empty, never faked.
+  assert(p.markdown === '', 'markdown should be empty on a non-HTML kind');
+  assert(p.contentRegionSha256 === '', 'structural hash should be empty');
+  assert(p.textSha256.length === 64, 'textSha256 must always be set');
+  return `kind=${p.contentKind}, ${p.text.length} chars`;
+});
+
+console.log('\nRendering');
+// ─── Local Chromium rendering ────────────────────────────────────────────────
+//
+// The render rung could not be exercised anywhere before this. It cannot run in
+// the unit suite: it drives a REAL browser at a REAL URL, and the host guard
+// refuses the private addresses a local test server would bind to. So the rung
+// that carries the most security machinery — navigation-hop checks, subresource
+// screening, same-site landing — had every guard tested in isolation and the
+// rung itself never driven end to end.
+//
+// Forcing it: renderWhenTextBelow set above any real page length makes every
+// fetch look thin, so the ladder escalates to render on a page that fetched fine.
+{
+  let playwrightPresent = true;
+  try {
+    await import('playwright');
+  } catch {
+    playwrightPresent = false;
+  }
+
+  if (!playwrightPresent) {
+    console.log('  (playwright not installed — local render checks skipped)');
+  } else {
+    const renderCrawler = createCrawler({
+      userAgent: 'OliverCrawl-LiveCheck/0.1 (+https://github.com/oliver-chase/oliver-crawl)',
+      dnsLookup: dns,
+      minHostIntervalMs: 500,
+      localRender: true,
+      renderWhenTextBelow: 10_000_000,
+    });
+
+    await check('local Chromium renders a real page', async () => {
+      const r = await renderCrawler.crawl(IANA, 'https://www.iana.org/help/example-domains');
+      assert(r.ok, `${r.reason}: ${r.detail}`);
+      const page = r.pages[0];
+      assert(page.rung === 'local-render', `escalated to ${page.rung}, not local-render`);
+      assert(page.text.length > 0, 'rendered page had no text');
+      return `${page.text.length} chars`;
+    });
+
+    await check('a rendered page has the same shape as a fetched one', async () => {
+      // PAGE-SHAPE-1 claimed "every rung" while never driving this one. A rung
+      // returning a thinner page than its neighbours shows up as worse
+      // extraction and gets blamed on the site.
+      const r = await renderCrawler.crawl(IANA, 'https://www.iana.org/help/example-domains');
+      assert(r.ok, `${r.reason}: ${r.detail}`);
+      const page = r.pages[0];
+      // QA: without this the check passed on the PLAIN FETCH rung — any
+      // HTML-derived rung satisfied the body, so it asserted the shape of a
+      // page the render rung never produced. Same vacuous-shape defect as the
+      // unit test this replaced, reintroduced in its replacement.
+      assert(page.rung === 'local-render', `shape checked on ${page.rung}, not local-render`);
+      assert(/^[a-f0-9]{64}$/.test(page.textSha256), 'textSha256 missing — change detection would be dead for this rung');
+      assert(/^[a-f0-9]{64}$/.test(page.bodySha256), 'bodySha256 missing');
+      // Rendered output IS HTML, so the HTML-derived fields must be populated
+      // rather than empty the way a prose rung leaves them.
+      assert(/^[a-f0-9]{64}$/.test(page.contentRegionSha256), 'contentRegionSha256 empty on an HTML-derived rung');
+      assert(page.markdown.length > 0, 'markdown empty on an HTML-derived rung');
+      assert(Array.isArray(page.links) && Array.isArray(page.jsonLd), 'array fields not arrays');
+      return `markdown ${page.markdown.length}, ${page.links.length} links`;
+    });
+
+    await check('a redirect chain leaving the site is refused BEFORE the hop', async () => {
+      // RENDER-HOP-2, and the only check that can prove it. The static wiring
+      // tests assert the guard is present; QA showed a guard can be present,
+      // correct and never invoked. This drives a real off-site chain that
+      // RETURNS HOME, which is the shape that defeated the previous fix: the
+      // landing check saw the original host and passed.
+      const chain =
+        'https://nghttp2.org/httpbin/redirect-to?url=' +
+        encodeURIComponent('https://httpbin.org/redirect-to?url=' + encodeURIComponent('https://nghttp2.org/httpbin/get'));
+      const reasons = [];
+      const html = await renderViaLocalChromium(chain, true, [], dns, (r) => reasons.push(r));
+      assert(html === null, 'an off-site redirect chain rendered anyway');
+      assert(reasons.length > 0, 'the refusal was silent (RENDER-SILENT-1)');
+      assert(/off-domain|Blocked/i.test(reasons[0]), `refused for an unrelated reason: ${reasons[0]}`);
+      return reasons[0].slice(0, 44);
+    });
+
+    await check('a same-site redirect still renders', async () => {
+      // The other half. A guard that refuses the attack AND the ordinary case
+      // is not a guard, it is an outage — and it would show up as the render
+      // rung quietly never working.
+      const same =
+        'https://nghttp2.org/httpbin/redirect-to?url=' + encodeURIComponent('https://nghttp2.org/httpbin/get');
+      const html = await renderViaLocalChromium(same, true, [], dns, () => {});
+      assert(html !== null, 'a same-site redirect was refused');
+      assert(html.length > 0, 'same-site redirect returned empty html');
+      return `${html.length} chars`;
+    });
+
+    await check('the render rung reports what it did', async () => {
+      // NOT a test of the refusal itself. Driving a real cross-site redirect
+      // would need a redirector this suite does not control, so RENDER-HOP-1
+      // and RENDER-SUBRESOURCE-1 are proven in tests/fetch/render-wiring.test.ts
+      // against a stubbed browser instead.
+      //
+      // What this adds on top: RENDER-SILENT-1's reporting path is real. The
+      // rung used to swallow every outcome into `return null`, so an operator
+      // could not tell a blocked redirect from an uninstalled browser. If the
+      // rung goes silent again, this goes red where a stub cannot.
+      const events = [];
+      const guarded = createCrawler({
+        userAgent: 'OliverCrawl-LiveCheck/0.1 (+https://github.com/oliver-chase/oliver-crawl)',
+        dnsLookup: dns,
+        minHostIntervalMs: 500,
+        localRender: true,
+        renderWhenTextBelow: 10_000_000,
+        onUsage: (e) => events.push(e),
+      });
+      await guarded.crawl(
+        { baseUrl: 'https://www.rfc-editor.org', robotsPolicy: 'allow', active: true },
+        'https://www.rfc-editor.org/rfc/rfc9309.html',
+      );
+      const rendered = events.filter((e) => e.rung === 'local-render');
+      assert(rendered.length > 0, 'render rung emitted no usage event at all');
+      // QA: counting events alone kept this green with onBlocked unwired, since
+      // the success path emits too. Name what is being proven.
+      assert(rendered.some((e) => e.ok), 'no successful render event');
+      return `${rendered.length} render events, ${rendered.filter((e) => e.ok).length} ok`;
+    });
+  }
+}
+
+console.log('\nSearch (skipped without a key)');
+if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
+  const searchCrawler = createCrawler({
+    userAgent: 'OliverCrawl-LiveCheck/0.1',
+    dnsLookup: dns,
+    autoRobots: true,
+    vendor: { serper: process.env.SERPER_API_KEY, tavily: process.env.TAVILY_API_KEY },
+  });
+
+  await check('web search returns usable results', async () => {
+    const found = await searchCrawler.search('rfc editor internet standards', { maxResults: 3 });
+    if (!found.ok) skipIfProviderUnavailable(found.detail);
+    assert(found.ok, `${found.reason}: ${found.detail}`);
+    assert(found.results.length > 0, 'no results');
+    assert(found.results.every((r) => r.url.startsWith('http')), 'an unsafe URL survived filtering');
+    return `${found.results.length} via ${found.provider}`;
+  });
+
+  await check('site: restriction narrows to one domain', async () => {
+    const found = await searchCrawler.search('standards', { site: 'rfc-editor.org', maxResults: 3 });
+    if (!found.ok) skipIfProviderUnavailable(found.detail);
+    assert(found.ok, `${found.reason}: ${found.detail}`);
+    assert(found.results.some((r) => r.url.includes('rfc-editor.org')), 'site: restriction had no effect');
+    return `${found.results.length} results`;
+  });
+
+  await check('searchAndCrawl reads the pages it finds', async () => {
+    const found = await searchAndCrawl(searchCrawler, 'rfc editor', { maxResults: 2 });
+    if (!found.ok) skipIfProviderUnavailable(found.detail);
+    assert(found.ok, `${found.reason}: ${found.detail}`);
+    return `${found.pages.length} read, ${found.skipped.length} skipped`;
+  });
+} else {
+  console.log('  (no SERPER_API_KEY / TAVILY_API_KEY — search checks skipped)');
+}
+
+console.log(`\n${'-'.repeat(52)}`);
+console.log(`${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}`);
+if (skipped) console.log('(skips are unavailable third parties — exhausted keys or outages, not code)');
+if (failures.length) {
+  console.log('\nFailures:');
+  for (const f of failures) console.log(`  - ${f}`);
+}
+process.exit(failed > 0 ? 1 : 0);

@@ -1,0 +1,536 @@
+// ─── Multi-page crawl orchestrator ──────────────────────────────────────────
+//
+// Drives the single-page crawl across a target's seeds, optionally following
+// pagination, and returns one result for the whole run.
+//
+// Everything here is a LOOP over parts that already exist — policy, fetch,
+// render, guard, hashing all live in the lanes. This module owns only the
+// things a single page cannot decide for itself:
+//
+//   - which URLs to visit (seeds, then discovered next-pages)
+//   - how many, in total (a hard page budget — a crawl must be bounded)
+//   - what to do when one page fails (retry, unless retrying is pointless)
+//   - not visiting the same URL twice
+//   - reporting per-URL outcomes without letting one bad page sink the run
+//
+// Sequential, not parallel, and deliberately so: the origin implementation ran
+// `maxConcurrency: 1`, and hammering a small venue site with parallel requests
+// is what gets a crawler blocked.
+
+import { urlDedupKey } from './core/url-dedup-key.js';
+import { sleep } from './core/host-throttle.js';
+import { assertRequestUrlAllowed, assertTargetEligible } from './fetch/host-policy.js';
+import { findNextPageUrl } from './extract/pagination-discovery.js';
+import type { Crawler } from './index.js';
+import { DEFAULT_MAX_PAGES } from './core/types.js';
+import type { CrawlOptions, CrawlPage, CrawlTarget } from './core/types.js';
+
+export type SiteCrawlOptions = CrawlOptions & {
+  /** URLs to start from. Falls back to target.seeds, then target.baseUrl. */
+  seeds?: string[];
+  /** Hard ceiling on pages fetched in one run, seeds included. */
+  maxPages?: number;
+  /** Attempts per URL before giving up on it. 0 = try once, never retry. */
+  maxRetries?: number;
+  /** Follow "next page" links discovered on crawled pages, up to maxPages.
+   *  Narrow by design: only pagination, so a listing's page 2/3 are read. */
+  followPagination?: boolean;
+  /**
+   * Follow ALL same-site links, breadth-first, to discover a whole site from
+   * one starting URL. This is what answers "I gave it example.com, I want
+   * /calendar and /menu and /locations too" — pagination alone will not do
+   * that, and a sitemap only helps if the site publishes one.
+   *
+   * Bounded by maxPages and maxDepth. Breadth-first on purpose: the pages
+   * linked from the homepage are the ones a site considers important, so a
+   * truncated crawl keeps the useful pages rather than descending one deep
+   * branch.
+   */
+  followLinks?: boolean;
+  /** How many link-hops from a seed to travel when followLinks is on.
+   *  Default 2 — the homepage, its sections, and their pages. */
+  maxDepth?: number;
+  /** Skip discovered URLs matching any of these. Applied to the full URL.
+   *  Useful for the parts of a site that are never worth crawling (login,
+   *  cart, calendar permalinks that expand forever). */
+  excludePatterns?: RegExp[];
+  /**
+   * If set, ONLY follow discovered URLs matching one of these — an allowlist
+   * rather than a blocklist. `[/\/events\//]` crawls a site's events
+   * section and nothing else.
+   *
+   * Seeds are always crawled regardless: you asked for those explicitly.
+   * Exclude wins over include when both match.
+   *
+   * (Scrapy's LinkExtractor makes the same allow/deny distinction, for the
+   * same reason: on a large site, naming what you WANT is far shorter than
+   * enumerating everything you don't.)
+   */
+  includePatterns?: RegExp[];
+  /**
+   * Wall-clock ceiling for the whole run, ms. When it expires the run stops
+   * cleanly and reports `truncated`, keeping everything gathered so far.
+   *
+   * A page budget alone does not bound time: 20 pages on a site that takes
+   * 30s each is a ten-minute run. Anything on a schedule needs a time bound
+   * as well, or one slow origin delays every target behind it.
+   */
+  maxDurationMs?: number;
+  /** Per-URL conditional-GET validators from a previous run, keyed by URL —
+   *  exactly the shape `result.validators` (and `config.onSignals`) hands
+   *  back, so the round-trip is: crawl → persist → pass here next run. */
+  priorValidators?: Record<
+    string,
+    { etag?: string | null; lastModified?: string | null; contentRegionSha256?: string; textSha256?: string }
+  >;
+  /** Pause between page fetches, ms. Sequential is already the default;
+   *  this adds breathing room for small origins. 0 = none. */
+  politenessDelayMs?: number;
+  /** Consumer id for this target, passed to onSignals so the consumer knows
+   *  which of its records the validators belong to. Defaults to baseUrl. */
+  targetId?: string;
+  /** Discover seeds from the site's own /sitemap.xml when no seeds were
+   *  given. Free, and far more accurate than guessing paths — the site is
+   *  telling you what it has. Falls back to baseUrl if there is no sitemap. */
+  useSitemap?: boolean;
+  /**
+   * BETTER-LASTMOD-1: `{ [url]: lastmod }` kept from a previous run, from
+   * `SiteCrawlResult.lastmod`.
+   *
+   * With `useSitemap`, any sitemap entry whose `<lastmod>` still equals the
+   * stored value is skipped WITHOUT being fetched. One sitemap request then
+   * answers "which of these 500 pages changed" — conditional GET answers the
+   * same question in 500 requests, one per page.
+   *
+   * Used only to SKIP. `<lastmod>` is origin-supplied and frequently a lie
+   * (plenty of CMSs stamp every URL with today's date), so a CHANGED value
+   * proves nothing and simply lets the page through to the normal 304 and
+   * content-hash checks, which are trustworthy. Omit this to disable.
+   */
+  priorLastmod?: Record<string, string>;
+  /**
+   * CRAWL-RESUME-1: called after each page, with everything needed to pick
+   * the run back up. Persist it (your storage, not ours) and pass the last
+   * snapshot as `resumeFrom` to continue.
+   *
+   * Without this, a 500-page crawl killed at page 400 restarts from zero —
+   * the queue and visited set live only in memory.
+   */
+  onProgress?: (state: CrawlProgress) => void;
+  /**
+   * A snapshot from a previous run's `onProgress`. Its `visited` set is
+   * honoured, so pages already collected are not fetched again, and its
+   * queue replaces the seeds.
+   *
+   * The pages themselves are NOT carried over — you already persisted those
+   * when you received them. This resumes the WORK, not the results.
+   */
+  resumeFrom?: CrawlProgress;
+
+  /** Persistence hook for this run's fresh validators — same data as
+   *  `result.validators`, delivered as a callback for consumers that prefer
+   *  push over return-value plumbing. Fire-and-forget: a throwing sink never
+   *  breaks the crawl. */
+  onSignals?: (targetId: string, validators: SiteCrawlResult['validators']) => void | Promise<void>;
+  /** Base wait between retry attempts (multiplied by attempt number).
+   *  Exists mostly so tests can zero it. */
+  retryBackoffMs?: number;
+};
+
+export type SiteCrawlFailure = { url: string; reason: string; detail: string };
+
+/**
+ * Enough state to resume a crawl. Plain JSON so a consumer can put it in a
+ * row, a file or a queue message without a serialiser.
+ */
+export type CrawlProgress = {
+  /** URLs still waiting, in breadth-first order. */
+  queue: string[];
+  /** Canonical dedup keys already handled — never fetch these again. */
+  visited: string[];
+  /** Depth per queued URL, so resuming preserves the depth limit. */
+  depths: Record<string, number>;
+  /** How many pages this run has collected so far, against maxPages. */
+  collected: number;
+};
+
+export type SiteCrawlResult = {
+  /** Pages successfully fetched and parsed. */
+  pages: CrawlPage[];
+  /** URLs the origin answered 304 for — unchanged, and correctly NOT failures. */
+  notModified: string[];
+  /** Per-URL failures. A run with some pages and some failures is normal. */
+  failures: SiteCrawlFailure[];
+  /** True when the run stopped because it hit maxPages rather than running
+   *  out of URLs — the caller may want to raise the budget or paginate again. */
+  truncated: boolean;
+  /** Fresh conditional-GET validators per URL from THIS run. Persist these
+   *  and pass them back as `priorValidators` next run — that round-trip is
+   *  what turns a scheduled re-crawl of an unchanged page into a free 304.
+   *  Also delivered via onSignals when set. `contentRegionSha256` is the
+   *  nav/footer-INSENSITIVE hash: it answers "did the real content change"
+   *  for the many origins that send no ETag at all. */
+  validators: Record<
+    string,
+    {
+      etag: string | null;
+      lastModified: string | null;
+      bodySha256: string;
+      /** Structural, nav-insensitive. EMPTY on text-only rungs (Jina/vendor). */
+      contentRegionSha256: string;
+      /** Always set — the universally comparable signal. */
+      textSha256: string;
+    }
+  >;
+  /** URLs that WERE re-fetched (the origin gave no 304) but whose meaningful
+   *  content is byte-identical to last run, by content-region hash. A
+   *  consumer can skip re-extraction/re-LLM for these — the fetch was
+   *  unavoidable, the expensive downstream work is not. */
+  unchanged: string[];
+  /** `<lastmod>` per URL from this run's sitemap, for `priorLastmod` next
+   *  time. Empty when no sitemap was read or it published no lastmod. */
+  lastmod: Record<string, string>;
+  /** URLs skipped because their sitemap `<lastmod>` was unchanged — never
+   *  fetched at all. Not failures, and not `notModified` (no request was
+   *  made to be answered). */
+  skippedByLastmod: string[];
+  startedAt: string;
+  finishedAt: string;
+};
+
+const DEFAULT_MAX_RETRIES = 1;
+
+/**
+ * A failure that retrying cannot fix. Retrying a blocked URL just burns the
+ * budget to get the identical refusal — the origin implementation made the
+ * same distinction with its TerminalCrawlError.
+ */
+function isTerminal(reason: string): boolean {
+  return reason === 'blocked' || reason === 'quarantined' || reason === 'no_lane_available';
+}
+
+
+
+/**
+ * Decide which URLs a run starts from, and record what the sitemap told us.
+ *
+ * Pulled out of `crawlSite` because it answers a question the main loop does
+ * not care about: the loop consumes a queue, this decides what goes in it.
+ * The three sources are mutually exclusive and ordered — a resume snapshot
+ * replaces everything, an explicit list beats discovery, and the base URL is
+ * the fallback.
+ */
+async function resolveSeeds(
+  crawler: Crawler,
+  target: CrawlTarget,
+  options: SiteCrawlOptions,
+  maxPages: number,
+): Promise<{ seeds: string[]; lastmod: Record<string, string>; skippedByLastmod: string[] }> {
+  const lastmod: Record<string, string> = {};
+  const skippedByLastmod: string[] = [];
+
+  // CRAWL-RESUME-1: a snapshot replaces the seeds entirely — its queue is
+  // where the previous run stopped, and re-seeding from baseUrl on top would
+  // re-walk ground already covered.
+  if (options.resumeFrom) return { seeds: options.resumeFrom.queue, lastmod, skippedByLastmod };
+
+  const explicit = options.seeds ?? target.seeds;
+  if (explicit) return { seeds: explicit, lastmod, skippedByLastmod };
+
+  if (!options.useSitemap) return { seeds: [target.baseUrl], lastmod, skippedByLastmod };
+
+  // Free page discovery: the site's own sitemap beats guessing paths. Goes
+  // through the crawler so it uses the SAME User-Agent and DNS resolver as
+  // every other request — a discovery call that resolved DNS differently from
+  // the crawl would be both inconsistent and, in tests, an unstubbed network
+  // call.
+  const entries = await crawler.discoverSeedEntries(target, maxPages);
+  if (entries.length === 0) return { seeds: [target.baseUrl], lastmod, skippedByLastmod };
+
+  for (const entry of entries) {
+    if (entry.lastmod) lastmod[entry.url] = entry.lastmod;
+  }
+
+  // BETTER-LASTMOD-1: drop entries the sitemap says have not moved. The saving
+  // is the FETCH itself, so this has to happen before seeding.
+  const prior = options.priorLastmod;
+  const fresh = prior
+    ? entries.filter((entry) => {
+        const unmoved = Boolean(entry.lastmod) && prior[entry.url] === entry.lastmod;
+        if (unmoved) skippedByLastmod.push(entry.url);
+        return !unmoved;
+      })
+    : entries;
+
+  return { seeds: fresh.map((entry) => entry.url), lastmod, skippedByLastmod };
+}
+
+/**
+ * Crawl a whole site: seeds, discovery, budgets, dedup and resume.
+ *
+ * Takes a `Crawler` rather than a config so lane selection, budgeting and
+ * usage reporting come along for free — this orchestrator never needs to know
+ * which lane served a page.
+ */
+export async function crawlSite(
+  crawler: Crawler,
+  target: CrawlTarget,
+  options: SiteCrawlOptions = {},
+): Promise<SiteCrawlResult> {
+  const startedAt = new Date().toISOString();
+  const maxPages = Math.max(1, options.maxPages ?? DEFAULT_MAX_PAGES);
+  const maxRetries = Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES);
+
+  const pages: CrawlPage[] = [];
+  const notModified: string[] = [];
+  const failures: SiteCrawlFailure[] = [];
+  const validators: SiteCrawlResult['validators'] = {};
+  const unchanged: string[] = [];
+  const lastmod: Record<string, string> = {};
+  const skippedByLastmod: string[] = [];
+
+  const done = (truncated: boolean): SiteCrawlResult => {
+    // Deliver fresh validators to the consumer's persistence hook, fire-and-
+    // forget: a slow or throwing sink must not break (or slow) the crawl.
+    if (Object.keys(validators).length > 0 && options.onSignals) {
+      // Wrapped in a promise so a sink that throws, or returns a rejected promise, cannot reach the crawl.
+      void Promise.resolve()
+        .then(() => options.onSignals!(options.targetId ?? target.baseUrl, validators))
+        .catch(() => {});
+    }
+    return {
+      pages,
+      notModified,
+      failures,
+      truncated,
+      validators,
+      unchanged,
+      lastmod,
+      skippedByLastmod,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+    };
+  };
+
+  // CRAWLSITE-AUTOROBOTS-1: resolve the posture BEFORE the eligibility gate.
+  // That gate fails closed on an unknown policy, and autoRobots resolution
+  // used to happen only inside the lane — so a whole-site crawl of a target
+  // with no stored policy was refused outright, while a single-page crawl of
+  // the same URL succeeded. One request per host, cached.
+  target = await crawler.resolveTarget(target);
+
+  // Eligibility is a property of the TARGET, not of any one URL — check it
+  // once, and report it as a single failure rather than N identical ones.
+  try {
+    assertTargetEligible(target);
+  } catch (error) {
+    failures.push({
+      url: target.baseUrl,
+      reason: 'blocked',
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    return done(false);
+  }
+
+  const seeded = await resolveSeeds(crawler, target, options, maxPages);
+  Object.assign(lastmod, seeded.lastmod);
+  skippedByLastmod.push(...seeded.skippedByLastmod);
+  const rawSeeds = seeded.seeds;
+
+  const queue: string[] = [];
+  for (const seed of rawSeeds) {
+    try {
+      queue.push(assertRequestUrlAllowed(target, seed).toString());
+    } catch (error) {
+      failures.push({ url: seed, reason: 'blocked', detail: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  // Dedup across seeds AND everything discovered — a site whose page 2 links
+  // back to page 1, or whose nav links every page to every other page, must
+  // not loop.
+  // Keyed on the canonical resource identity, not the raw string — see
+  // core/url-dedup-key.ts. /events, /events/, /events#lineup and
+  // /events?utm_source=x are one page, and must cost one slot of maxPages.
+  const visited = new Set<string>(options.resumeFrom?.visited ?? []);
+  const maxDepth = Math.max(0, options.maxDepth ?? 2);
+  // Depth rides alongside the URL so breadth-first ordering is preserved and
+  // a deep branch cannot consume the whole page budget.
+  const depthOf = new Map<string, number>();
+  for (const seed of queue) depthOf.set(urlDedupKey(seed), 0);
+  // Restored depths win over the seed default, so a resumed run cannot
+  // silently reset a deep page back to depth 0 and blow past maxDepth.
+  for (const [key, depth] of Object.entries(options.resumeFrom?.depths ?? {})) {
+    depthOf.set(key, depth);
+  }
+
+  const shouldSkip = (candidate: string) => {
+    if ((options.excludePatterns ?? []).some((pattern) => pattern.test(candidate))) return true;
+    const include = options.includePatterns;
+    // Allowlist, when given: anything not named is not followed.
+    return Boolean(include?.length) && !include!.some((pattern) => pattern.test(candidate));
+  };
+
+  /** Queue a discovered URL if it is same-site, unseen, and within depth. */
+  const enqueue = (rawUrl: string, depth: number) => {
+    if (depth > maxDepth) return;
+    if (shouldSkip(rawUrl)) return;
+    try {
+      const safe = assertRequestUrlAllowed(target, rawUrl).toString();
+      const key = urlDedupKey(safe);
+      if (visited.has(key) || depthOf.has(key)) return;
+      depthOf.set(key, depth);
+      // The QUEUE keeps the real URL — we request exactly what the site
+      // published. Only identity is normalised.
+      queue.push(safe);
+    } catch {
+      // Off-site or unsafe — not an error, just not ours to follow.
+    }
+  };
+
+  // Pages a resumed run already collected count against maxPages.
+  const alreadyCollected = options.resumeFrom?.collected ?? 0;
+  const deadline = options.maxDurationMs ? Date.now() + options.maxDurationMs : Infinity;
+
+  while (queue.length > 0) {
+    if (alreadyCollected + pages.length + notModified.length >= maxPages) return done(true);
+    // Stop cleanly on the time budget, keeping everything gathered so far —
+    // a partial result is far more useful than an aborted run.
+    if (Date.now() >= deadline) return done(true);
+
+    const url = queue.shift()!;
+    const urlKey = urlDedupKey(url);
+    if (visited.has(urlKey)) continue;
+    visited.add(urlKey);
+    const depth = depthOf.get(urlKey) ?? 0;
+
+    const prior = options.priorValidators?.[url];
+    const perPageOptions: CrawlOptions = {
+      ...options,
+      etag: prior?.etag ?? options.etag ?? null,
+      lastModified: prior?.lastModified ?? options.lastModified ?? null,
+      // Pagination discovery reads markup, so the page must carry its HTML.
+      // Requested here rather than left to the caller: otherwise
+      // followPagination would silently do nothing.
+      includeHtml: options.includeHtml || options.followPagination === true || options.followLinks === true,
+      // This loop does its own retrying; letting crawl() retry too would
+      // multiply attempts (3 x 3 = 9 requests for one page).
+      retries: 0,
+    };
+
+    let lastFailure: SiteCrawlFailure | null = null;
+    let succeeded = false;
+
+    for (let attempt = 0; attempt <= maxRetries && !succeeded; attempt++) {
+      const result = await crawler.crawl(target, url, perPageOptions);
+
+      if (result.ok) {
+        succeeded = true;
+        if (result.notModified) {
+          notModified.push(url);
+          // The stored validators are still current — carry them forward so
+          // the consumer's next run keeps getting free 304s.
+          if (prior?.etag || prior?.lastModified) {
+            validators[url] = {
+              etag: prior.etag ?? null,
+              lastModified: prior.lastModified ?? null,
+              bodySha256: '',
+              contentRegionSha256: prior.contentRegionSha256 ?? '',
+              textSha256: prior.textSha256 ?? '',
+            };
+          }
+          break;
+        }
+        // CRAWL-DEDUP-1 (found in a live run): dedup keyed only on the
+        // REQUESTED url, so two different URLs that redirect to the same
+        // page were both crawled and both stored — a real site's
+        // /home, /index and / commonly converge. Mark the RESOLVED url
+        // visited too, and drop a page already collected under it.
+        const fresh = result.pages.filter((p) => {
+          const key = urlDedupKey(p.url);
+          if (visited.has(key) && key !== urlKey) return false;
+          visited.add(key);
+          return true;
+        });
+        pages.push(...fresh);
+        for (const p of fresh) {
+          // CRAWL-UNCHANGED-1: these hashes were computed on every page and
+          // then thrown away. Comparing against last run is what makes
+          // re-crawls cheap for origins that send NO ETag (most small sites):
+          // the page had to be fetched, but extraction/LLM need not re-run.
+          //
+          // CRAWL-HASH-1: compare LIKE WITH LIKE. contentRegionSha256 is
+          // structural (HTML-only) and is the better signal, but it is empty
+          // on text-only rungs — comparing it across a rung change would
+          // report a false content change. Prefer it only when both sides
+          // have it; otherwise fall back to the always-present text hash.
+          const prev = options.priorValidators?.[p.url];
+          const bothStructural = Boolean(prev?.contentRegionSha256 && p.contentRegionSha256);
+          const same = bothStructural
+            ? prev!.contentRegionSha256 === p.contentRegionSha256
+            : Boolean(prev?.textSha256 && prev.textSha256 === p.textSha256);
+          if (same) unchanged.push(p.url);
+          validators[p.url] = {
+            etag: p.httpEtag,
+            lastModified: p.httpLastModified,
+            bodySha256: p.bodySha256,
+            contentRegionSha256: p.contentRegionSha256,
+            textSha256: p.textSha256,
+          };
+        }
+
+        // Discovery from the page just read — appends only, so breadth-first
+        // ordering of what was already scheduled is preserved.
+        const first = fresh[0];
+
+        // Pagination stays at the SAME depth: page 2 of a listing is the same
+        // distance from the seed as page 1, not one hop further.
+        if (options.followPagination && first?.html) {
+          const next = findNextPageUrl(first.html, url);
+          if (next) enqueue(next, depth);
+        }
+
+        // Whole-site discovery: every same-site link, one hop deeper.
+        if (options.followLinks && first) {
+          for (const link of first.links) enqueue(link.url, depth + 1);
+        }
+        break;
+      }
+
+      lastFailure = { url, reason: result.reason, detail: result.detail };
+      // Retrying these produces the identical answer; spend the budget elsewhere.
+      if (isTerminal(result.reason) || result.failureClass === 'structural') break;
+      if (attempt < maxRetries) {
+        // CRAWL-BACKOFF-1: when the origin SAID how long to wait (429/503 +
+        // Retry-After), wait that long. Our own schedule is a guess; theirs
+        // is an instruction, and ignoring it is what gets a crawler banned.
+        const ourBackoff = (options.retryBackoffMs ?? 500) * (attempt + 1);
+        await sleep(Math.max(result.retryAfterMs ?? 0, ourBackoff));
+      }
+    }
+
+    if (!succeeded && lastFailure) failures.push(lastFailure);
+
+    // CRAWL-RESUME-1: emitted AFTER the URL is marked visited and after any
+    // discovery it produced is queued, so a snapshot is always a coherent
+    // "everything up to here is done" — never one that would re-fetch the
+    // page just handled, or lose the links it found.
+    //
+    // Emitted for failures too: a page that failed terminally is finished
+    // with, and a resume that retried it would repeat the same failure.
+    if (options.onProgress) {
+      options.onProgress({
+        queue: [...queue],
+        visited: [...visited],
+        depths: Object.fromEntries(depthOf),
+        collected: alreadyCollected + pages.length + notModified.length,
+      });
+    }
+
+    if ((options.politenessDelayMs ?? 0) > 0 && queue.length > 0) {
+      await sleep(options.politenessDelayMs!);
+    }
+  }
+
+  return done(false);
+}
