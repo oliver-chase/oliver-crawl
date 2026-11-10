@@ -487,12 +487,20 @@ async function archiveFallback(
 }
 
 /**
- * The remaining FREE rungs, in one order defined once.
- *
- * LANE-EXHAUST-1: local Chromium -> your render service -> Jina. A skipped
- * free rung pushes the crawl into the paid lane sooner than it needed to go,
- * so every failure path routes through here rather than choosing its own.
+ * The registrable part of a host: the last two labels, or the last three under a two-letter country
+ * code with a generic second level (shop.co.uk is a different site from other.co.uk). A short list
+ * stands in for the public suffix list.
  */
+function registrableHost(host: string): string {
+  const labels = host.toLowerCase().split('.');
+  const generic = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac']);
+  const take = labels.length >= 3 && labels[labels.length - 1]!.length === 2 && generic.has(labels[labels.length - 2]!) ? 3 : 2;
+  return labels.slice(-take).join('.');
+}
+
+/** Test seam. */
+export const __isOffDomainRefusalForTests = (detail: string, requestedUrl: string): boolean => isOffDomainRefusal(detail, requestedUrl);
+
 /**
  * Did the direct rung refuse because the origin moved to a DIFFERENT SITE?
  *
@@ -509,21 +517,6 @@ async function archiveFallback(
  * a restatement of the rule — an earlier version asserted a duplicated copy of
  * the regex, so rewriting the detector left it green.
  */
-/**
- * The registrable part of a host: the last two labels, or the last three under a two-letter country
- * code with a generic second level (shop.co.uk is a different site from other.co.uk). A short list
- * stands in for the public suffix list.
- */
-function registrableHost(host: string): string {
-  const labels = host.toLowerCase().split('.');
-  const generic = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac']);
-  const take = labels.length >= 3 && labels[labels.length - 1]!.length === 2 && generic.has(labels[labels.length - 2]!) ? 3 : 2;
-  return labels.slice(-take).join('.');
-}
-
-/** Test seam. */
-export const __isOffDomainRefusalForTests = (detail: string, requestedUrl: string): boolean => isOffDomainRefusal(detail, requestedUrl);
-
 function isOffDomainRefusal(detail: string, requestedUrl: string): boolean {
   const found = detail.match(/https?:\/\/[^\s)]+/);
   if (!found) return false;
@@ -549,6 +542,13 @@ function withOriginMoved(result: CrawlResult, priorDetail: string, servedBy: str
   return { ...result, originMoved: { refusal: priorDetail, servedBy } };
 }
 
+/**
+ * The remaining FREE rungs, in one order defined once.
+ *
+ * LANE-EXHAUST-1: local Chromium -> your render service -> Jina. A skipped
+ * free rung pushes the crawl into the paid lane sooner than it needed to go,
+ * so every failure path routes through here rather than choosing its own.
+ */
 async function freeFallbackLadder(
   url: string,
   config: ResolvedConfig,

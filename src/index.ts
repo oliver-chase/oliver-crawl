@@ -212,7 +212,7 @@ export type { FailureClass } from './core/failure-class.js';
 export { looksLikeEmptyState } from './core/soft-404.js';
 export { looksLikeBlockPage } from './core/block-page.js';
 export { EXTRACTOR_VERSION } from './core/extractor-version.js';
-export { urlDedupKey, sameUrlResource } from './core/url-dedup-key.js';
+export { urlDedupKey } from './core/url-dedup-key.js';
 export { evaluateRobotsForUrl, parseRobots, userAgentToken, MAX_HONORED_CRAWL_DELAY_MS } from './fetch/robots-check.js';
 export { publishedCrawlDelayMs } from './lanes/own/index.js';
 export type { RobotsPolicy, RobotsCheckResult } from './fetch/robots-check.js';

@@ -403,7 +403,7 @@ Anything not listed here is not exported.
 |---|---|
 | `computeContentRegionHash(html)` | Structural hash, nav/footer-insensitive |
 | `probeCheapChangeSignal` · `cheapSignalsMatch` | Cheap pre-fetch change probe |
-| `urlDedupKey(url)` · `sameUrlResource(a, b)` | Canonical URL identity |
+| `urlDedupKey(url)` | Canonical URL identity |
 
 ### Discovery
 

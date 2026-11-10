@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { createCrawler } from '@/index';
 import type { CrawlTarget } from '@/core/types';
 import { publicDns } from '../helpers';
@@ -72,45 +72,41 @@ describe('page cache', () => {
 });
 
 describe('per-host throttle', () => {
-  test('off by default — concurrent same-host requests are not delayed', async () => {
-    globalThis.fetch = (async () => page()) as typeof fetch;
-    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns });
+  /** Starts the crawls under fake timers and returns the time each request reached the network. */
+  async function fetchTimes(config: { minHostIntervalMs?: number }, targets: Array<[typeof target, string]>): Promise<number[]> {
+    vi.useFakeTimers();
+    const times: number[] = [];
+    globalThis.fetch = (async () => {
+      times.push(Date.now());
+      return page();
+    }) as typeof fetch;
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns, ...config });
+    const all = Promise.all(targets.map(([t, url]) => crawler.crawl(t, url)));
+    await vi.advanceTimersByTimeAsync(2_000);
+    await all;
+    return times;
+  }
+  const sameHost: Array<[typeof target, string]> = ['a', 'b', 'c'].map((p) => [target, `https://venue.example.com/${p}`]);
 
-    const started = Date.now();
-    await Promise.all([
-      crawler.crawl(target, 'https://venue.example.com/a'),
-      crawler.crawl(target, 'https://venue.example.com/b'),
-      crawler.crawl(target, 'https://venue.example.com/c'),
-    ]);
-    expect(Date.now() - started).toBeLessThan(200);
+  test('off by default — concurrent same-host requests are not delayed', async () => {
+    const times = await fetchTimes({}, sameHost);
+    expect(new Set(times).size).toBe(1);
   });
 
-  // The real point: CONCURRENT callers must serialise, not all read the same
-  // "now" and fire together — the bug a naive last-request-time check has.
+  // CONCURRENT callers must serialise, not all read the same "now" and fire together.
   test('concurrent same-host requests are spaced by minHostIntervalMs', async () => {
-    globalThis.fetch = (async () => page()) as typeof fetch;
-    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns, minHostIntervalMs: 60 });
-
-    const started = Date.now();
-    await Promise.all([
-      crawler.crawl(target, 'https://venue.example.com/a'),
-      crawler.crawl(target, 'https://venue.example.com/b'),
-      crawler.crawl(target, 'https://venue.example.com/c'),
-    ]);
-    // 3 requests at a 60ms gap: the 3rd waits ~120ms.
-    expect(Date.now() - started).toBeGreaterThanOrEqual(100);
+    const times = await fetchTimes({ minHostIntervalMs: 60 }, sameHost);
+    expect(times).toHaveLength(3);
+    expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(60);
+    expect(times[2]! - times[1]!).toBeGreaterThanOrEqual(60);
   });
 
   test('different hosts never wait on each other', async () => {
-    globalThis.fetch = (async () => page()) as typeof fetch;
-    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns, minHostIntervalMs: 200 });
-
-    const started = Date.now();
-    await Promise.all([
-      crawler.crawl({ baseUrl: 'https://a.example.com', robotsPolicy: 'allow' }, 'https://a.example.com/x'),
-      crawler.crawl({ baseUrl: 'https://b.example.com', robotsPolicy: 'allow' }, 'https://b.example.com/x'),
+    const times = await fetchTimes({ minHostIntervalMs: 200 }, [
+      [{ baseUrl: 'https://a.example.com', robotsPolicy: 'allow' }, 'https://a.example.com/x'],
+      [{ baseUrl: 'https://b.example.com', robotsPolicy: 'allow' }, 'https://b.example.com/x'],
     ]);
-    expect(Date.now() - started).toBeLessThan(200);
+    expect(new Set(times).size).toBe(1);
   });
 });
 

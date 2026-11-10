@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { createCrawler } from '@/index';
 import { crawlSite } from '@/crawl-site';
 import { intervalForHost, recordHostLatency } from '@/core/host-throttle';
@@ -105,18 +105,18 @@ describe('include/exclude scoping', () => {
 
 describe('total run time budget', () => {
   test('stops cleanly at maxDurationMs and keeps what it gathered', async () => {
+    vi.useFakeTimers();
     globalThis.fetch = (async () => {
       await new Promise((r) => setTimeout(r, 60));
       return page('Slow page.');
     }) as typeof fetch;
 
     const seeds = Array.from({ length: 20 }, (_, i) => `https://venue.example.com/p/${i}`);
-    const started = Date.now();
-    const run = await crawlSite(crawler(), target, { seeds, maxPages: 20, maxDurationMs: 200 });
-    const elapsed = Date.now() - started;
+    const pending = crawlSite(crawler(), target, { seeds, maxPages: 20, maxDurationMs: 200 });
+    await vi.advanceTimersByTimeAsync(5_000);
+    const run = await pending;
 
-    // A page budget alone would have run all 20 (~1.2s).
-    expect(elapsed).toBeLessThan(900);
+    // A page budget alone would have run all 20; the time budget stops it after a handful.
     expect(run.truncated).toBe(true);
     expect(run.pages.length).toBeGreaterThan(0);
     expect(run.pages.length).toBeLessThan(20);
