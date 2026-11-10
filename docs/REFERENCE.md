@@ -392,8 +392,6 @@ Anything not listed here is not exported.
 | `summarizeStructuredData(jsonLd)` | Is any of this JSON-LD about the page's content? |
 | `diffContent(previous, current)` | What changed between two versions — re-extract the delta |
 | `findContentImages($, pageUrl)` | Images that plausibly carry the content (flyers, posters) |
-| `pickDetailLinks(links, keywords)` | Which link probably answers a still-missing field |
-| `extractJsonLdEvent` · `extractAllJsonLdEvents` · `extractJsonLdAddress` · `formatJsonLdAddress` | schema.org readers |
 | `classifyFailure(reason, detail)` | `transient` (retry) vs `structural` (needs a fix) |
 | `looksLikeEmptyState(text)` | "No results" pages that cost a model call to learn nothing |
 | `looksLikeBlockPage(text)` | A bot-wall interstitial wearing an HTTP 200 |
@@ -441,8 +439,6 @@ Anything not listed here is not exported.
 | Export | Purpose |
 |---|---|
 | `configFromEnv(overrides)` · `resolveConfig(config)` | Config helpers |
-| `createRungMemory` · `recallWinningRung` · `rememberWinningRung` · `forgetWinningRung` · `RUNG_MEMORY_TTL_MS` | Per-host rung memory |
-| `applyRecipe` · `parseStoredRecipe` | Replay a stored extraction recipe |
 | `availableVendorRungs` · `availableSearchProviders` | Which paid rungs your keys enable |
 | `DEFAULT_*` constants | Defaults, for callers who want to reason about them |
 

@@ -196,16 +196,12 @@ export { DEFAULT_MAX_TEXT_CHARS, DEFAULT_MAX_PAGES, DEFAULT_TIMEOUT_MS } from '.
 // incrementally often wants just the sanitiser or the JSON-LD reader before
 // it adopts the full crawler.
 export { sanitizeCrawledText, detectPromptInjectionSignals } from './guard/prompt-injection-guard.js';
-export { extractJsonLdEvent, extractAllJsonLdEvents } from './extract/jsonld-event.js';
-export { extractJsonLdAddress, formatJsonLdAddress } from './extract/jsonld-address.js';
 export { computeContentRegionHash } from './extract/content-region-hash.js';
 export { summarizeStructuredData } from './extract/structured-summary.js';
 export { findContentImages } from './extract/content-images.js';
 export type { ContentImage } from './extract/content-images.js';
 export { diffContent } from './extract/content-diff.js';
 export type { ContentDiff } from './extract/content-diff.js';
-export { pickDetailLinks } from './extract/detail-link-picker.js';
-export type { DetailLinkMatch, DetailKeywords } from './extract/detail-link-picker.js';
 export type { StructuredSummary } from './extract/structured-summary.js';
 export { isSafeHttpUrl } from './core/url-safety.js';
 export { classifyContentType, refineKindByUrl } from './core/content-kind.js';
@@ -216,8 +212,6 @@ export type { FailureClass } from './core/failure-class.js';
 export { looksLikeEmptyState } from './core/soft-404.js';
 export { looksLikeBlockPage } from './core/block-page.js';
 export { EXTRACTOR_VERSION } from './core/extractor-version.js';
-export { createRungMemory, rememberWinningRung, recallWinningRung, forgetWinningRung, RUNG_MEMORY_TTL_MS } from './core/rung-memory.js';
-export type { RungMemory } from './core/rung-memory.js';
 export { urlDedupKey, sameUrlResource } from './core/url-dedup-key.js';
 export { evaluateRobotsForUrl, parseRobots, userAgentToken, MAX_HONORED_CRAWL_DELAY_MS } from './fetch/robots-check.js';
 export { publishedCrawlDelayMs } from './lanes/own/index.js';
@@ -235,10 +229,6 @@ export { renderViaService, renderServiceFrom } from './fetch/browser-render.js';
 export type { RenderResult } from './fetch/browser-render.js';
 export { probeCheapChangeSignal, cheapSignalsMatch } from './fetch/cheap-change-probe.js';
 export type { CheapChangeSignal } from './fetch/cheap-change-probe.js';
-// Recipe REPLAY only — learning a recipe is domain-specific and stays with the
-// consumer (see src/extract/extraction-recipe.ts's header).
-export { applyRecipe, parseStoredRecipe } from './extract/extraction-recipe.js';
-export type { ExtractionRecipe, RecipeDraft, RecipeFieldRule } from './extract/extraction-recipe.js';
 export {
   assertHostResolvesToPublicAddress,
   assertRequestUrlAllowed,

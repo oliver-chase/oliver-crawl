@@ -110,7 +110,6 @@ for (const row of await db.sources.sample(50)) {
 - **Turning pages into your objects.** You get `text`, `markdown`, `jsonLd`, `links` and `title`, and the mapping to your records stays in your code. Read `jsonLd` before reaching for a model, since it is free and exact
 - **Crawl state.** `run.validators` holds `{ etag, lastModified, bodySha256, contentRegionSha256, textSha256 }` per URL. Persist it and pass it back next run
 - **Pages behind a login.** The package sends credentials you hold and never acquires, stores or refreshes them (example below)
-- **Learning extraction recipes.** The package replays a stored recipe with `applyRecipe`. Judging whether a recipe is any good needs your domain's validity rules
 
 ```ts
 crawler.crawl(

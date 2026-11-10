@@ -194,10 +194,8 @@ src/
     structured-summary.ts is any of this JSON-LD actually about the content?
     content-images.ts    flyer/poster candidates (finding is free, reading is not)
     content-diff.ts      what changed, not just that something did
-    detail-link-picker.ts which link answers a still-missing field
-    jsonld-event.ts · jsonld-address.ts
     content-region-hash.ts · spa-content-extract.ts
-    pagination-discovery.ts · extraction-recipe.ts (replay only)
+    pagination-discovery.ts
   guard/
     prompt-injection-guard.ts
   lanes/

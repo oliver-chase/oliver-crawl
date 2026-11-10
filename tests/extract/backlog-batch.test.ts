@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as cheerio from 'cheerio';
 import { findContentImages } from '@/extract/content-images';
-import { pickDetailLinks } from '@/extract/detail-link-picker';
 import { diffContent } from '@/extract/content-diff';
 
 const PAGE_URL = 'https://venue.example.com/events';
@@ -56,45 +55,6 @@ describe('findContentImages', () => {
   });
 });
 
-// CRAWL-DETAILLINK-1 — mechanism ours, vocabulary the caller's
-describe('pickDetailLinks', () => {
-  const links = [
-    { url: 'https://venue.example.com/visit/parking', text: 'Parking & Directions' },
-    { url: 'https://venue.example.com/tickets', text: 'Buy tickets' },
-    { url: 'https://venue.example.com/about', text: 'About us' },
-  ];
-
-  test('matches a field to its most likely link', () => {
-    const picks = pickDetailLinks(links, { parking: ['parking'], price: ['ticket', 'admission'] });
-    const byField = Object.fromEntries(picks.map((p) => [p.field, p.link.url]));
-
-    expect(byField.parking).toContain('/visit/parking');
-    expect(byField.price).toContain('/tickets');
-  });
-
-  test('anchor text outweighs a path coincidence', () => {
-    // The author naming the link is stronger evidence than a path segment.
-    const picks = pickDetailLinks(
-      [
-        { url: 'https://venue.example.com/parking/archive/2019', text: 'Old news archive' },
-        { url: 'https://venue.example.com/p/9', text: 'Parking information' },
-      ],
-      { parking: ['parking'] },
-    );
-    expect(picks[0]!.link.url).toContain('/p/9');
-  });
-
-  test('returns one link per field, not three guesses', () => {
-    const picks = pickDetailLinks(links, { price: ['ticket', 'buy'] });
-    expect(picks.filter((p) => p.field === 'price')).toHaveLength(1);
-  });
-
-  test('no match yields nothing rather than a bad guess', () => {
-    expect(pickDetailLinks(links, { catering: ['catering', 'banquet'] })).toEqual([]);
-  });
-});
-
-// BETTER-DIFF-1 — pay to re-extract the delta, not the page
 describe('diffContent', () => {
   test('identical content reports no change', () => {
     const md = '## Shows\n\n- July 11 Test Band A\n\n- July 18 Test Band B';

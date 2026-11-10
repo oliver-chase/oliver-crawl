@@ -29,7 +29,6 @@ wrong the moment one changes.
 | `CRAWL-CONTENTKIND-1` | Stamp extractorVersion so an extraction improvement can reach pages already stored. Cannot be added retroactively. | `core/extractor-version.ts` | `core/consumer-signals.test.ts` |
 | `CRAWL-DEDUP-1` | Dedup on the RESOLVED url too — /home, /index and / commonly converge. | `crawl-site.ts` | `lanes/crawl-site.test.ts` |
 | `CRAWL-DEGRADE-1` | failureClass separates "retry later" from "needs a human". The useful distinction is not in `reason`. | `core/failure-class.ts` | `core/consumer-signals.test.ts` |
-| `CRAWL-DETAILLINK-1` | Rank links against caller-supplied keywords. Mechanism is generic; vocabulary is the caller's domain. | `extract/detail-link-picker.ts` | `extract/backlog-batch.test.ts` |
 | `CRAWL-FEED-1` | Read feeds, calendars, CSV and JSON. We discovered ICS feeds we could not then fetch. | `core/content-kind.ts` | `lanes/content-kinds.test.ts` |
 | `CRAWL-HARDEN-1` | Cap body bytes. An endless response otherwise ties up memory until the process dies. | `lanes/own/index.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-HASH-1` | Compare like with like. A structural hash against a text hash across a rung change reports a change that did not happen. | `core/types.ts` | `lanes/crawl-site.test.ts` |
