@@ -425,6 +425,32 @@ trap 'rm -f "$ID_LIST"' EXIT
 if [ ! -s "$ID_LIST" ]; then
   echo "  Gate 8 skipped (no owner identifier can be derived from git or docs/IDENTIFIER-GATE.json)."
 else
+  # A project names itself: its origin path, its repo name and its package name are not owner data, so a
+  # line is matched after those strings are removed. A bare author name in prose still blocks.
+  ID_SELF="$(mktemp "${TMPDIR:-/tmp}/oc-identifier-self.XXXXXX")"
+  trap 'rm -f "$ID_LIST" "$ID_SELF"' EXIT
+  {
+    id_self_remote="$(git remote get-url origin 2>/dev/null || true)"
+    id_self_remote="${id_self_remote%.git}"
+    case "$id_self_remote" in
+      *://*) id_self_path="${id_self_remote#*://}"; id_self_path="${id_self_path#*/}" ;;
+      *:*) id_self_path="${id_self_remote#*:}" ;;
+      *) id_self_path="" ;;
+    esac
+    printf '%s\n' "$id_self_path" "${id_self_path##*/}"
+    git show ":package.json" 2>/dev/null | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("name",""))
+except Exception: pass' || true
+  } | awk 'length($0) >= 4' | sort -u > "$ID_SELF"
+  ID_MATCHER='import re, sys
+words = [w.strip() for w in open(sys.argv[1]) if w.strip()]
+selfs = sorted((w.strip() for w in open(sys.argv[2]) if w.strip()), key=len, reverse=True)
+pattern = re.compile(r"(?<![A-Za-z0-9_])(?:" + "|".join(re.escape(w) for w in words) + r")(?![A-Za-z0-9_])", re.I) if words else None
+for number, line in enumerate(sys.stdin, 1):
+    for own in selfs:
+        line = re.sub(re.escape(own), " ", line, flags=re.I)
+    for match in (pattern.finditer(line) if pattern else []):
+        print(f"{number}:{match.group(0)}")'
   ID_LOCAL="$(id_array localData)"
   ID_HITS=0
   while IFS= read -r id_file; do
@@ -438,7 +464,7 @@ else
       case "$id_file" in $id_glob) id_skip=1; break ;; esac
     done <<< "$ID_LOCAL"
     [ "$id_skip" = 1 ] && continue
-    id_found="$(git show ":$id_file" 2>/dev/null | grep -InoiwF -f "$ID_LIST" || true)"
+    id_found="$(git show ":$id_file" 2>/dev/null | python3 -c "$ID_MATCHER" "$ID_LIST" "$ID_SELF" || true)"
     if [ -n "$id_found" ]; then
       while IFS= read -r id_line; do
         echo "  $id_file:${id_line%%:*} names the owner: ${id_line#*:}"

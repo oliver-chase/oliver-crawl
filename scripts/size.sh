@@ -42,6 +42,42 @@ kind() {
   esac
 }
 
+# --total in a git repo counts every tracked file's newlines in one pass, because the commit gate runs it
+# on every commit and a per-file `git show` costs seconds on a large repo.
+if [ "$mode" = total ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  STAGED="$staged" python3 - <<'PY'
+import os, subprocess, sys
+staged = os.environ["STAGED"] == "1"
+entries = subprocess.run(["git", "ls-files", "-s", "-z"], capture_output=True, check=True).stdout.split(b"\0")
+files = []
+for entry in entries:
+    if not entry:
+        continue
+    meta, _, path = entry.partition(b"\t")
+    mode, sha, _stage = meta.split()
+    path = os.fsdecode(path)
+    if os.path.isfile(path):
+        files.append((mode, sha.decode(), path))
+total = 0
+if staged:
+    blobs = [f for f in files if f[0] != b"160000"]
+    proc = subprocess.run(["git", "cat-file", "--batch"], input="".join(f"{sha}\n" for _, sha, _ in blobs).encode(), capture_output=True, check=True)
+    out, pos = proc.stdout, 0
+    for _ in blobs:
+        end = out.index(b"\n", pos)
+        header = out[pos:end].split()
+        size = int(header[2]) if len(header) == 3 and header[1] == b"blob" else 0
+        total += out[end + 1:end + 1 + size].count(b"\n")
+        pos = end + 1 + size + 1
+else:
+    for _, _, path in files:
+        with open(path, "rb") as handle:
+            total += handle.read().count(b"\n")
+print(total)
+PY
+  exit 0
+fi
+
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 while IFS= read -r f; do
