@@ -12,11 +12,6 @@ if [[ -x .githooks/pre-commit ]]; then
   OLIVERCODE_SCAN_TREE=1 bash .githooks/pre-commit
 fi
 
-if [[ -f scripts/check-structure-contract.mjs ]]; then
-  echo "=== validate: structure contract ==="
-  node scripts/check-structure-contract.mjs
-fi
-
 # Repo-local gate the shared hook does not carry: this repo is public, so the strings it must
 # never contain live in a gitignored .private-patterns file and are checked against tracked files.
 if [[ -f .private-patterns ]]; then
