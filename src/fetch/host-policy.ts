@@ -44,7 +44,7 @@ export const DEFAULT_DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
  */
 const DNS_SAFE_HOST_TTL_MS = 60_000;
 
-type SafeHostEntry = { pending: Promise<void>; at: number };
+type SafeHostEntry = { pending: Promise<DnsAddress[]>; at: number };
 
 /**
  * DNS-CACHE-BOUND-1: a crawl across many thousands of hosts used to grow this
@@ -81,11 +81,32 @@ function cacheFor(lookupFn: DnsLookupFn): Map<string, SafeHostEntry> {
 /** Test seam — a long-lived process should never need this. */
 export function __clearDnsCacheForTests(): void {
   DNS_SAFE_HOST_CACHE.clear();
+  APPROVED_ADDRESSES.clear();
 }
 
 /** Test seam: how many verdicts a resolver's cache holds. */
 export function __dnsCacheSizeForTests(lookupFn: DnsLookupFn): number {
   return DNS_SAFE_HOST_CACHE.get(lookupFn)?.size ?? 0;
+}
+
+// POOL-PIN-1: the addresses a host was approved at, so the connection goes to one of them and not to a
+// second DNS answer. Holds only addresses that passed the public-range check, so it can steer a
+// connection and never answers a check.
+const APPROVED_ADDRESSES = new Map<string, { addresses: DnsAddress[]; at: number }>();
+
+function rememberApproved(host: string, addresses: DnsAddress[]): void {
+  if (APPROVED_ADDRESSES.size >= DNS_SAFE_HOST_MAX_ENTRIES) {
+    const oldest = APPROVED_ADDRESSES.keys().next().value;
+    if (oldest !== undefined) APPROVED_ADDRESSES.delete(oldest);
+  }
+  APPROVED_ADDRESSES.delete(host);
+  APPROVED_ADDRESSES.set(host, { addresses, at: Date.now() });
+}
+
+/** The public addresses `host` was last approved at, or undefined once the approval has expired. */
+export function approvedAddressesFor(host: string): DnsAddress[] | undefined {
+  const entry = APPROVED_ADDRESSES.get(host.toLowerCase());
+  return entry && Date.now() - entry.at < DNS_SAFE_HOST_TTL_MS ? entry.addresses : undefined;
 }
 
 export function assertPublicHost(hostname: string): void {
@@ -94,7 +115,7 @@ export function assertPublicHost(hostname: string): void {
   }
 }
 
-function assertPublicResolvedAddress(address: string, family: number, hostname: string): void {
+export function assertPublicResolvedAddress(address: string, family: number, hostname: string): void {
   if (family === 4 && isPrivateIpv4(address)) {
     throw new Error(`Blocked DNS resolution to private IPv4 for crawl host "${hostname}": ${address}`);
   }
@@ -175,6 +196,7 @@ export async function assertHostResolvesToPublicAddress(
         }
         assertPublicResolvedAddress(record.address, record.family, hostname);
       }
+      return records;
     })();
 
     evictIfFull(cache);
@@ -182,7 +204,7 @@ export async function assertHostResolvesToPublicAddress(
   }
 
   try {
-    await pending;
+    rememberApproved(normalizedHost, await pending);
   } catch (error) {
     // Never cache a failure: one transient SERVFAIL would otherwise blacklist
     // a legitimate host for the life of the process.

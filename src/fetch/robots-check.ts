@@ -14,6 +14,7 @@
 // is the honest outcome. A missing robots.txt (404) is 'allow' per the
 // standard. Matches the caller's own user-agent group first, then '*'.
 
+import { pooledFetch } from './connection-pool.js';
 import { assertHostResolvesToPublicAddress, hostsMatchAllowingWww } from './host-policy.js';
 import { followManualRedirects, readBodyCapped } from './http-mechanics.js';
 import { DEFAULT_USER_AGENT } from '../core/config.js';
@@ -63,7 +64,7 @@ export async function evaluateRobotsForUrl(
   rawUrl: string,
   opts?: { fetchImpl?: typeof fetch; userAgent?: string; dnsLookup?: DnsLookupFn },
 ): Promise<RobotsCheckResult> {
-  const doFetch = opts?.fetchImpl ?? fetch;
+  const doFetch = opts?.fetchImpl ?? pooledFetch;
   const userAgent = opts?.userAgent ?? DEFAULT_USER_AGENT;
   let target: URL;
   let robotsUrl: URL;

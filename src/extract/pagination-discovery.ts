@@ -16,6 +16,7 @@
 // a source with no pagination at all, not an error. Paying for a render just
 // to DISCOVER a link (before the main crawl even runs) isn't a good trade.
 
+import { pooledFetch } from '../fetch/connection-pool.js';
 import { safeFetch } from '../fetch/safe-fetch.js';
 import { readBodyCapped } from '../fetch/http-mechanics.js';
 import { hostsMatchAllowingWww } from '../fetch/host-policy.js';
@@ -101,7 +102,7 @@ export async function discoverPaginatedUrls(
   seedUrl: string,
   opts?: { fetchImpl?: typeof fetch; userAgent?: string; dnsLookup?: DnsLookupFn },
 ): Promise<string[]> {
-  const doFetch = opts?.fetchImpl ?? fetch;
+  const doFetch = opts?.fetchImpl ?? pooledFetch;
   const visited = new Set<string>([seedUrl]);
   const discovered: string[] = [];
   let currentUrl = seedUrl;
