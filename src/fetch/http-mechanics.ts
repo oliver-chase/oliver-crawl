@@ -12,6 +12,7 @@
 import { decodeBody } from '../core/charset.js';
 import { assertRedirectUrlAllowedForHost, assertHostResolvesToPublicAddress } from './host-policy.js';
 import type { ResolvedConfig } from '../core/config.js';
+import { pooledFetch } from './connection-pool.js';
 
 /**
  * Parse a Retry-After header, which the spec allows in two forms: delay in
@@ -115,7 +116,7 @@ export async function fetchFollowingSafeRedirects(
   validators: { etag?: string | null; lastModified?: string | null } = {},
   extraHeaders: Record<string, string> = {},
   maxHops = 5,
-  doFetch: typeof fetch = fetch,
+  doFetch: typeof fetch = pooledFetch,
 ): Promise<Response> {
   const baseHost = url.hostname;
   const basePort = url.port || '';

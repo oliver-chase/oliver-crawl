@@ -99,6 +99,7 @@ wrong the moment one changes.
 | `QUARANTINE-TELEMETRY-1` | Every rung emits a usage event when it quarantines. A guard nobody can see firing teaches an operator nothing. | `lanes/own/index.ts` | `lanes/lane-exhaustion.test.ts` |
 | `OFFDOMAIN-WWW-1` | `www.` and apex are the same site; anything else is not. | `fetch/host-policy.ts` | `fetch/host-policy.test.ts` |
 | `PROBE-DNS-SEAM-1` | `probeCheapChangeSignal` takes an injectable `dnsLookup` like every other fetch path, so its success path is testable without real DNS. | `fetch/cheap-change-probe.ts` | `core/public-helpers.test.ts` |
+| `POOL-REUSE-1` | Direct fetches share one keep-alive pool whose idle lifetime is shorter than the DNS verdict lifetime, so a repeat request skips the handshake and a pooled socket never outlives the answer that approved it. | `fetch/connection-pool.ts` | `fetch/connection-pool.test.ts` |
 
 ## Decisions with no test
 
