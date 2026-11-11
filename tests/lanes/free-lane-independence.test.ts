@@ -4,7 +4,7 @@ import type { CrawlTarget } from '@/core/types';
 import { publicDns } from '../helpers';
 
 // The central promise: lane 1 works with NO keys, NO vendor accounts, and no
-// path by which a vendor is called. Asserted rather than claimed, because it
+// path by which a vendor is called. Asserted here, because it
 // is the whole reason the package exists — and a future change that quietly
 // made a vendor call reachable from the default path would break it silently.
 
@@ -105,7 +105,7 @@ describe('the paid lane cannot be reached by accident', () => {
     expect(vendorHits).toEqual([]);
   });
 
-  test('asking for the vendor lane with no key fails instead of silently succeeding', async () => {
+  test('asking for the vendor lane with no key fails and does not silently succeed', async () => {
     watchForVendorCalls();
     const crawler = createCrawler({ userAgent: 'MyBot/1.0', dnsLookup: publicDns });
 

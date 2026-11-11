@@ -4,7 +4,7 @@ import { crawlSite } from '@/crawl-site';
 import type { CrawlTarget } from '@/core/types';
 import { publicDns } from '../helpers';
 
-// CRAWLSITE-AUTOROBOTS-1, found by measuring whole-site coverage on live
+// CRAWLSITE-AUTOROBOTS-1, measured as whole-site coverage on live
 // sources: crawlSite validated its seeds against the RAW target before the
 // crawler could resolve robots, so with autoRobots on and no stored policy
 // every seed failed closed and the run returned zero pages — while a

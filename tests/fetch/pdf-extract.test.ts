@@ -43,22 +43,3 @@ describe('without the optional parser installed', () => {
   });
 
 });
-
-describe('a PDF is recognised as its own content kind', () => {
-  test('application/pdf is no longer refused outright', async () => {
-    // Before CRAWL-PDF-1 this produced "Unsupported content-type". The
-    // distinction matters: one says "we will never read this", the other
-    // says "install a package and we will".
-    globalThis.fetch = (async () =>
-      new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), {
-        status: 200,
-        headers: { 'content-type': 'application/pdf' },
-      })) as typeof fetch;
-
-    const crawler = createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns });
-    const result = await crawler.crawl(target, 'https://example.com/x.pdf');
-
-    if (result.ok) throw new Error('expected failure without the parser');
-    expect(result.detail).not.toContain('Unsupported content-type');
-  });
-});

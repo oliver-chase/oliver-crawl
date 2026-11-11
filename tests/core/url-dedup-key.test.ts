@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { urlDedupKey, sameUrlResource } from '@/core/url-dedup-key';
+import { urlDedupKey } from '@/core/url-dedup-key';
+
+/** Two URLs identify one resource when their keys are equal and non-empty. */
+const sameUrlResource = (a: string, b: string): boolean => Boolean(urlDedupKey(a)) && urlDedupKey(a) === urlDedupKey(b);
 
 describe('urlDedupKey — collapses spellings of one resource', () => {
   const cases: Array<[string, string, string]> = [

@@ -5,7 +5,8 @@
 
 import { classifyContentType } from '../../core/content-kind.js';
 import { looksLikeBlockPage } from '../../core/block-page.js';
-import { isQuarantined, buildPage, buildTextPage } from '../../fetch/build-page.js';
+import { isQuarantined, buildTextPage } from '../../fetch/build-page.js';
+import { buildRungPage, quarantined } from './rung-page.js';
 import { readBodyCapped, fetchFollowingSafeRedirects } from '../../fetch/http-mechanics.js';
 import { fetchViaWayback } from '../../fetch/wayback-fetch.js';
 import { fetchViaJina } from '../../fetch/jina-fetch.js';
@@ -38,31 +39,19 @@ export async function archiveFallback(
   });
   if (!archived.ok) return null;
 
-  const page = await buildPage({
-    url,
-    html: archived.html,
-    contentType: 'text/html',
-    etag: null,
-    lastModified: null,
-    baseHost: new URL(url).hostname,
-    maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
-    rung: 'archive',
-    includeHtml: options.includeHtml ?? false,
-    maxLinks: config.limits.maxLinksPerPage,
-    maxOutboundHosts: config.limits.maxOutboundHosts,
-  });
+  const page = await buildRungPage(config, options, {
+      url,
+      html: archived.html,
+      contentType: 'text/html',
+      etag: null,
+      lastModified: null,
+      baseHost: new URL(url).hostname,
+      rung: 'archive',
+    });
 
   if (isQuarantined(page)) {
     const detail = 'Archived capture tripped the prompt-injection guard.';
-    emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-    // QUARANTINE-EVIDENCE-1: the refusal carries what tripped it.
-    return {
-      ok: false,
-      reason: 'quarantined',
-      detail,
-      lane: 'own',
-      quarantine: { signals: page.signals, text: page.text, title: page.title },
-    };
+    return quarantined(config, url, started, detail, page);
   }
   if (!page.text.trim() || looksLikeBlockPage(page.text)) return null;
 
@@ -152,8 +141,8 @@ export async function freeFallbackLadder(
 /**
  * Render rung: our own browser service, for pages whose content only exists
  * after JavaScript runs. Returns null when no service is configured (skip to
- * the next rung) — a configured-but-broken service reports the failure rather
- * than pretending the rung does not exist.
+ * the next rung) — a configured-but-broken service is reported as a failed usage
+ * event, and the ladder then moves on.
  */
 async function renderFallback(
   url: string,
@@ -174,32 +163,20 @@ async function renderFallback(
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: reason }),
   );
   if (localHtml) {
-    const localPage = await buildPage({
+    const localPage = await buildRungPage(config, options, {
       url,
       html: localHtml,
       contentType: 'text/html',
       etag: null,
       lastModified: null,
       baseHost: new URL(url).hostname,
-      maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
       rung: 'local-render',
-      includeHtml: options.includeHtml ?? false,
-      maxLinks: config.limits.maxLinksPerPage,
-      maxOutboundHosts: config.limits.maxOutboundHosts,
     });
     if (isQuarantined(localPage)) {
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
       // QUARANTINE-TELEMETRY-1: every rung reports its own quarantine.
       const detail = 'Locally rendered content tripped the prompt-injection guard.';
-      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-      // QUARANTINE-EVIDENCE-1: the refusal carries what tripped it.
-      return {
-        ok: false,
-        reason: 'quarantined',
-        detail,
-        lane: 'own',
-        quarantine: { signals: localPage.signals, text: localPage.text, title: localPage.title },
-      };
+      return quarantined(config, url, started, detail, localPage);
     }
     // LADDER-QUALITY-1: a rendered bot-wall interstitial is a rung FAILURE,
     // not content. Accepting it here beat the Jina rung, which retrieves the
@@ -217,32 +194,20 @@ async function renderFallback(
     const rendered = await renderViaService(url, config);
     if (!rendered) return null;
 
-    const page = await buildPage({
+    const page = await buildRungPage(config, options, {
       url: rendered.url,
       html: rendered.html,
       contentType: rendered.contentType,
       etag: null,
       lastModified: null,
       baseHost: new URL(url).hostname,
-      maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
       rung: 'browser-render',
-      includeHtml: options.includeHtml ?? false,
-      maxLinks: config.limits.maxLinksPerPage,
-      maxOutboundHosts: config.limits.maxOutboundHosts,
     });
 
     if (isQuarantined(page)) {
       emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
       const detail = 'Rendered content tripped the prompt-injection guard.';
-      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-      // QUARANTINE-EVIDENCE-1: the refusal carries what tripped it.
-      return {
-        ok: false,
-        reason: 'quarantined',
-        detail,
-        lane: 'own',
-        quarantine: { signals: page.signals, text: page.text, title: page.title },
-      };
+      return quarantined(config, url, started, detail, page);
     }
 
     // A render that still yields nothing is not a success — let the caller
@@ -291,30 +256,19 @@ async function proxyFallback(
       fail(`Unsupported content-type: ${contentType || 'unknown'}`);
       return null;
     }
-    const page = await buildPage({
+    const page = await buildRungPage(config, options, {
       url: response.url || requestUrl.toString(),
       html: await readBodyCapped(response, config.limits.maxBodyBytes),
       contentType,
       etag: response.headers.get('etag'),
       lastModified: response.headers.get('last-modified'),
       baseHost: requestUrl.hostname,
-      maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
       rung: 'proxy',
-      includeHtml: options.includeHtml ?? false,
-      maxLinks: config.limits.maxLinksPerPage,
-      maxOutboundHosts: config.limits.maxOutboundHosts,
     });
     if (isQuarantined(page)) {
       fail('quarantined');
       const detail = 'Content fetched through the proxy tripped the prompt-injection guard.';
-      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-      return {
-        ok: false,
-        reason: 'quarantined',
-        detail,
-        lane: 'own',
-        quarantine: { signals: page.signals, text: page.text, title: page.title },
-      };
+      return quarantined(config, url, started, detail, page);
     }
     if (!page.text.trim() || looksLikeBlockPage(page.text)) {
       fail('still blocked or empty');

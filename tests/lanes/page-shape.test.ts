@@ -5,13 +5,13 @@ import { publicDns } from '../helpers';
 
 // PAGE-SHAPE-1: every rung must return a COMPLETE and self-consistent page.
 //
-// Written after a refactor routed four rungs through one constructor and
+// Covers the four rungs that share one constructor and
 // silently dropped `markdown` on the paid lane. 600 tests stayed green,
 // because they asserted that rungs returned pages — never what was IN them.
 // A missing field surfaces as worse extraction, blamed on the sites.
 //
 // Each rung below is driven end to end and checked against the same contract,
-// so a change to any constructor fails here rather than in a consumer.
+// so a change to any constructor fails here, before a consumer sees it.
 
 const target: CrawlTarget = { baseUrl: 'https://site.example.com', robotsPolicy: 'allow', active: true };
 
@@ -31,7 +31,7 @@ const ICS = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'SUMMARY:A listing', 'END:VCALEND
  *
  * `derivedFromHtml` is the axis that actually varies: a rung that parsed HTML
  * can offer structure, one that received prose cannot. The honesty rule is
- * that the second reports empty rather than faking it — a rung change must
+ * that the second reports empty — a rung change must
  * never look like a content change.
  */
 function assertPageShape(page: CrawlPage, expected: { rung: string; lane: string; derivedFromHtml: boolean }) {
@@ -71,7 +71,7 @@ function assertPageShape(page: CrawlPage, expected: { rung: string; lane: string
     expect(page.markdown.length).toBeGreaterThan(0);
     expect(page.contentRegionSha256).toMatch(/^[a-f0-9]{64}$/);
   } else {
-    // No HTML to derive from: empty rather than faked (CRAWL-HASH-1).
+    // No HTML to derive from: left empty (CRAWL-HASH-1).
     expect(page.contentRegionSha256).toBe('');
   }
 }

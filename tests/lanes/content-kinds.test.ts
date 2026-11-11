@@ -84,7 +84,7 @@ describe('a real ICS feed can now be crawled', () => {
     expect(page.contentKind).toBe('calendar');
     expect(page.text).toContain('BEGIN:VCALENDAR');
     expect(page.text).toContain('Test Band A');
-    // No HTML to derive these from — empty rather than faked.
+    // No HTML to derive these from — left empty.
     expect(page.markdown).toBe('');
     expect(page.contentRegionSha256).toBe('');
     expect(page.links).toEqual([]);

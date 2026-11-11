@@ -36,6 +36,16 @@ describe('an injection payload in <title> does not reach the caller', () => {
     expect(r.pages[0]!.title).toBe('Outdoor Concert Series — Riverside Stage');
   });
 
+  test('an injection payload in the title quarantines the page and the title is not returned', async () => {
+    serve(`<html><head><title>${PAYLOAD}</title></head><body>${CLEAN_BODY}</body></html>`);
+    const r = await crawl('payload-title');
+
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('expected a quarantine');
+    expect(r.reason).toBe('quarantined');
+    expect(r.quarantine?.title).toBeNull();
+  });
+
   test('a page with no title still returns', async () => {
     serve(`<html><head></head><body>${CLEAN_BODY}</body></html>`);
     const r = await crawl('no-title');

@@ -9,9 +9,9 @@
 // It is also last: an archived copy is older than the live page by
 // definition, so it runs when the alternative is nothing at all.
 
-/** CDX index: which snapshots exist, newest first, successful captures only. */
 import { readBodyCapped } from './http-mechanics.js';
 
+/** CDX index: which snapshots exist, newest first, successful captures only. */
 const CDX_ENDPOINT = 'https://web.archive.org/cdx/search/cdx';
 /** `id_` returns the ORIGINAL bytes without the Archive's toolbar injection. */
 const SNAPSHOT_PREFIX = 'https://web.archive.org/web/';

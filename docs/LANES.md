@@ -32,7 +32,7 @@ The recovery rungs run on **any** failure of the direct fetch, not just one kind
 
 All three take the same path in the same order, and rung 7 runs before rung 10, and the proxy at rung 9 runs before Jina. A 403 is usually a bot wall, and a real browser — with a real TLS fingerprint, real headers and JavaScript execution — clears those where a bare `fetch` does not. Reaching for Jina first would skip infrastructure we control in favour of a third party, and every free rung skipped moves a crawl closer to the paid path.
 
-The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lanes/own/index.ts`) so the order can't drift between the failure paths as rungs are added. `tests/lanes/lane-exhaustion.test.ts` asserts it, including that a vendor is never called while a free rung could still have worked.
+The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lanes/own/fallback-rungs.ts`) so the order can't drift between the failure paths as rungs are added. `tests/lanes/lane-exhaustion.test.ts` asserts it, including that a vendor is never called while a free rung could still have worked.
 
 One rung is skipped conditionally: **a target carrying `headers` (credentials) never reaches rung 9 or 10.** Jina is a public third-party service that fetches the URL itself, so sending it a members-only URL would disclose that URL and its query string to a party you never agreed to share it with — and it would fail regardless, because Jina has none of your credentials. Rungs 7 and 8 still run: those are your own infrastructure. The proxy is skipped too, because the library cannot vouch for what a proxy does with credentials.
 
@@ -113,7 +113,7 @@ Two hashes are stored per page, and the comparison picks the right one:
 - **`contentRegionSha256`** — structural, ignores nav/header/footer/script, so a cookie-banner tweak is not a content change. The better signal, but **only computable from HTML**, so it is empty on text-only rungs (Jina, vendor markdown)
 - **`textSha256`** — hash of the delivered text. Always present, so always comparable, at the cost of moving when nav text changes
 
-`unchanged` uses the structural hash only when **both** runs have it, and falls back to the text hash otherwise. Comparing a structural hash against a text hash across a rung change reports a content change that did not happen; that was the defect this design replaced.
+`unchanged` uses the structural hash only when **both** runs have it, and falls back to the text hash otherwise. Comparing a structural hash against a text hash across a rung change reports a content change that did not happen, so the two are never compared.
 
 Both need the same loop: store `result.validators`, pass them back as `priorValidators`.
 

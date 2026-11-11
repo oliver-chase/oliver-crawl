@@ -4,7 +4,7 @@ Every `ID-N` referenced in the source has an entry here. `scripts/check-decision
 fails the build if a decision in the code is missing from this file, if an entry
 here describes code that no longer exists, or if a test invents an ID.
 
-**Why this file exists.** About 40% of non-blank lines in `src/` are comments,
+**Why this file exists.** Comments are a large share of `src/` (`npm run check:comments` prints the density),
 and most of them explain a decision by naming the defect it prevents. That is
 only durable if the records stay honest — otherwise a refactor quietly undoes a
 decision, or an entry outlives the code it described and becomes confidently
@@ -18,18 +18,18 @@ wrong the moment one changes.
 
 | ID | What it protects | Source | Test |
 |---|---|---|---|
-| `BETTER-DIFF-1` | Report what changed as well as the fact that it changed, so a consumer re-extracts the delta. | `extract/content-diff.ts` | `extract/backlog-batch.test.ts` |
+| `BETTER-DIFF-1` | Report what changed as well as the fact that it changed, so a consumer re-extracts the delta. | `extract/content-diff.ts` | `extract/content-images-and-diff.test.ts` |
 | `BETTER-LASTMOD-1` | A sitemap answers "which pages changed" in one request; conditional GET costs one request per page. Skip-only, because lastmod frequently lies. | `crawl-site.ts` | `fetch/sitemap-lastmod.test.ts` |
 | `BETTER-RUNGMEMORY-1` | Remember the rung that works per host. Store is PER CRAWLER — a module-level one leaks between crawlers with different identities. | `core/config.ts` | `core/rung-memory.test.ts` |
 | `BETTER-SOFT404-1` | Flag pages that loaded and say nothing. Advisory only: an empty state is often a true fact worth recording. | `core/soft-404.ts` | `core/consumer-signals.test.ts` |
-| `CACHE-POLICY-1` | The page cache is keyed on url+lanes and omits the target, so policy must run BEFORE the cache read or a second target reads what it was refused. | `index.ts` | `lanes/cache-policy.test.ts` |
+| `CACHE-POLICY-1` | The page cache is keyed on url, lanes, user agent, html option, text cap and target headers, and omits the target, so policy must run BEFORE the cache read or a second target reads what it was refused. | `index.ts` | `lanes/cache-policy.test.ts` |
 | `CI-NODE20-1` | Cross-runtime SHA-256 without assuming a Node-only API. | `core/hash.ts` | — |
-| `CRAWL-BACKOFF-1` | Obey Retry-After as stated. Our own schedule is a guess; the origin's is an instruction. | `crawl-site.ts` | — |
+| `CRAWL-BACKOFF-1` | Obey Retry-After as stated. Our own schedule is a guess; the origin's is an instruction. | `crawl-site.ts` | `fetch/request-shape.test.ts` |
 | `CRAWL-CONCURRENCY-1` | Parallelism is safe in searchAndCrawl only because host-throttle already serialises per host. Default 1. | `search-and-crawl.ts` | — |
 | `CRAWL-CONTENTKIND-1` | Stamp extractorVersion so an extraction improvement can reach pages already stored. Cannot be added retroactively. | `core/extractor-version.ts` | `core/consumer-signals.test.ts` |
 | `CRAWL-DEDUP-1` | Dedup on the RESOLVED url too — /home, /index and / commonly converge. | `crawl-site.ts` | `lanes/crawl-site.test.ts` |
 | `CRAWL-DEGRADE-1` | failureClass separates "retry later" from "needs a human". The useful distinction is not in `reason`. | `core/failure-class.ts` | `core/consumer-signals.test.ts` |
-| `CRAWL-FEED-1` | Read feeds, calendars, CSV and JSON. We discovered ICS feeds we could not then fetch. | `core/content-kind.ts` | `lanes/content-kinds.test.ts` |
+| `CRAWL-FEED-1` | Read feeds, calendars, CSV and JSON, so a feed that discovery finds can also be fetched. | `core/content-kind.ts` | `lanes/content-kinds.test.ts` |
 | `CRAWL-HARDEN-1` | Cap body bytes. An endless response otherwise ties up memory until the process dies. | `lanes/own/index.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-HASH-1` | Compare like with like. A structural hash against a text hash across a rung change reports a change that did not happen. | `core/types.ts` | `lanes/crawl-site.test.ts` |
 | `CRAWL-PDF-1` | The PDF parser is an optional install (`unpdf`), because a large hostile-input surface does not belong in every consumer's install. | `core/content-kind.ts` | `fetch/pdf-extract.test.ts` |
@@ -44,8 +44,8 @@ wrong the moment one changes.
 | `CRAWL-ROBOTS-1` | robots.txt was ported but never called. A governed crawler was only as governed as the caller's bookkeeping. | `lanes/own/robots-policy.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-UA-1` | Warn once when a User-Agent carries no contact. Operators block traffic they cannot ask about. | `core/config.ts` | `core/consumer-signals.test.ts` |
 | `CRAWL-UNCHANGED-1` | Hashes were computed and discarded. Comparing them is what makes re-crawls cheap for origins sending no ETag. | `crawl-site.ts` | `lanes/crawl-site.test.ts` |
-| `CRAWL-VALIDATE-1` | Conditional-GET headers were never actually sent; the test passed on a stub that returned 304 unconditionally. | `fetch/http-mechanics.ts` | `lanes/own-lane.test.ts` |
-| `CRAWL-VISION-1` | Rank images that plausibly carry the content. Finding them is free and ours; reading them is the caller's. | `core/types.ts` | `extract/backlog-batch.test.ts` |
+| `CRAWL-VALIDATE-1` | Conditional-GET headers go on the wire on every hop, so a real origin can answer 304. | `fetch/http-mechanics.ts` | `lanes/own-lane.test.ts` |
+| `CRAWL-VISION-1` | Rank images that plausibly carry the content. Finding them is free and ours; reading them is the caller's. | `core/types.ts` | `extract/content-images-and-diff.test.ts` |
 | `CRAWLSITE-AUTOROBOTS-1` | crawlSite checked eligibility before robots could resolve, so autoRobots did nothing for whole-site crawls. | `crawl-site.ts` | `lanes/crawlsite-autorobots.test.ts` |
 | `DEPLOY-BLOCKER-1` | The playwright import is invisible to bundler tracers. A plain import breaks serverless builds for consumers who never wanted it. | `fetch/local-render.ts` | — |
 | `GUARD-PRECISION-1` | Guard patterns tightened against real page copy that was being quarantined. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
@@ -66,7 +66,7 @@ wrong the moment one changes.
 | `GUARD-REDACT-1` | Redaction follows detection: only patterns that raised a signal are redacted. The loop ran every pattern over un-stripped text while detection evaluates `encoded-payload` URL-free, so GUARD-PRECISION-3 removed the false quarantine and left the false REDACTION — an ordinary page had a working asset URL silently replaced mid-string in both `text` and `markdown`. It also restores the inference that a non-zero `redactionCount` means an injection was present. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `HOST-CACHE-SCOPE-1` | A module-level DNS cache shared by every crawler let one crawler's observation answer another's security check. | `core/rung-memory.ts` | `core/rung-memory.test.ts` |
 | `JINA-CREDENTIAL-1` | Never send a credentialed target's URL to a public proxy. It discloses the URL and cannot succeed anyway. | `lanes/own/fallback-rungs.ts` | `lanes/lane-exhaustion.test.ts` |
-| `JINA-SELFHOST-1` | The reader endpoint is configurable. A rung advertised as free should not depend on one third party's uptime. | `core/types.ts` | — |
+| `JINA-SELFHOST-1` | The reader endpoint is configurable. A rung advertised as free should not depend on one third party's uptime. | `core/types.ts` | `fetch/request-shape.test.ts` |
 | `JSONLD-SIGNAL-1` | Report whether structured data is about the CONTENT. `jsonLd.length > 0` is a misleading test. | `core/types.ts` | `extract/structured-summary.test.ts` |
 | `LADDER-QUALITY-1` | A bot-wall interstitial is a rung failure, not content. Accepting it beat the rung holding the real page. | `core/block-page.ts` | `lanes/block-page.test.ts` |
 | `LANE-EXHAUST-1` | Every failure path exhausts the free rungs in one order, defined once. A skipped free rung reaches the paid lane sooner. | `lanes/own/fallback-rungs.ts` | `lanes/lane-exhaustion.test.ts` |
@@ -76,7 +76,7 @@ wrong the moment one changes.
 | `PDF-TIMEOUT-1` | Parsing is time-bounded. The bytes are attacker-supplied and a hostile PDF can send a parser into work that never finishes; a hang is worse than a failure, because nothing reports and nothing retries. | `fetch/pdf-extract.ts` | `fetch/pdf-extract.test.ts` |
 | `PAGE-SHAPE-1` | Every rung returns a complete, self-consistent page, checked against one contract. Written after a refactor dropped `markdown` on the paid lane with 600 tests green — they asserted rungs returned pages, never what was in them. | `fetch/build-page.ts` | `lanes/page-shape.test.ts` |
 | `PARITY-ACTIONS-1` | Browser actions before capture, bounded by library constants a caller cannot raise. | `core/types.ts` | `fetch/browser-actions.test.ts` |
-| `PARITY-HEADERS-1` | Send a plausible header set. A missing accept-language is an old bot tell; sec-ch-ua is deliberately NOT sent. | `fetch/http-mechanics.ts` | — |
+| `PARITY-HEADERS-1` | Send a plausible header set. A missing accept-language is an old bot tell; sec-ch-ua is deliberately NOT sent. | `fetch/http-mechanics.ts` | `fetch/request-shape.test.ts` |
 | `PARITY-MAP-1` | List a site's URLs without crawling it. One page body fetched. | `map-site.ts` | `lanes/map-site.test.ts` |
 | `PARITY-READABILITY-1` | Paragraphs vote for their parent when no semantic tag exists. Guardrails because a wrong pick loses content. | `extract/main-region.ts` | `extract/html-to-markdown.test.ts` |
 | `READABILITY-CHROME-1` | Scoring ran before chrome removal, so a prose-heavy sidebar could win and the later strip could not undo it. | `extract/main-region.ts` | `extract/html-to-markdown.test.ts` |

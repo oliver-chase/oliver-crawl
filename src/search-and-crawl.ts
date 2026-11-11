@@ -103,22 +103,18 @@ export async function searchAndCrawl(
   };
 
   const lanes = Math.max(1, Math.floor(options.concurrency ?? 1));
-  if (lanes === 1) {
-    for (const result of found.results) await readOne(result);
-  } else {
-    // Fixed pool of workers pulling from a shared cursor — bounded memory and
-    // bounded in-flight requests regardless of how many results came back.
-    const queue = [...found.results];
-    await Promise.all(
-      Array.from({ length: Math.min(lanes, queue.length) }, async () => {
-        for (;;) {
-          const next = queue.shift();
-          if (!next) return;
-          await readOne(next);
-        }
-      }),
-    );
-  }
+  // Fixed pool of workers pulling from a shared queue — bounded memory and bounded in-flight requests
+  // regardless of how many results came back. One worker is the sequential case.
+  const queue = [...found.results];
+  await Promise.all(
+    Array.from({ length: Math.min(lanes, queue.length) }, async () => {
+      for (;;) {
+        const next = queue.shift();
+        if (!next) return;
+        await readOne(next);
+      }
+    }),
+  );
 
   return { ok: true, results: found.results, pages, skipped, provider: found.provider };
 }

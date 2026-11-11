@@ -58,9 +58,3 @@ export function urlDedupKey(rawUrl: string): string {
   // Only the host is case-insensitive. Most servers treat /A and /a as different pages, so the path and query keep their case.
   return `${host}${path}${query}`;
 }
-
-/** True when two URLs identify the same resource for dedup purposes. */
-export function sameUrlResource(a: string, b: string): boolean {
-  const keyA = urlDedupKey(a);
-  return Boolean(keyA) && keyA === urlDedupKey(b);
-}

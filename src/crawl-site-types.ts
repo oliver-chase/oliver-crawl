@@ -58,7 +58,7 @@ export type SiteCrawlOptions = CrawlOptions & {
    */
   maxDurationMs?: number;
   /** Per-URL conditional-GET validators from a previous run, keyed by URL —
-   *  exactly the shape `result.validators` (and `config.onSignals`) hands
+   *  exactly the shape `result.validators` (and the `onSignals` option) hands
    *  back, so the round-trip is: crawl → persist → pass here next run. */
   priorValidators?: Record<
     string,

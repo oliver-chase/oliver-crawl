@@ -17,7 +17,7 @@ import type { CrawlTarget } from '@/core/types';
 // repos on trust alone.
 //
 // The DNS lookup is injectable (lookupFn), so the rebinding cases below are
-// exercised against a stub rather than the network — deterministic, offline,
+// exercised against a stub, with no network — deterministic, offline,
 // and able to express answers a real resolver would rarely hand back.
 
 function makeSource(overrides: Partial<CrawlTarget> = {}): CrawlTarget {
@@ -85,19 +85,19 @@ describe('assertHostResolvesToPublicAddress — DNS rebinding defence', () => {
     ).resolves.toBeUndefined();
   });
 
-  test('rejects an empty DNS answer rather than treating it as safe', async () => {
+  test('rejects an empty DNS answer', async () => {
     await expect(assertHostResolvesToPublicAddress('empty-answer.example.com', async () => [])).rejects.toThrow(
       /no addresses/i,
     );
   });
 
-  test('rejects a malformed address rather than treating it as safe', async () => {
+  test('rejects a malformed address', async () => {
     await expect(
       assertHostResolvesToPublicAddress('bad-answer.example.com', lookupTo('not-an-ip')),
     ).rejects.toThrow(/invalid address/i);
   });
 
-  test('surfaces a resolver failure instead of allowing the crawl', async () => {
+  test('surfaces a resolver failure and does not allow the crawl', async () => {
     const lookup = async () => {
       throw new Error('SERVFAIL');
     };
@@ -244,7 +244,7 @@ describe('assertRedirectUrlAllowed / ForHost — redirect following', () => {
   });
 });
 
-// HOST-CACHE-SCOPE-1 (found by live validation): the safe-host cache was a
+// HOST-CACHE-SCOPE-1 (seen in live validation): the safe-host cache was a
 // single module-level Map, so a host validated by ONE crawler was trusted by
 // every other crawler in the process — including one deliberately configured
 // with a different resolver. A resolver is part of a crawler's security

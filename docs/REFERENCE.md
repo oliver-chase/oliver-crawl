@@ -12,24 +12,14 @@ Most scraping libraries give you "URL in, text out". This one also answers *shou
 
 ## Why two paths
 
-| | Free path: `own` | Paid path: `vendor` |
-|---|---|---|
-| **Cost** | Free | Per call, billed by the vendor |
-| **Keys needed** | None | One per vendor |
-| **Runs on** | Your infrastructure | Theirs |
-| **Handles** | HTML, JSON-LD, SPA payloads, conditional GET | JS-heavy pages, hard bot walls |
-| **Default?** | Yes | No — opt in explicitly |
-
-The free path handles the large majority of real pages. The paid path covers what it genuinely cannot reach: an origin behind a commercial anti-bot service, where the differentiator is a residential proxy pool that cannot be replicated for free.
-
-**Nothing bills unless a call asks it to.** `lanes` defaults to `['own']`, and a missing vendor key disables that rung alone and the crawl continues.
+The free `own` path needs no keys and runs on your machine. The paid `vendor` path is opt-in and bills per call. [LANES](LANES.md) holds the comparison and the rung order. Nothing bills unless a call asks it to: `lanes` defaults to `['own']`, and a missing vendor key disables that rung alone.
 
 ---
 
 ## Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl
+npm install github:oliver-chase/oliver-crawl#<tag>
 ```
 
 ## Use
@@ -37,7 +27,7 @@ npm install github:oliver-chase/oliver-crawl
 ```ts
 import { createCrawler, configFromEnv } from '@oliver/crawl-core';
 
-const crawler = createCrawler(configFromEnv({ userAgent: 'MyBot/1.0 (+https://mysite.example/bot)' }));
+const crawler = createCrawler(configFromEnv(process.env, { userAgent: 'MyBot/1.0 (+https://mysite.example/bot)' }));
 const target = { baseUrl: 'https://events.example.org', robotsPolicy: 'allow' } as const;
 const result = await crawler.crawl(target, 'https://events.example.org/shows');
 
@@ -132,7 +122,7 @@ const run = await crawlSite(crawler, target, {
 run.pages;        // everything fetched and parsed
 run.notModified;  // URLs that answered 304 — unchanged, and NOT failures
 run.failures;     // per-URL, so one bad page never sinks the run
-run.truncated;    // true if it stopped at maxPages rather than running out
+run.truncated;    // true if it stopped at maxPages with URLs still queued
 ```
 
 Sequential by design (one request at a time): hammering a small site in parallel is what gets a crawler blocked. Already-visited URLs are never re-fetched, so a "next page" link that loops back to page 1 terminates.
@@ -372,6 +362,7 @@ The own lane reads more than HTML. `page.contentKind` tells you what you got:
 | `json` | application/json, `+json` | empty |
 | `feed` | RSS, Atom, generic XML | empty |
 | `text` | text/plain | empty |
+| `pdf` | application/pdf | empty |
 
 Non-HTML kinds arrive verbatim in `page.text`. **Parsing them is yours** —
 the shape a feed or CSV should become is defined by your schema. Branch on
@@ -439,7 +430,7 @@ no HTML to convert — those rungs already deliver prose in `text`. Fall back to
 ## Complete API surface
 
 Everything the package exports, grouped by what you would reach for it to do.
-Anything not listed here is not exported.
+`src/index.ts` is the full list; the groups below cover what most callers reach for.
 
 ### Crawling
 
@@ -447,6 +438,8 @@ Anything not listed here is not exported.
 |---|---|
 | `createCrawler(config)` | The crawler. Everything else takes one. |
 | `crawlSite(crawler, target, options)` | Multi-page crawl: seeds, discovery, budgets, resume |
+| `crawlSites(crawler, targets, options)` | Many sites at once, each polite to its own host |
+| `createMemoryCrawlStore()` | The default `CrawlStore`; implement `CrawlStore` to keep a crawl's state elsewhere |
 | `mapSite(crawler, target, options)` | URLs a site has, without crawling them |
 | `searchSite(crawler, target, query)` | Search **within** a site using its own search — free |
 | `searchAndCrawl(crawler, query, options)` | Web search, then read the results |
@@ -505,7 +498,7 @@ Anything not listed here is not exported.
 
 | Export | Purpose |
 |---|---|
-| `configFromEnv(overrides)` · `resolveConfig(config)` | Config helpers |
+| `configFromEnv(env, overrides)` · `resolveConfig(config)` | Config helpers |
 | `availableVendorRungs` · `availableSearchProviders` | Which paid rungs your keys enable |
 | `DEFAULT_*` constants | Defaults, for callers who want to reason about them |
 
@@ -623,21 +616,13 @@ Checking a URL's literal hostname is not enough. An attacker who controls DNS fo
 - private, loopback, link-local, CGNAT, benchmarking and multicast ranges all refused
 - bare-integer hosts (`2130706433` == `127.0.0.1`) refused without decoding
 
-Covered by the host-policy suite — see the [README](../README.md#status) for current counts.
+Covered by the host-policy suite.
 
 ---
 
 ## Development
 
-```bash
-npm install
-npm run check     # typecheck + tests
-npm run build     # emit dist/
-```
-
-## Status
-
-Strict TypeScript that builds to `dist/` and is tested as a git-installed dependency. It has both lanes, the free-first rung ladder (fetch → local Chromium → your render service → Jina), self-governing robots, sitemap/feed/pagination discovery, JSON-LD, two independent re-crawl-cheapening mechanisms, recipe replay, the multi-page orchestrator, and web search. See [ADOPTING.md](ADOPTING.md) to use it in a repo, [LANES.md](LANES.md) for the lane model.
+`npm run check` runs the type check, the tests, the decision-record gate and the comment-budget gate. [README](../README.md#development) lists the other scripts.
 
 ## License
 

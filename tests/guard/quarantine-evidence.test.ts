@@ -110,8 +110,7 @@ describe('every rung that can quarantine reports its evidence', () => {
   // PDF and local-render are absent on purpose: PDF needs the optional `unpdf`
   // peer, which is not installed here, and local-render needs a real browser at
   // a real URL that the host guard refuses. Asserting a rung that never ran is
-  // the defect this suite exists to catch, so they stay uncovered and named
-  // rather than faked.
+  // the defect this suite exists to catch, so they stay uncovered and named.
 
   function expectEvidence(result: Awaited<ReturnType<ReturnType<typeof createCrawler>['crawl']>>, rung: string) {
     expect(result.ok, `${rung}: expected a refusal`).toBe(false);
@@ -180,7 +179,7 @@ describe('every rung that can quarantine reports its evidence', () => {
 
   test('the vendor lane reports evidence', async () => {
     // A paid page that trips the guard is still a page a consumer must be able
-    // to review rather than silently drop.
+    // to review.
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('api.firecrawl.dev')) {

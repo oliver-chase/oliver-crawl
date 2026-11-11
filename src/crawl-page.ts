@@ -13,15 +13,6 @@ import type { Crawler } from './index.js';
 import type { CrawlOptions, CrawlPage, CrawlTarget } from './core/types.js';
 import type { SiteCrawlFailure, SiteCrawlOptions, SiteCrawlResult } from './crawl-site-types.js';
 
-/**
- * A failure that retrying cannot fix. Retrying a blocked URL just burns the
- * budget to get the identical refusal — the origin implementation made the
- * same distinction with its TerminalCrawlError.
- */
-function isTerminal(reason: string): boolean {
-  return reason === 'blocked' || reason === 'quarantined' || reason === 'no_lane_available';
-}
-
 /** What the page step reads and writes: the run's collections, owned by crawlSite. */
 export type PageStepContext = {
   crawler: Crawler;
@@ -149,7 +140,7 @@ export function createPageProcessor(ctx: PageStepContext) {
 
       lastFailure = { url, reason: result.reason, detail: result.detail };
       // Retrying these produces the identical answer; spend the budget elsewhere.
-      if (isTerminal(result.reason) || result.failureClass === 'structural') break;
+      if (result.failureClass === 'structural') break;
       if (attempt < maxRetries) {
         // CRAWL-BACKOFF-1: when the origin SAID how long to wait (429/503 +
         // Retry-After), wait that long. Our own schedule is a guess; theirs

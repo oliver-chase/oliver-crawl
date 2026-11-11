@@ -1,0 +1,42 @@
+// ─── Live checks: web search ───────────────────────────────────────────────
+
+import { createCrawler, searchAndCrawl } from '../../dist/index.js';
+import { USER_AGENT, dns, check, assert, skipIfProviderUnavailable } from './harness.mjs';
+
+export async function searchChecks() {
+  console.log('\nSearch (skipped without a key)');
+  if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
+    const searchCrawler = createCrawler({
+      userAgent: USER_AGENT,
+      dnsLookup: dns,
+      autoRobots: true,
+      vendor: { serper: process.env.SERPER_API_KEY, tavily: process.env.TAVILY_API_KEY },
+    });
+
+    await check('web search returns usable results', async () => {
+      const found = await searchCrawler.search('rfc editor internet standards', { maxResults: 3 });
+      if (!found.ok) skipIfProviderUnavailable(found.detail);
+      assert(found.ok, `${found.reason}: ${found.detail}`);
+      assert(found.results.length > 0, 'no results');
+      assert(found.results.every((r) => r.url.startsWith('http')), 'an unsafe URL survived filtering');
+      return `${found.results.length} via ${found.provider}`;
+    });
+
+    await check('site: restriction narrows to one domain', async () => {
+      const found = await searchCrawler.search('standards', { site: 'rfc-editor.org', maxResults: 3 });
+      if (!found.ok) skipIfProviderUnavailable(found.detail);
+      assert(found.ok, `${found.reason}: ${found.detail}`);
+      assert(found.results.some((r) => r.url.includes('rfc-editor.org')), 'site: restriction had no effect');
+      return `${found.results.length} results`;
+    });
+
+    await check('searchAndCrawl reads the pages it finds', async () => {
+      const found = await searchAndCrawl(searchCrawler, 'rfc editor', { maxResults: 2 });
+      if (!found.ok) skipIfProviderUnavailable(found.detail);
+      assert(found.ok, `${found.reason}: ${found.detail}`);
+      return `${found.pages.length} read, ${found.skipped.length} skipped`;
+    });
+  } else {
+    console.log('  (no SERPER_API_KEY / TAVILY_API_KEY — search checks skipped)');
+  }
+}

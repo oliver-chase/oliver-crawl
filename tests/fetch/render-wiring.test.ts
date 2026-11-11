@@ -36,7 +36,7 @@ describe('the landing guard stays wired into the render path', () => {
     expect(renderFn).toMatch(/route\.abort\(\)/);
   });
 
-  test('a blocked hop aborts the render rather than returning content', () => {
+  test('a blocked hop aborts the render and returns no content', () => {
     expect(renderFn).toMatch(/blockedHops\.length > 0.*throw|throw new Error\(`Render blocked a redirect hop/s);
   });
 });
@@ -71,14 +71,14 @@ describe('subresource requests are screened too', () => {
 });
 
 describe('security refusals are reported, ordinary unavailability is not', () => {
-  // RENDER-SILENT-1 made the render rung report a blocked redirect instead of
-  // returning a bare null that looked like an uninstalled browser. Nothing
+  // RENDER-SILENT-1 made the render rung report a blocked redirect, where it used to
+  // return a bare null that looked like an uninstalled browser. Nothing
   // tested that reporting, and the decision is enforced by matching the text
   // of guard error messages — so rewording a guard would turn its reporting
   // off silently.
   //
   // These cases throw from the REAL guards and feed the ACTUAL message through
-  // the predicate, so a reworded guard message fails here rather than going
+  // the predicate, so a reworded guard message fails here and cannot go
   // quiet in production.
   const privateAddress = async () => [{ address: '127.0.0.1', family: 4 }];
 

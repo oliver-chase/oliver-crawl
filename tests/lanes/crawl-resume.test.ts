@@ -77,7 +77,7 @@ describe('progress snapshots are coherent', () => {
   });
 });
 
-describe('resuming continues instead of restarting', () => {
+describe('resuming continues where the run stopped', () => {
   test('a resumed run does not re-fetch pages already done', async () => {
     stub();
     const snapshots: CrawlProgress[] = [];

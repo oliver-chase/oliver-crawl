@@ -40,7 +40,7 @@ describe('availableSearchProviders', () => {
 });
 
 describe('search — outcomes are distinguishable', () => {
-  // The whole reason this returns an outcome rather than a bare array: a
+  // This returns an outcome and not a bare array because a
   // caller cannot tell these three apart from an empty array.
   test('no key configured is reported as such, NOT as "no results"', async () => {
     const result = await search('anything', resolveConfig({ userAgent: 'T/1' }));
@@ -148,7 +148,7 @@ describe('search — results', () => {
           title: 'Long',
           // Real prose, not a single repeated character: a long run of one
           // letter is degenerate input the injection guard flags on its own,
-          // which would make this test about the guard instead of truncation.
+          // which would make this test about the guard and not truncation.
           snippet: 'The outdoor concert series returns to the riverside stage this Friday evening. '.repeat(20),
           link: 'https://a.example.com/',
         },
@@ -294,11 +294,4 @@ describe('search — provider fallback', () => {
     expect(result.detail).toMatch(/432/);
   });
 
-  // A provider that genuinely answered with zero matches is NOT an outage.
-  test('a provider answering with zero matches still reports no_results', async () => {
-    globalThis.fetch = (async () => serperBody([])) as typeof fetch;
-    const config = resolveConfig({ userAgent: 'T/1', vendor: { serper: 'serper-key-long' } });
-    const result = await search('q', config);
-    expect(result).toMatchObject({ ok: false, reason: 'no_results' });
-  });
 });

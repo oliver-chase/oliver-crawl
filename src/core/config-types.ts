@@ -64,8 +64,8 @@ export type CrawlConfig = {
    * Off by default, deliberately: a consumer that already tracks robots
    * posture in its own database should keep that as the source of truth, and
    * silently adding a network call per target would be a surprise. Turned on,
-   * it makes the crawler self-governing — the result is cached per host for
-   * the process lifetime, so it costs one request per host, not per page.
+   * it makes the crawler self-governing — the result is cached per host (six
+   * hours for an answer, five minutes for a failure), so it costs one request per host, not per page.
    */
   autoRobots?: boolean;
   /** Default caps, overridable per request. */

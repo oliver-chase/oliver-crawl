@@ -36,7 +36,7 @@ describe('Crawl-delay is read from robots.txt', () => {
 describe('an absurd Crawl-delay cannot stall the crawler', () => {
   test('a one-day delay is capped', () => {
     // Sites really do publish Crawl-delay: 86400. Honouring it literally would
-    // hang a crawl rather than slow it politely.
+    // hang a crawl and would not slow it politely.
     const r = parseRobots('User-agent: *\nCrawl-delay: 86400\nAllow: /', 'mybot', '/');
     expect(r.crawlDelayMs).toBe(MAX_HONORED_CRAWL_DELAY_MS);
   });

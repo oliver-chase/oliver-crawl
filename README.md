@@ -54,7 +54,7 @@ Most pages answer a normal request, so the crawler starts there and moves to mor
 5. **Call a paid API.** Firecrawl and Apify handle sites that defeat the earlier methods
 6. **Read the archived copy.** The Internet Archive may hold a copy when every live method fails
 
-Steps 1 to 3 run on your machine or your own proxy. Step 4 uses a free public service. Paid APIs are opt-in with `lanes: ['own', 'vendor']`, and an API key alone never triggers a paid request. The archive step is off by default (`useArchiveFallback: true`) and runs only for a target whose robots posture is explicitly `allow`.
+Steps 1 to 3 run on your machine or your own proxy. Step 4 uses a free public service. Paid APIs are opt-in with `lanes: ['own', 'vendor']`, and an API key alone never triggers a paid request. The archive step is off unless you set `useArchiveFallback: true`, and it runs only for a target whose robots posture is explicitly `allow`.
 
 The cheaper methods go first because a `403` usually means the site spotted automated traffic, and a local browser clears many of those blocks without an external cost. The crawler also remembers for 30 minutes which method worked for each host, so the next request starts there. [LANES](docs/LANES.md) lists every rung in order.
 
@@ -89,7 +89,7 @@ if (!result.ok) {
 }
 ```
 
-`transient` failures (timeouts, DNS failures, 5xx responses, bot walls) are worth retrying later. `structural` failures (404s, robots exclusions, disabled targets) repeat until something changes, so consecutive structural failures identify a source to retire.
+`transient` failures (timeouts, resolver errors, 5xx responses, bot walls) are worth retrying later. `structural` failures (404s, robots exclusions, disabled targets, names with no DNS answer) repeat until something changes, so consecutive structural failures identify a source to retire.
 
 ## Design decisions
 
@@ -176,7 +176,7 @@ if (found.ok) {
 
 ## Configuration
 
-Only `userAgent` is needed, and it defaults to a generic identifier that triggers the contact warning. `configFromEnv()` reads the options below from environment variables:
+Only `userAgent` is needed, and it defaults to an identifier that names this library and not your deployment, so set your own. A `userAgent` with no contact URL logs a warning once. `configFromEnv()` reads the options below from environment variables:
 
 ```bash
 OLIVER_CRAWL_USER_AGENT="MyBot/1.0 (+https://mysite.example/bot)"
@@ -190,7 +190,7 @@ OLIVER_CRAWL_SERPER_KEY=...
 import { createCrawler, configFromEnv } from '@oliver/crawl-core';
 
 const crawler = createCrawler(
-  configFromEnv({
+  configFromEnv(process.env, {
     onUsage: (event) => myMetrics.record(event),   // every external call and its cost
     checkBudget: () => spentToday < myCap,         // consulted before every paid call
     renderWhenTextBelow: 600,
@@ -226,7 +226,7 @@ npm run bench    # crawls and recrawls six local hosts, prints pages per second,
 npm run live    # exercises the library against real websites
 ```
 
-The package is strict TypeScript and builds to `dist/`. Installation is also tested as a genuine Git dependency.
+The package is strict TypeScript and builds to `dist/`. CI packs the package and installs it into an empty project on every push.
 
 ## License
 

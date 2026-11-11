@@ -47,7 +47,7 @@ describe('assertPublicHost — the SSRF gate, called directly', () => {
   );
 });
 
-describe('fetchViaWayback — called directly rather than through the ladder', () => {
+describe('fetchViaWayback — called directly', () => {
   test('returns the archived body for a capture that exists', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -122,7 +122,7 @@ describe('probeCheapChangeSignal — the pre-fetch change probe', () => {
     expect(called).toBe(false);
   });
 
-  test('an unreachable host yields null rather than throwing', async () => {
+  test('an unreachable host yields null and does not throw', async () => {
     globalThis.fetch = (async () => {
       throw new Error('ECONNRESET');
     }) as typeof fetch;

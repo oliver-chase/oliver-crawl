@@ -33,7 +33,7 @@ describe('findNextPageUrl', () => {
     expect(findNextPageUrl(html, 'https://site.example.com/events')).toBeNull();
   });
 
-  // Code-review finding: a word-boundary check on "rel" also matches inside
+  // A word-boundary check on "rel" also matches inside
   // data-rel (a hyphen is a word boundary too) — a real pattern from
   // carousel/slider JS plugins ("next slide"), wholly unrelated to page-level
   // pagination.

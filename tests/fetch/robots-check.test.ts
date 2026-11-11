@@ -104,8 +104,8 @@ describe('evaluateRobotsForUrl (fetch layer)', () => {
   });
 });
 
-// The crawler's robots identity is derived from its configured User-Agent
-// rather than hardcoded, so a consumer's robots group actually matches the UA
+// The crawler's robots identity is derived from its configured User-Agent,
+// so a consumer's robots group actually matches the UA
 // it sends. Untested when first ported — added with the change.
 describe('userAgentToken', () => {
   test('takes the product token before the version', () => {

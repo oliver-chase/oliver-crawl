@@ -54,7 +54,7 @@ type SafeHostEntry = { pending: Promise<DnsAddress[]>; at: number };
  */
 const DNS_SAFE_HOST_MAX_ENTRIES = 10_000;
 
-function evictIfFull(scoped: Map<string, SafeHostEntry>): void {
+function evictIfFull(scoped: Map<string, { at: number }>): void {
   if (scoped.size < DNS_SAFE_HOST_MAX_ENTRIES) return;
   const now = Date.now();
   for (const [host, entry] of scoped) {
@@ -70,14 +70,17 @@ function evictIfFull(scoped: Map<string, SafeHostEntry>): void {
 
 const DNS_SAFE_HOST_CACHE = new Map<DnsLookupFn, Map<string, SafeHostEntry>>();
 
-function cacheFor(lookupFn: DnsLookupFn): Map<string, SafeHostEntry> {
-  let scoped = DNS_SAFE_HOST_CACHE.get(lookupFn);
+/** The map a resolver owns inside a process-wide cache, created on first use. */
+function scopedMap<V>(root: Map<DnsLookupFn, Map<string, V>>, lookupFn: DnsLookupFn): Map<string, V> {
+  let scoped = root.get(lookupFn);
   if (!scoped) {
     scoped = new Map();
-    DNS_SAFE_HOST_CACHE.set(lookupFn, scoped);
+    root.set(lookupFn, scoped);
   }
   return scoped;
 }
+
+const cacheFor = (lookupFn: DnsLookupFn) => scopedMap(DNS_SAFE_HOST_CACHE, lookupFn);
 
 /** Test seam — a long-lived process should never need this. */
 export function __clearDnsCacheForTests(): void {
@@ -97,15 +100,8 @@ type Approval = { addresses: DnsAddress[]; at: number };
 const APPROVED_ADDRESSES = new Map<DnsLookupFn, Map<string, Approval>>();
 
 function rememberApproved(lookupFn: DnsLookupFn, host: string, addresses: DnsAddress[]): void {
-  let scoped = APPROVED_ADDRESSES.get(lookupFn);
-  if (!scoped) {
-    scoped = new Map();
-    APPROVED_ADDRESSES.set(lookupFn, scoped);
-  }
-  if (scoped.size >= DNS_SAFE_HOST_MAX_ENTRIES) {
-    const oldest = scoped.keys().next().value;
-    if (oldest !== undefined) scoped.delete(oldest);
-  }
+  const scoped = scopedMap(APPROVED_ADDRESSES, lookupFn);
+  evictIfFull(scoped);
   scoped.delete(host);
   scoped.set(host, { addresses, at: Date.now() });
 }

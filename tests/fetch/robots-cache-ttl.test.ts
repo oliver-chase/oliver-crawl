@@ -59,7 +59,7 @@ describe('a resolved robots posture is cached, but not forever', () => {
 
     expect((await crawler.crawl(target, 'https://venue.example.com/a')).ok).toBe(true);
 
-    // The operator adds a Disallow. Before this fix the cached 'allow' held
+    // The operator adds a Disallow. With no expiry the cached 'allow' would hold
     // for the life of the process and we kept crawling over their refusal.
     disallowed = true;
     vi.setSystemTime(Date.now() + ROBOTS_CACHE_TTL_MS + 1000);

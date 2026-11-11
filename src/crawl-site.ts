@@ -265,14 +265,18 @@ export async function crawlSite(
         //
         // CRAWL-PARALLEL-1: pages still in flight are not done, so they go
         // back at the head of the queue and out of the visited set.
-        lastProgress = {
-          queue: [...running.values(), ...queue],
-          visited: [...visited].filter((key) => !running.has(key)),
-          depths: Object.fromEntries(depthOf),
-          collected: collectedSoFar(),
-        };
-        session.persist(lastProgress);
-        options.onProgress?.(lastProgress);
+        // The snapshot copies the visited set and depths, so it is built only when a store or an
+        // onProgress callback will read it. Building it for every page costs time quadratic in the page count.
+        if (options.store || options.onProgress) {
+          lastProgress = {
+            queue: [...running.values(), ...queue],
+            visited: [...visited].filter((key) => !running.has(key)),
+            depths: Object.fromEntries(depthOf),
+            collected: collectedSoFar(),
+          };
+          session.persist(lastProgress);
+          options.onProgress?.(lastProgress);
+        }
         if ((options.politenessDelayMs ?? 0) > 0 && queue.length > 0) {
           await sleep(options.politenessDelayMs!);
         }

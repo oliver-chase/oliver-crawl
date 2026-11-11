@@ -110,5 +110,7 @@ describe('the proxy rung', () => {
     await crawler.crawl(target, 'https://venue.example.com/x');
 
     expect(order.filter((o) => o.startsWith('proxy:'))).toEqual(['proxy:https://venue.example.com/x']);
+    // The off-site Location is never requested, by the proxy or by anything else.
+    expect(order.some((o) => o.includes('elsewhere.example.net'))).toBe(false);
   });
 });

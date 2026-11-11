@@ -7,7 +7,7 @@ import { publicDns } from '../helpers';
 
 // Ideas adapted from established crawlers (Scrapy's AutoThrottle,
 // LinkExtractor allow/deny, CLOSESPIDER_TIMEOUT), reimplemented to fit this
-// package's model rather than ported.
+// package's model.
 
 const target: CrawlTarget = { baseUrl: 'https://venue.example.com', robotsPolicy: 'allow', active: true };
 
@@ -43,7 +43,7 @@ describe('adaptive throttle', () => {
     expect(intervalForHost('unknown.example.com', 250, 2)).toBe(250);
   });
 
-  test('the average smooths rather than tracking one outlier', () => {
+  test('the average smooths one outlier', () => {
     for (let i = 0; i < 5; i++) recordHostLatency('h.example.com', 100);
     recordHostLatency('h.example.com', 5000); // one slow blip
     const interval = intervalForHost('h.example.com', 0, 1);

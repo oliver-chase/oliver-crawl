@@ -32,8 +32,8 @@ const navigationBranchRaw = source.slice(
 /**
  * Comments stripped before matching. The branch's own comment EXPLAINS why
  * route.continue() is wrong, so a test reading raw text matches the prose and
- * fails on correct code — it would be asserting against the documentation
- * rather than the behaviour.
+ * fails on correct code — it would assert against the documentation
+ * and not the behaviour.
  */
 const navigationBranch = navigationBranchRaw
   .replace(/\/\*[\s\S]*?\*\//g, '')

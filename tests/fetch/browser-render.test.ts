@@ -39,7 +39,7 @@ describe('renderServiceFrom — configuration', () => {
     expect(renderServiceFrom(config)).toBeNull();
   });
 
-  test('refuses a malformed endpoint rather than throwing', () => {
+  test('refuses a malformed endpoint and does not throw', () => {
     const config = resolveConfig({ userAgent: 'T/1', browserRender: { url: 'not a url' } });
     expect(renderServiceFrom(config)).toBeNull();
   });
@@ -90,7 +90,7 @@ describe('renderViaService', () => {
   });
 
   // Configured-but-broken is DIFFERENT from unconfigured, and must be
-  // reported rather than silently degraded — otherwise a dead render service
+  // reported — otherwise a dead render service
   // looks identical to one that was never set up.
   test('throws on a service error, so a broken service is visible', async () => {
     globalThis.fetch = (async () => new Response('upstream exploded', { status: 502 })) as typeof fetch;
@@ -135,7 +135,7 @@ describe('own lane — render rung integration', () => {
     expect(result.pages[0]!.text).toContain('Three real events, after JS.');
   });
 
-  test('a broken render service falls through to Jina rather than ending the crawl', async () => {
+  test('a broken render service falls through to Jina and the crawl continues', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('render.example.com')) return new Response('down', { status: 500 });

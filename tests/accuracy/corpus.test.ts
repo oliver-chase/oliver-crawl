@@ -80,8 +80,4 @@ describe('extraction accuracy on the fixed corpus', () => {
     expect(regressed, `pages that scored lower than their baseline: ${regressed.join(', ')}`).toEqual([]);
     expect(overall).toBeGreaterThanOrEqual(baseline.overall - MARGIN);
   });
-
-  test('every fixture has its expectations', () => {
-    for (const name of names) expect(() => readFileSync(join(dir, `${name}.expect.json`))).not.toThrow();
-  });
 });

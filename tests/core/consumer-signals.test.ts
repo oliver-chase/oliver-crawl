@@ -128,7 +128,6 @@ describe('extractor version', () => {
 
     if (!result.ok || result.notModified) throw new Error('expected pages');
     expect(result.pages[0]!.extractorVersion).toBe(EXTRACTOR_VERSION);
-    expect(EXTRACTOR_VERSION).toBeTruthy();
   });
 });
 

@@ -22,6 +22,23 @@ function endlessBody(counter: { bytes: number }): Response {
   return new Response(stream, { status: 200, headers: { 'content-type': 'text/plain' } });
 }
 
+describe('the byte cap counts bytes', () => {
+  test('multi-byte text stops at the cap in bytes, not characters', async () => {
+    let chunksPulled = 0;
+    const chunk = new TextEncoder().encode('€'.repeat(100)); // 300 bytes, 100 characters
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunksPulled++;
+        controller.enqueue(chunk);
+      },
+    });
+    const { readBodyCapped } = await import('@/fetch/http-mechanics');
+    await readBodyCapped(new Response(stream, { headers: { 'content-type': 'text/plain; charset=utf-8' } }), 3000);
+    // 3000 bytes is 10 chunks. A counter that counted characters would pull about 30.
+    expect(chunksPulled * 300).toBeLessThanOrEqual(3000 + 3 * 300);
+  });
+});
+
 describe('bounded reads', () => {
   test('a sitemap that never ends is cut near the cap', async () => {
     const counter = { bytes: 0 };

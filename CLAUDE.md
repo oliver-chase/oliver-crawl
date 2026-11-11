@@ -15,14 +15,12 @@ Read `docs/repo-structure-contract.md` and `docs/backlog-config.json` before wor
 **This repo is public, and a consumer's deploy depends on it staying that way.** A
 downstream app installs it as a git dependency, and npm resolves a GitHub dependency to
 `git+ssh` in the lockfile. An edge build host has no ssh key, so the install only works
-because npm falls back to https — and that fallback needs anonymous read. While this repo
-was private, that consumer's build failed at `npm clean-install` with
-`Permission denied (publickey)`. Making it private again breaks that build, and no change
-to the dependency spec avoids it: npm normalises `git+https://` to ssh either way.
+because npm falls back to https — and that fallback needs anonymous read. Making it private breaks that build with
+`Permission denied (publickey)`, and no change to the dependency spec avoids it: npm
+normalises `git+https://` to ssh either way.
 
-Comment density runs above the 25% guideline by design. The
-exported types and functions are the contract a consumer reads, so their fields carry the
-decisions. Block length is what actually fails.
+The exported types and functions are the contract a consumer reads, so their fields carry the
+decisions. `npm run check:comments` prints the density and fails on a comment block over 20 lines.
 
 Open work lives in the `oliver-crawl` GitHub Project. `docs/backlog-config.json` names it.
-`backlog` governs it. The one genuinely open item is an issue on the Project, and git log holds the resolved entries.
+`backlog` governs it, and git log holds the resolved entries.

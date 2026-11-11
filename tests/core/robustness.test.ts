@@ -21,7 +21,7 @@ describe('character encoding', () => {
 
   // The actual bug: a UTF-8 assumption silently mangles a latin-1 page, and
   // the corrupted text flows into the database and the LLM looking normal.
-  test('decodes windows-1252 correctly instead of mangling it', () => {
+  test('decodes windows-1252 correctly', () => {
     // 0xE9 is 'é' in windows-1252, invalid as standalone UTF-8.
     const bytes = new Uint8Array([0x63, 0x61, 0x66, 0xe9]); // "café"
     expect(decodeBody(bytes, 'text/html; charset=windows-1252')).toBe('café');
@@ -29,7 +29,7 @@ describe('character encoding', () => {
     expect(new TextDecoder().decode(bytes)).not.toBe('café');
   });
 
-  test('an unknown charset label degrades to utf-8 rather than throwing', () => {
+  test('an unknown charset label degrades to utf-8 and does not throw', () => {
     const bytes = new TextEncoder().encode('hello');
     expect(decodeBody(bytes, 'text/html; charset=not-a-real-charset')).toBe('hello');
   });
@@ -149,7 +149,7 @@ describe('searchAndCrawl', () => {
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
 
-  test('searches, then reads each result through the normal guards', async () => {
+  test('searches, reads each result through the normal guards and reports a blocked one as skipped', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('serper')) return serper(['https://a.example.com/page']);

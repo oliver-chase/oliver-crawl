@@ -51,7 +51,7 @@ export const DEFAULT_VENDOR_RUNG_ORDER = ['firecrawl', 'apify'];
 /** A deliberately generic default. Consumers SHOULD override it: an origin
  *  that wants to allow or block you cannot do either if every deployment
  *  claims the same identity, and robots.txt rules key off this string. */
-export const DEFAULT_USER_AGENT = 'OliverCrawl/0.1 (+https://github.com/oliver-chase/oliver-crawl)';
+export const DEFAULT_USER_AGENT = 'OliverCrawl (+https://github.com/oliver-chase/oliver-crawl)';
 
 /**
  * CRAWL-UA-1: a User-Agent with no way to reach you is a significant cause of

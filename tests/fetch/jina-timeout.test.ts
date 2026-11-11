@@ -9,7 +9,7 @@ import { fetchViaJina } from '@/fetch/jina-fetch';
 // the one number they set has to mean something on every rung.
 
 describe('the Jina rung honours the caller timeout', () => {
-  test('aborts at the caller budget rather than its own default', async () => {
+  test('aborts at the caller budget', async () => {
     const started = Date.now();
     const neverResolves: typeof fetch = ((_url: RequestInfo | URL, init?: RequestInit) =>
       new Promise((_resolve, reject) => {

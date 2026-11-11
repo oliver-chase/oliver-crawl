@@ -17,6 +17,19 @@ describe('the archive', () => {
   });
 });
 
+describe('the archive index query', () => {
+  test('asks only for successful captures', async () => {
+    const asked: string[] = [];
+    await fetchViaWayback('https://a.example.com/x', {
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        asked.push(String(input));
+        return new Response('[["timestamp","original"]]', { status: 200 });
+      }) as typeof fetch,
+    });
+    expect(new URL(asked[0]!).searchParams.get('filter')).toBe('statuscode:200');
+  });
+});
+
 describe('a sitemap index', () => {
   test('more child sitemaps than are read is reported as truncated', async () => {
     const target: CrawlTarget = { baseUrl: 'https://map.example.com', robotsPolicy: 'allow', active: true };

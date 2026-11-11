@@ -127,7 +127,7 @@ describe('a blocked host skips the wasted fetch next time', () => {
     expect(calls).toEqual(['fetch']);
   });
 
-  test('a stale memory self-heals instead of losing the page', async () => {
+  test('a stale memory self-heals and the page is kept', async () => {
     // The host stops blocking AND the remembered rung goes down. Without
     // self-healing this costs the PAGE: we skip the fetch that would now
     // work, jina fails, and there is nothing left.

@@ -5,7 +5,7 @@ import { publicDns } from '../helpers';
 
 // LANE-EXHAUST-1: lane 1 must be FULLY exhausted before lane 2 is reached.
 // Every free rung skipped is a page lost for free and a vendor billed
-// unnecessarily, so the order is asserted rather than assumed.
+// unnecessarily, so the order is asserted.
 
 const target: CrawlTarget = { baseUrl: 'https://venue.example.com', robotsPolicy: 'allow', active: true };
 

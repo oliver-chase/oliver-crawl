@@ -17,7 +17,8 @@ import { classifyContentType, refineKindByUrl } from '../../core/content-kind.js
 import { extractPdfText } from '../../fetch/pdf-extract.js';
 import { forgetWinningRung, shouldSkipDirectFetch } from '../../core/rung-memory.js';
 import { looksLikeBlockPage } from '../../core/block-page.js';
-import { isQuarantined, buildPage, buildTextPage } from '../../fetch/build-page.js';
+import { isQuarantined, buildTextPage } from '../../fetch/build-page.js';
+import { buildRungPage, quarantined } from './rung-page.js';
 import { dropBody, parseRetryAfter, readBodyCapped, readBytesCapped, fetchFollowingSafeRedirects } from '../../fetch/http-mechanics.js';
 import { assertHostResolvesToPublicAddress } from '../../fetch/host-policy.js';
 import { emitUsage } from '../../core/usage.js';
@@ -260,32 +261,20 @@ export async function crawlWithOwnLane(
       ],
     };
   }
-  const page = await buildPage({
-    url: response.url || requestUrl.toString(),
-    html,
-    contentType,
-    etag: response.headers.get('etag'),
-    lastModified: response.headers.get('last-modified'),
-    baseHost: requestUrl.hostname,
-    maxTextChars,
-    rung: 'fetch',
-    includeHtml: options.includeHtml ?? false,
-    maxLinks: config.limits.maxLinksPerPage,
-    maxOutboundHosts: config.limits.maxOutboundHosts,
-  });
+  const page = await buildRungPage(config, options, {
+      url: response.url || requestUrl.toString(),
+      html,
+      contentType,
+      etag: response.headers.get('etag'),
+      lastModified: response.headers.get('last-modified'),
+      baseHost: requestUrl.hostname,
+      maxTextChars,
+      rung: 'fetch',
+    });
 
   if (isQuarantined(page)) {
     const detail = 'Content tripped the prompt-injection guard and was quarantined.';
-    emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
-    // QUARANTINE-EVIDENCE-1: hand back what tripped it, so a consumer that must
-    // never lose a page can raise a review task instead of dropping it.
-    return {
-      ok: false,
-      reason: 'quarantined',
-      detail,
-      lane: 'own',
-      quarantine: { signals: page.signals, text: page.text, title: page.title },
-    };
+    return quarantined(config, url, started, detail, page);
   }
 
   if (!page.text.trim()) {

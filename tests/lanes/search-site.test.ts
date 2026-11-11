@@ -73,7 +73,7 @@ describe('results come from the content region, not the whole page', () => {
   });
 });
 
-describe('a site with no usable search answers rather than throws', () => {
+describe('a site with no usable search answers and does not throw', () => {
   test('every pattern 404ing yields ok:false with a reason', async () => {
     serve(() => new Response('', { status: 404 }));
     const found = await searchSite(crawler(), target, 'anything');
