@@ -13,12 +13,14 @@
 //   - not visiting the same URL twice
 //   - reporting per-URL outcomes without letting one bad page sink the run
 //
-// Sequential, not parallel, and deliberately so: the origin implementation ran
+// Sequential by default, parallel on request: the origin implementation ran
 // `maxConcurrency: 1`, and hammering a small venue site with parallel requests
-// is what gets a crawler blocked.
+// is what gets a crawler blocked. `concurrency` raises the global ceiling and
+// `perHostConcurrency` (default 1) keeps each host to one request at a time, so
+// a crawl across many hosts runs in parallel while every host stays polite.
 
 import { urlDedupKey } from './core/url-dedup-key.js';
-import { sleep } from './core/host-throttle.js';
+import { releaseHostSlot, sleep, tryAcquireHostSlot } from './core/host-throttle.js';
 import { assertRequestUrlAllowed, assertTargetEligible } from './fetch/host-policy.js';
 import { findNextPageUrl } from './extract/pagination-discovery.js';
 import type { Crawler } from './index.js';
@@ -83,6 +85,16 @@ export type SiteCrawlOptions = CrawlOptions & {
     string,
     { etag?: string | null; lastModified?: string | null; contentRegionSha256?: string; textSha256?: string }
   >;
+  /**
+   * CRAWL-PARALLEL-1: pages fetched at once across the whole run.
+   * Default 1, which is the sequential behavior every earlier version had.
+   * Raising it only helps when the queue spans several hosts, because
+   * `perHostConcurrency` still caps any one origin.
+   */
+  concurrency?: number;
+  /** Requests in flight to one host at once. Default 1: raise it only for
+   *  an origin you operate. `Crawl-delay` and the host throttle still apply. */
+  perHostConcurrency?: number;
   /** Pause between page fetches, ms. Sequential is already the default;
    *  this adds breathing room for small origins. 0 = none. */
   politenessDelayMs?: number;
@@ -392,18 +404,20 @@ export async function crawlSite(
   const alreadyCollected = options.resumeFrom?.collected ?? 0;
   const deadline = options.maxDurationMs ? Date.now() + options.maxDurationMs : Infinity;
 
-  while (queue.length > 0) {
-    if (alreadyCollected + pages.length + notModified.length >= maxPages) return done(true);
-    // Stop cleanly on the time budget, keeping everything gathered so far —
-    // a partial result is far more useful than an aborted run.
-    if (Date.now() >= deadline) return done(true);
+  const concurrency = Math.max(1, Math.floor(options.concurrency ?? 1));
+  const perHost = Math.max(1, Math.floor(options.perHostConcurrency ?? 1));
+  /** urlKey -> url for every fetch in flight, so a snapshot can keep them. */
+  const running = new Map<string, string>();
+  const hostOf = (candidate: string): string => {
+    try {
+      return new URL(candidate).hostname.toLowerCase();
+    } catch {
+      return '';
+    }
+  };
+  const collectedSoFar = () => alreadyCollected + pages.length + notModified.length;
 
-    const url = queue.shift()!;
-    const urlKey = urlDedupKey(url);
-    if (visited.has(urlKey)) continue;
-    visited.add(urlKey);
-    const depth = depthOf.get(urlKey) ?? 0;
-
+  const processUrl = async (url: string, urlKey: string, depth: number): Promise<void> => {
     const prior = options.priorValidators?.[url];
     const perPageOptions: CrawlOptions = {
       ...options,
@@ -510,27 +524,126 @@ export async function crawlSite(
     }
 
     if (!succeeded && lastFailure) failures.push(lastFailure);
+  };
 
-    // CRAWL-RESUME-1: emitted AFTER the URL is marked visited and after any
-    // discovery it produced is queued, so a snapshot is always a coherent
-    // "everything up to here is done" — never one that would re-fetch the
-    // page just handled, or lose the links it found.
-    //
-    // Emitted for failures too: a page that failed terminally is finished
-    // with, and a resume that retried it would repeat the same failure.
-    if (options.onProgress) {
-      options.onProgress({
-        queue: [...queue],
-        visited: [...visited],
-        depths: Object.fromEntries(depthOf),
-        collected: alreadyCollected + pages.length + notModified.length,
+  const inFlight = new Set<Promise<void>>();
+
+  const launch = (url: string, urlKey: string, depth: number) => {
+    const host = hostOf(url);
+    running.set(urlKey, url);
+    const task = processUrl(url, urlKey, depth)
+      .finally(() => {
+        running.delete(urlKey);
+        releaseHostSlot(host);
+      })
+      .then(async () => {
+        // CRAWL-RESUME-1: emitted AFTER the URL is marked visited and after
+        // any discovery it produced is queued, so a snapshot is always a
+        // coherent "everything up to here is done" — never one that would
+        // re-fetch the page just handled, or lose the links it found.
+        //
+        // Emitted for failures too: a page that failed terminally is finished
+        // with, and a resume that retried it would repeat the same failure.
+        //
+        // CRAWL-PARALLEL-1: pages still in flight are not done, so they go
+        // back at the head of the queue and out of the visited set.
+        if (options.onProgress) {
+          options.onProgress({
+            queue: [...running.values(), ...queue],
+            visited: [...visited].filter((key) => !running.has(key)),
+            depths: Object.fromEntries(depthOf),
+            collected: collectedSoFar(),
+          });
+        }
+        if ((options.politenessDelayMs ?? 0) > 0 && queue.length > 0) {
+          await sleep(options.politenessDelayMs!);
+        }
+      })
+      .finally(() => {
+        inFlight.delete(task);
       });
-    }
+    inFlight.add(task);
+  };
 
-    if ((options.politenessDelayMs ?? 0) > 0 && queue.length > 0) {
-      await sleep(options.politenessDelayMs!);
+  for (;;) {
+    let hostBlocked = false;
+    while (queue.length > 0 && running.size < concurrency) {
+      // Stop starting work at the page or time budget; what is in flight finishes.
+      if (collectedSoFar() + running.size >= maxPages) break;
+      // Stop cleanly on the time budget, keeping everything gathered so far —
+      // a partial result is far more useful than an aborted run.
+      if (Date.now() >= deadline) break;
+
+      let next = -1;
+      for (let i = 0; i < queue.length; i++) {
+        if (visited.has(urlDedupKey(queue[i]!))) {
+          queue.splice(i, 1);
+          i--;
+          continue;
+        }
+        // The slot is process-wide, so another crawl on the same host counts too.
+        if (tryAcquireHostSlot(hostOf(queue[i]!), perHost)) {
+          next = i;
+          break;
+        }
+      }
+      if (next < 0) {
+        hostBlocked = queue.length > 0;
+        break;
+      }
+
+      const url = queue.splice(next, 1)[0]!;
+      const urlKey = urlDedupKey(url);
+      visited.add(urlKey);
+      launch(url, urlKey, depthOf.get(urlKey) ?? 0);
     }
+    if (inFlight.size === 0) {
+      // Every queued host is held by another crawl in this process: wait for a slot.
+      if (hostBlocked) {
+        await sleep(20);
+        continue;
+      }
+      break;
+    }
+    await Promise.race(inFlight);
   }
 
-  return done(false);
+  const budgetHit = collectedSoFar() >= maxPages || Date.now() >= deadline;
+  return done(queue.length > 0 && budgetHit);
+}
+
+export type MultiSiteOptions = SiteCrawlOptions & {
+  /** Sites crawled at once. Default 4. Each site still honours its own
+   *  `concurrency` and `perHostConcurrency`, and the per-host slot is
+   *  process-wide, so two targets on one origin never exceed its limit. */
+  siteConcurrency?: number;
+};
+
+export type MultiSiteResult = { target: CrawlTarget; result: SiteCrawlResult };
+
+/**
+ * Crawl many targets in parallel, returning one result per target in input order.
+ *
+ * This is the fast path across a fleet of sites: each site stays sequential
+ * and polite, and the speed comes from running different origins together.
+ * It is `crawlSite` in a bounded pool and shares its options, throttle and
+ * host slots, so nothing here duplicates a rule.
+ */
+export async function crawlSites(
+  crawler: Crawler,
+  targets: CrawlTarget[],
+  options: MultiSiteOptions = {},
+): Promise<MultiSiteResult[]> {
+  const width = Math.max(1, Math.floor(options.siteConcurrency ?? 4));
+  const results: MultiSiteResult[] = new Array(targets.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < targets.length) {
+      const index = cursor++;
+      const target = targets[index]!;
+      results[index] = { target, result: await crawlSite(crawler, target, options) };
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(width, targets.length) }, worker));
+  return results;
 }

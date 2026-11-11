@@ -221,6 +221,26 @@ retrying it on resume would just repeat the failure.
 already persisted those when you received them. This resumes the work and leaves the
 results to you.
 
+### Crawling in parallel
+
+`crawlSite` fetches one page at a time unless you ask for more. Two options raise
+that, and a third runs many sites together:
+
+| Option | Default | Effect |
+|---|---|---|
+| `concurrency` | 1 | Pages in flight at once across the run |
+| `perHostConcurrency` | 1 | Requests in flight to one host. Raise it only for an origin you operate |
+| `siteConcurrency` | 4 | `crawlSites` only: sites crawled at once |
+
+```ts
+const runs = await crawlSites(crawler, targets, { followLinks: true, siteConcurrency: 8 });
+```
+
+The speed across a fleet comes from running different origins together, since each
+site stays polite. The per-host limit is counted for the whole process, so two
+targets on one origin share it. A snapshot taken mid-run puts the pages still in
+flight back at the head of the queue, so a resume repeats them and loses none.
+
 ## Searching within a site (free)
 
 `crawler.search()` asks a search engine, which always costs money. When you

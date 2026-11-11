@@ -38,10 +38,34 @@ const AVG_LATENCY_MS = new Map<string, number>();
  *  slow outlier dominating. */
 const LATENCY_SMOOTHING = 0.3;
 
+/**
+ * CRAWL-PARALLEL-1: requests in flight per host, process-wide. The gap
+ * above spaces requests out in time, and this caps how many overlap, so two
+ * crawls that share an origin still count as one load on it.
+ */
+const IN_FLIGHT = new Map<string, number>();
+
+/** Take one in-flight slot on a host, or report that the host is at its limit. */
+export function tryAcquireHostSlot(hostname: string, limit: number): boolean {
+  const host = hostname.toLowerCase();
+  const held = IN_FLIGHT.get(host) ?? 0;
+  if (held >= limit) return false;
+  IN_FLIGHT.set(host, held + 1);
+  return true;
+}
+
+export function releaseHostSlot(hostname: string): void {
+  const host = hostname.toLowerCase();
+  const held = (IN_FLIGHT.get(host) ?? 1) - 1;
+  if (held <= 0) IN_FLIGHT.delete(host);
+  else IN_FLIGHT.set(host, held);
+}
+
 /** Test seam. */
 export function __clearThrottleForTests(): void {
   NEXT_ALLOWED_AT.clear();
   AVG_LATENCY_MS.clear();
+  IN_FLIGHT.clear();
 }
 
 /** Record how long a host took to answer, for adaptive pacing. */
