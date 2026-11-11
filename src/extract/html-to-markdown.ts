@@ -15,19 +15,9 @@
 
 import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { AnyNode } from 'domhandler';
+import { CHROME_SELECTOR, isInputForm, selectMainRegion } from './main-region.js';
 
-/** Regions that are page furniture, never content. */
-const CHROME_SELECTOR =
-  'nav, header, footer, aside, script, style, noscript, template, svg, #comments, .comments, .comment-list, #disqus_thread, #respond';
-
-/**
- * A form that collects input is page furniture. A form that wraps the whole page (the pattern some
- * server frameworks emit) holds the content, so it is kept: it has several paragraphs or headings,
- * or a long body of text.
- */
-function isInputForm($form: Cheerio<AnyNode>): boolean {
-  return $form.find('p, h1, h2, h3').length < 3 && $form.text().length < 1500;
-}
+export { selectMainRegion };
 
 /** Escape the characters that would otherwise be read as markdown syntax. */
 function escapeInline(text: string): string {
@@ -36,93 +26,6 @@ function escapeInline(text: string): string {
 
 function collapse(text: string): string {
   return text.replace(/[ \t\r\n]+/g, ' ');
-}
-
-/**
- * The main-content root, in order of confidence:
- *
- *   1. The first `<main>` or `<article>` — the author told us, believe them.
- *   2. PARITY-READABILITY-1: on div-soup pages that never use
- *      semantic tags, score the content the Readability way — paragraphs
- *      vote for their parent — and take the winning cluster.
- *   3. `<body>`, when nothing scores — chrome stripping is then all we have.
- *
- * On the change hash: extract/content-region-hash.ts stays on its regex
- * region (semantic-or-body), so on div-soup pages the hash covers a SUPERSET
- * of the markdown scope. The divergence is deliberate and safe in exactly
- * one direction — the hash may report "changed" when the markdown region
- * did not move (a wasted re-extraction), never "unchanged" when it did
- * (silently stale data).
- */
-export function selectMainRegion($: CheerioAPI): Cheerio<AnyNode> {
-  const main = $('main').first();
-  if (main.length > 0) return main as Cheerio<AnyNode>;
-  // One article is the page's content. Several are a listing, and the first alone would drop the rest.
-  if ($('article').length === 1) return $('article').first() as Cheerio<AnyNode>;
-  const scored = scoreContentParent($);
-  if (scored) return scored;
-  return $('body') as Cheerio<AnyNode>;
-}
-
-/**
- * Readability's core move, simplified: paragraphs vote for their parent.
- *
- * Every text-bearing `<p>` adds its non-link text length to its parent's
- * score, discounted by link density — a paragraph that is mostly links is a
- * menu wearing a <p> tag, and gets almost no vote. The parent with the most
- * votes is where the prose lives; link farms, sidebars and footer nav score
- * near zero because their text IS their links.
- *
- * Guardrails, because a wrong pick here silently loses content:
- *   - a winner must hold a meaningful share (>= 40%) of the page's total
- *     paragraph mass — a page whose text is spread thin has no clear main
- *     region, and body-with-chrome-stripped is the honest answer;
- *   - fewer than 2 scoring paragraphs is no signal at all.
- */
-function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
-  const scores = new Map<AnyNode, number>();
-  let totalMass = 0;
-  let scoringParagraphs = 0;
-
-  $('p').each((_, p) => {
-    const $p = $(p);
-    // READABILITY-CHROME-1 (found in review): a paragraph inside
-    // nav/header/footer/aside is furniture and must not vote. Without this a
-    // prose-heavy sidebar outscores a short real article and is returned AS
-    // the main region — and because the winner is then a DESCENDANT of the
-    // chrome element, the later chrome strip cannot undo it (it removes
-    // chrome inside the scope, not the scope's own ancestors).
-    if ($p.closest(CHROME_SELECTOR).length > 0) return;
-    const $form = $p.closest('form');
-    if ($form.length > 0 && isInputForm($form as Cheerio<AnyNode>)) return;
-
-    const text = $p.text().trim();
-    if (text.length < 25) return; // too short to be prose
-
-    const linkText = $p.find('a').text().trim();
-    const linkDensity = text.length > 0 ? linkText.length / text.length : 1;
-    const vote = text.length * (1 - linkDensity);
-    if (vote <= 0) return;
-
-    scoringParagraphs++;
-    totalMass += vote;
-    const parent = $p.parent().get(0);
-    if (parent) scores.set(parent, (scores.get(parent) ?? 0) + vote);
-  });
-
-  if (scoringParagraphs < 2 || totalMass === 0) return null;
-
-  let best: AnyNode | null = null;
-  let bestScore = 0;
-  for (const [node, score] of scores) {
-    if (score > bestScore) {
-      best = node;
-      bestScore = score;
-    }
-  }
-
-  if (!best || bestScore / totalMass < 0.4) return null;
-  return $(best) as Cheerio<AnyNode>;
 }
 
 /**
