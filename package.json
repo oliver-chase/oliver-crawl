@@ -35,7 +35,8 @@
     "check": "npm run typecheck && npm run test && npm run check:decisions && npm run check:comments",
     "check:comments": "node scripts/check-comment-budget.mjs --quiet",
     "check:decisions": "node scripts/check-decisions.mjs",
-    "live": "npm run build && node scripts/live-check.mjs"
+    "live": "npm run build && node scripts/live-check.mjs",
+    "bench": "BENCH_PRINT=1 vitest run tests/bench"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

@@ -1,0 +1,10 @@
+{
+  "first": {
+    "requests": 126,
+    "bytes": 200676
+  },
+  "recrawl": {
+    "requests": 6,
+    "bytes": 0
+  }
+}

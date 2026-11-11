@@ -222,6 +222,7 @@ Open work lives in the `oliver-crawl` GitHub Project named in `docs/backlog-conf
 ```bash
 npm run check   # type check, unit tests (extraction accuracy included), decision-record gate, comment-budget gate
 npm run accuracy # scores extraction on the fixed corpus in tests/accuracy
+npm run bench    # crawls and recrawls six local hosts, prints pages per second, and fails check if requests or bytes grow
 npm run live    # exercises the library against real websites
 ```
 
