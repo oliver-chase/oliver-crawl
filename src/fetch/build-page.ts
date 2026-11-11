@@ -112,6 +112,13 @@ export async function buildPage(input: {
     return { quarantined: true, signals: sanitizedMarkdown.signals, text: sanitizedMarkdown.text, title };
   }
 
+  // An image's alt text is page content that reaches the caller, so it passes the guard like the text does.
+  const contentImages = findContentImages($, input.url);
+  for (const image of contentImages) {
+    const altGuard = sanitizeCrawledText(image.alt, input.maxTextChars);
+    if (altGuard.signals.length > 0) return { quarantined: true, signals: altGuard.signals, text: altGuard.text, title };
+  }
+
   const links: PageLink[] = [];
   const outbound = new Set<string>();
   $('a[href]').each((_, el) => {
@@ -142,7 +149,7 @@ export async function buildPage(input: {
     // footer are large would otherwise never look empty, which is exactly
     // the page this is meant to catch.
     likelyEmptyState: looksLikeEmptyState(sanitizedMarkdown.text || sanitized.text),
-    candidateContentImages: findContentImages($, input.url),
+    candidateContentImages: contentImages,
     extractorVersion: EXTRACTOR_VERSION,
     // BOTH fields, because an HTML page produces two. `markdown` is capped
     // independently and is the field the README tells consumers to feed a

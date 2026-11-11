@@ -76,6 +76,48 @@ export async function readBodyCapped(response: Response, maxBytes: number): Prom
   return decodeBody(merged, contentType);
 }
 
+/**
+ * CRAWL-PDF-CAP-1: read a binary body whole, or fail when it passes `maxBytes`. Unlike text, a truncated PDF
+ * is corrupt, so the read stops with an error and the rung reports the file as too large.
+ */
+export async function readBytesCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    if (buffer.byteLength > maxBytes) throw new Error(`Response too large: ${buffer.byteLength} > ${maxBytes}`);
+    return buffer;
+  }
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > maxBytes) throw new Error(`Response too large: more than ${maxBytes} bytes`);
+      chunks.push(value);
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  const merged = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged;
+}
+
+/**
+ * POOL-RELEASE-1: a response the crawler will not read still holds its connection until the body is read
+ * or cancelled, so every dropped response is cancelled. A refused 403 with a large body otherwise holds one
+ * of the pool's connections until the origin finishes sending it.
+ */
+export function dropBody(response: Response): void {
+  response.body?.cancel().catch(() => {});
+}
+
 export type RedirectWalk = {
   response: Response;
   finalUrl: URL;
@@ -105,6 +147,7 @@ export async function followManualRedirects(
     const location = response.headers.get('location');
     if (!location) return { response, finalUrl: current, stopped: 'no-location' };
     if (hop >= options.maxHops) return { response, finalUrl: current, stopped: 'max-hops' };
+    dropBody(response);
     current = await options.onRedirect(location, current);
   }
 }

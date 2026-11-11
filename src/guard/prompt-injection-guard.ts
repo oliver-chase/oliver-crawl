@@ -33,7 +33,7 @@ const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
     // any word between the verb and the noun broke the match. Attackers
     // phrase this naturally, not in a fixed template.
     source:
-      String.raw`(?:ignore|disregard|forget|override)\s+(?:all\s+)?(?:your|the|my|these|those|any\s+)?\s*(?:previous|prior|system|developer|initial|original|above|earlier)?\s*(?:instructions?|rules?|directives?|prompts?)`,
+      String.raw`(?:ignore|disregard|forget|override)\s+(?:(?:all|your|the|my|these|those|any)\s+)*(?:(?:previous|prior|system|developer|initial|original|above|earlier)\s+)*(?:instructions?|rules?|directives?|prompts?)`,
   },
   {
     id: 'system-prompt-exfil',
@@ -121,7 +121,9 @@ const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
     // Base64 of any real length carries mixed case AND digits; concatenated
     // English words carry neither. Requiring both, or explicit `=` padding,
     // separates them without shortening the run length.
-    source: String.raw`(?:(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[0-9])[A-Za-z0-9+/]{80,}={0,2}|[A-Za-z0-9+/]{80,}={1,2})`,
+    // GUARD-LINEAR-1: the run must start where the run starts, and the case and digit checks look only 200
+    // characters ahead, so a long run is scanned once and not once per start position.
+    source: String.raw`(?<![A-Za-z0-9+/])(?:(?=[A-Za-z0-9+/]{0,200}[A-Z])(?=[A-Za-z0-9+/]{0,200}[0-9])[A-Za-z0-9+/]{80,}={0,2}|[A-Za-z0-9+/]{80,}={1,2})`,
   },
 ];
 
@@ -211,6 +213,20 @@ export function detectPromptInjectionSignals(input: string): PromptInjectionSign
   return collectSignals(input);
 }
 
+/**
+ * GUARD-LINEAR-1: strips spaces and tabs before each newline in one pass. The regex `/[ \t]+\n/g` rescans a
+ * long run of spaces from every start position, which is quadratic on a body that is mostly spaces.
+ */
+function trimLineEnds(text: string): string {
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length - 1; i++) {
+    let end = lines[i]!.length;
+    while (end > 0 && (lines[i]![end - 1] === ' ' || lines[i]![end - 1] === '\t')) end--;
+    if (end < lines[i]!.length) lines[i] = lines[i]!.slice(0, end);
+  }
+  return lines.join('\n');
+}
+
 export function sanitizeCrawledText(input: string, maxChars = DEFAULT_MAX_TEXT_CHARS): SanitizedCrawlText {
   const originalLength = input.length;
   const signals = collectSignals(input);
@@ -244,7 +260,7 @@ export function sanitizeCrawledText(input: string, maxChars = DEFAULT_MAX_TEXT_C
     });
   }
 
-  sanitized = sanitized.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  sanitized = trimLineEnds(sanitized).replace(/\n{3,}/g, '\n\n').trim();
 
   const truncated = sanitized.length > maxChars;
   if (truncated) {

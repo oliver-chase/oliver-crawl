@@ -157,8 +157,11 @@ export async function discoverSitemapUrls(
   // A sitemap INDEX lists child sitemaps, not pages — follow same-site
   // children (bounded) and collect their pages instead.
   let pageEntries: SitemapEntry[] = [];
+  let childrenCapped = false;
   if (isSitemapIndex(xml)) {
-    const children = extractLocs(xml).slice(0, MAX_CHILD_SITEMAPS);
+    const allChildren = extractLocs(xml);
+    childrenCapped = allChildren.length > MAX_CHILD_SITEMAPS;
+    const children = allChildren.slice(0, MAX_CHILD_SITEMAPS);
     for (const child of children) {
       try {
         // Same-site enforcement on the child sitemap URL itself — an index
@@ -196,7 +199,7 @@ export async function discoverSitemapUrls(
   return {
     urls,
     entries,
-    truncated: pageEntries.length > urls.length && urls.length === maxUrls,
+    truncated: childrenCapped || (pageEntries.length > urls.length && urls.length === maxUrls),
     reason: urls.length === 0 ? 'Sitemap present but contained no same-site https URLs.' : '',
   };
 }

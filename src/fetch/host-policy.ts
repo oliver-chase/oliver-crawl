@@ -43,6 +43,7 @@ export const DEFAULT_DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
  * same resolver, same answer).
  */
 const DNS_SAFE_HOST_TTL_MS = 60_000;
+const DOH_TIMEOUT_MS = 8_000;
 
 type SafeHostEntry = { pending: Promise<DnsAddress[]>; at: number };
 
@@ -121,11 +122,13 @@ export function assertPublicHost(hostname: string): void {
   }
 }
 
-export function assertPublicResolvedAddress(address: string, family: number, hostname: string): void {
-  if (family === 4 && isPrivateIpv4(address)) {
+export function assertPublicResolvedAddress(address: string, _family: number, hostname: string): void {
+  // The checker is chosen from the address itself, because a resolver's family label can be wrong.
+  const version = getIpVersion(address);
+  if (version === 4 && isPrivateIpv4(address)) {
     throw new Error(`Blocked DNS resolution to private IPv4 for crawl host "${hostname}": ${address}`);
   }
-  if (family === 6 && isPrivateIpv6(address)) {
+  if (version === 6 && isPrivateIpv6(address)) {
     throw new Error(`Blocked DNS resolution to private IPv6 for crawl host "${hostname}": ${address}`);
   }
 }
@@ -150,7 +153,8 @@ async function queryDnsType(hostname: string, type: 'A' | 'AAAA', endpoint: stri
   const resolver = new URL(endpoint);
   resolver.searchParams.set('name', hostname);
   resolver.searchParams.set('type', type);
-  const response = await fetch(resolver, { headers: { accept: 'application/dns-json' }, cache: 'no-store' });
+  // Every other fetch in the package has a timeout, and a resolver that never answers must not hang a crawl.
+  const response = await fetch(resolver, { headers: { accept: 'application/dns-json' }, cache: 'no-store', signal: AbortSignal.timeout(DOH_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`DNS resolver returned ${response.status} ${response.statusText}`);
   return parseDohResponse((await response.json()) as DohResponse);
 }

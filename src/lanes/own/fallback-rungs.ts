@@ -139,7 +139,7 @@ export async function freeFallbackLadder(
     result.ok || !bodyReceived ? result : { ...result, bodyReceived: true };
 
   // Last, and only for an explicitly permitted target — see archiveFallback.
-  if (target) {
+  if (target?.robotsPolicy === 'allow') {
     const archived = await archiveFallback(url, config, options, started);
     // The archive capture is of the ORIGINAL url, so it is less wrong than a
     // live fetch of the new owner — but with archiveMaxAgeDays unset the

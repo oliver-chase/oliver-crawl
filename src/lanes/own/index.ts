@@ -18,7 +18,7 @@ import { extractPdfText } from '../../fetch/pdf-extract.js';
 import { forgetWinningRung, shouldSkipDirectFetch } from '../../core/rung-memory.js';
 import { looksLikeBlockPage } from '../../core/block-page.js';
 import { isQuarantined, buildPage, buildTextPage } from '../../fetch/build-page.js';
-import { parseRetryAfter, readBodyCapped, fetchFollowingSafeRedirects } from '../../fetch/http-mechanics.js';
+import { dropBody, parseRetryAfter, readBodyCapped, readBytesCapped, fetchFollowingSafeRedirects } from '../../fetch/http-mechanics.js';
 import { assertHostResolvesToPublicAddress } from '../../fetch/host-policy.js';
 import { emitUsage } from '../../core/usage.js';
 import { throttleHost, recordHostLatency } from '../../core/host-throttle.js';
@@ -79,6 +79,11 @@ export async function crawlWithOwnLane(
   // dropped and the normal ladder runs from the top. Without this, a rung
   // that goes down while a memory points at it costs the PAGE, not just an
   // extra request, and that would make this optimisation a liability.
+  // LANE-ONCE-1: when the remembered path fails, its ladder has already tried every later rung, so a failure
+  // of the direct fetch that follows returns that result and does not run the ladder a second time.
+  let spentLadder: CrawlResult | null = null;
+  const ladder = (...args: Parameters<typeof freeFallbackLadder>): Promise<CrawlResult> =>
+    spentLadder ? Promise.resolve(spentLadder) : freeFallbackLadder(...args);
   if (config.rungMemory !== false && shouldSkipDirectFetch(config.rungMemoryStore, requestUrl.hostname)) {
     const viaMemory = await freeFallbackLadder(
       url,
@@ -87,11 +92,13 @@ export async function crawlWithOwnLane(
       started,
       'Direct fetch skipped: this host is known to serve it only via a later rung.',
       hasCredentials(target),
+      target,
     );
     if (viaMemory.ok) return viaMemory;
     // A policy refusal is a decision, not a stale memory — do not re-probe.
     if (viaMemory.reason === 'blocked' || viaMemory.reason === 'quarantined') return viaMemory;
     forgetWinningRung(config.rungMemoryStore, requestUrl.hostname);
+    spentLadder = viaMemory;
   }
 
   // 2-4. Direct fetch, conditional when the caller has validators from a
@@ -111,7 +118,7 @@ export async function crawlWithOwnLane(
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // Direct fetch failed — exhaust every remaining FREE rung before giving
     // up (and long before anything paid is considered).
-    return freeFallbackLadder(url, config, options, started, detail, hasCredentials(target), target);
+    return ladder(url, config, options, started, detail, hasCredentials(target), target);
   }
 
   // How long the origin took is the input to adaptive pacing.
@@ -120,6 +127,7 @@ export async function crawlWithOwnLane(
   // A 304 is the whole point of sending validators: nothing changed, nothing
   // to parse, nothing charged. Reported distinctly from "empty".
   if (response.status === 304) {
+    dropBody(response);
     emitUsage(config, { lane: 'own', rung: 'conditional', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
     return { ok: true, pages: [], notModified: true };
   }
@@ -130,13 +138,14 @@ export async function crawlWithOwnLane(
     // behaviour that earns a crawler a ban, so the instruction is surfaced
     // for the retry loop to honour (see crawl-site.ts).
     const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+    dropBody(response);
     const detail = retryAfterMs
       ? `HTTP ${response.status} (origin asked to wait ${Math.round(retryAfterMs / 1000)}s)`
       : `HTTP ${response.status}`;
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // A 403/429/503 is where a real browser most often succeeds — render
     // rungs come BEFORE Jina here (LANE-EXHAUST-1).
-    const fallback = await freeFallbackLadder(url, config, options, started, detail, hasCredentials(target), target);
+    const fallback = await ladder(url, config, options, started, detail, hasCredentials(target), target);
     if (!fallback.ok && retryAfterMs) return { ...fallback, retryAfterMs };
     return fallback;
   }
@@ -146,6 +155,7 @@ export async function crawlWithOwnLane(
   if (!kindRaw) {
     // Still refused: images, video, PDFs, binaries. HTML-parsing a JPEG
     // produces confident nonsense, and a PDF needs a real parser.
+    dropBody(response);
     const detail = `Unsupported content-type: ${contentType || 'unknown'}`;
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return { ok: false, reason: 'empty', detail, lane: 'own' };
@@ -155,7 +165,21 @@ export async function crawlWithOwnLane(
   // CRAWL-PDF-1: a PDF is bytes, not text — decoding it as a string first
   // would corrupt it, so it is read and parsed before the text path.
   if (contentKind === 'pdf') {
-    const buffer = new Uint8Array(await response.arrayBuffer());
+    // CRAWL-PDF-CAP-1: the same byte cap as the text path, applied before the bytes are parsed.
+    const announced = Number(response.headers.get('content-length') || 0);
+    if (announced > config.limits.maxBodyBytes) {
+      const detail = `PDF too large: content-length ${announced} > ${config.limits.maxBodyBytes}`;
+      emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return { ok: false, reason: 'empty', detail, lane: 'own' };
+    }
+    let buffer: Uint8Array;
+    try {
+      buffer = await readBytesCapped(response, config.limits.maxBodyBytes);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return { ok: false, reason: 'empty', detail, lane: 'own' };
+    }
     const extracted = await extractPdfText(buffer);
 
     if (!extracted.ok) {
@@ -269,7 +293,7 @@ export async function crawlWithOwnLane(
     // BODY-RECEIVED-1: an origin DID answer here — the page simply had no
     // readable text. The ladder's later rungs cannot know that, so it is
     // recorded now rather than inferred from wording afterwards.
-    return freeFallbackLadder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target), target, true);
+    return ladder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target), target, true);
   }
 
   // THIN-PAGE-1: the page parsed and has text, but too little of it. A
@@ -278,7 +302,7 @@ export async function crawlWithOwnLane(
   // Only runs when a caller sets a threshold — see renderWhenTextBelow.
   const thinThreshold = config.renderWhenTextBelow ?? 0;
   if (thinThreshold > 0 && page.text.trim().length < thinThreshold) {
-    const rendered = await freeFallbackLadder(
+    const rendered = await ladder(
       url,
       config,
       options,
@@ -297,7 +321,7 @@ export async function crawlWithOwnLane(
   // is the wall, not the page — treat it exactly like the 403 form of the
   // same wall and try the rungs that clear it.
   if (looksLikeBlockPage(page.text)) {
-    return freeFallbackLadder(url, config, options, started, 'Served a bot-wall interstitial (HTTP 200)', hasCredentials(target), target);
+    return ladder(url, config, options, started, 'Served a bot-wall interstitial (HTTP 200)', hasCredentials(target), target);
   }
 
   emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });

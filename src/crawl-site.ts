@@ -220,7 +220,10 @@ export async function crawlSite(
   const perHost = Math.max(1, Math.floor(options.perHostConcurrency ?? 1));
   /** urlKey -> url for every fetch in flight, so a snapshot can keep them. */
   const running = new Map<string, string>();
-  const collectedSoFar = () => alreadyCollected + pages.length + notModified.length;
+  // CRAWL-BUDGET-1: maxPages bounds fetches. Failures and near-duplicates spend the budget too, so a site
+  // that fails or repeats cannot make a run fetch without limit.
+  let attempted = 0;
+  const collectedSoFar = () => alreadyCollected + attempted - running.size;
 
   const processUrl = createPageProcessor({
     crawler,
@@ -245,6 +248,7 @@ export async function crawlSite(
   const launch = (url: string, urlKey: string, depth: number) => {
     const host = hostOf(url);
     running.set(urlKey, url);
+    attempted += 1;
     const task = processUrl(url, urlKey, depth)
       .finally(() => {
         running.delete(urlKey);
@@ -283,7 +287,7 @@ export async function crawlSite(
     let hostBlocked = false;
     while (queue.length > 0 && running.size < concurrency) {
       // Stop starting work at the page or time budget; what is in flight finishes.
-      if (collectedSoFar() + running.size >= maxPages) break;
+      if (alreadyCollected + attempted >= maxPages) break;
       // Stop cleanly on the time budget, keeping everything gathered so far —
       // a partial result is far more useful than an aborted run.
       if (Date.now() >= deadline) break;

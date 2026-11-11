@@ -63,7 +63,9 @@ export async function fetchViaWayback(
     const indexRes = await doFetch(query.toString(), { signal: controller.signal });
     if (!indexRes.ok) return { ok: false, detail: `Archive index returned ${indexRes.status}.` };
 
-    const rows = (await indexRes.json()) as string[][];
+    // An empty body is how the index says there is no capture.
+    const indexBody = (await indexRes.text()).trim();
+    const rows = (indexBody ? JSON.parse(indexBody) : []) as string[][];
     // Row 0 is the header; a bare header means no capture exists.
     const row = rows?.[1];
     const timestamp = row?.[0];

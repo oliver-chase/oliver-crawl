@@ -288,14 +288,21 @@ export async function renderViaLocalChromium(
       // request instead of after the fact.
       let current = request.url();
       let response: RenderResponse | null = null;
+      let settled = false;
       try {
         for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
           await assertLandedSameSite(current, url, dnsLookup);
           response = await route.fetch({ url: current, maxRedirects: 0 });
           const status = response.status();
-          if (status < 300 || status >= 400) break;
+          if (status < 300 || status >= 400) {
+            settled = true;
+            break;
+          }
           const location = response.headers()['location'];
-          if (!location) break;
+          if (!location) {
+            settled = true;
+            break;
+          }
           // Resolved against the CURRENT hop, so a relative Location behaves
           // the way the browser would have resolved it.
           current = new URL(location, current).toString();
@@ -305,7 +312,7 @@ export async function renderViaLocalChromium(
         await route.abort();
         return;
       }
-      if (!response) {
+      if (!response || !settled) {
         blockedHops.push(`${current}: redirect chain exceeded ${MAX_REDIRECT_HOPS} hops`);
         await route.abort();
         return;

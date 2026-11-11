@@ -53,4 +53,10 @@ describe('urlDedupKey — degenerate input', () => {
   test('an unparseable url does not match a different one', () => {
     expect(sameUrlResource('not a url', 'other junk')).toBe(false);
   });
+
+  test('paths and queries keep their case, and hosts do not', () => {
+    expect(urlDedupKey('https://x.com/A/Jan')).not.toBe(urlDedupKey('https://x.com/a/jan'));
+    expect(urlDedupKey('https://x.com/p?id=ABC')).not.toBe(urlDedupKey('https://x.com/p?id=abc'));
+    expect(urlDedupKey('https://X.COM/p')).toBe(urlDedupKey('https://x.com/p'));
+  });
 });

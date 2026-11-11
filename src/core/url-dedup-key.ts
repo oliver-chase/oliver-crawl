@@ -55,7 +55,8 @@ export function urlDedupKey(rawUrl: string): string {
   // Scheme is deliberately absent: http://x/a and https://x/a are the same
   // document, and a site that redirects one to the other would otherwise be
   // crawled twice.
-  return `${host}${path}${query}`.toLowerCase();
+  // Only the host is case-insensitive. Most servers treat /A and /a as different pages, so the path and query keep their case.
+  return `${host}${path}${query}`;
 }
 
 /** True when two URLs identify the same resource for dedup purposes. */

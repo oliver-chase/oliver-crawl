@@ -17,7 +17,7 @@ import {
   assertRedirectUrlAllowed,
 } from './host-policy.js';
 import { sha256Hex } from '../core/hash.js';
-import { followManualRedirects, readBodyCapped } from './http-mechanics.js';
+import { dropBody, followManualRedirects, readBodyCapped } from './http-mechanics.js';
 import { DEFAULT_USER_AGENT } from '../core/config.js';
 import type { DnsLookupFn, CrawlTarget } from '../core/types.js';
 
@@ -95,6 +95,8 @@ export async function probeCheapChangeSignal(
     if (!etag && !lastModified && response.ok) {
       const text = await readBodyCapped(response, PROBE_MAX_BODY_BYTES).catch(() => '');
       bodyHash = await sha256Hex(text);
+    } else {
+      dropBody(response);
     }
 
     return { etag, lastModified, bodyHash };
