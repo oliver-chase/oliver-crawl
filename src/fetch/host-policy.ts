@@ -46,6 +46,27 @@ const DNS_SAFE_HOST_TTL_MS = 60_000;
 
 type SafeHostEntry = { pending: Promise<void>; at: number };
 
+/**
+ * DNS-CACHE-BOUND-1: a crawl across many thousands of hosts used to grow this
+ * map for the life of the process, because only a failure ever removed an
+ * entry. Past the cap, expired verdicts go first, then the oldest.
+ */
+const DNS_SAFE_HOST_MAX_ENTRIES = 10_000;
+
+function evictIfFull(scoped: Map<string, SafeHostEntry>): void {
+  if (scoped.size < DNS_SAFE_HOST_MAX_ENTRIES) return;
+  const now = Date.now();
+  for (const [host, entry] of scoped) {
+    if (now - entry.at >= DNS_SAFE_HOST_TTL_MS) scoped.delete(host);
+  }
+  // Maps iterate in insertion order, so the first key is the oldest verdict.
+  while (scoped.size >= DNS_SAFE_HOST_MAX_ENTRIES) {
+    const oldest = scoped.keys().next().value;
+    if (oldest === undefined) break;
+    scoped.delete(oldest);
+  }
+}
+
 const DNS_SAFE_HOST_CACHE = new Map<DnsLookupFn, Map<string, SafeHostEntry>>();
 
 function cacheFor(lookupFn: DnsLookupFn): Map<string, SafeHostEntry> {
@@ -60,6 +81,11 @@ function cacheFor(lookupFn: DnsLookupFn): Map<string, SafeHostEntry> {
 /** Test seam — a long-lived process should never need this. */
 export function __clearDnsCacheForTests(): void {
   DNS_SAFE_HOST_CACHE.clear();
+}
+
+/** Test seam: how many verdicts a resolver's cache holds. */
+export function __dnsCacheSizeForTests(lookupFn: DnsLookupFn): number {
+  return DNS_SAFE_HOST_CACHE.get(lookupFn)?.size ?? 0;
 }
 
 export function assertPublicHost(hostname: string): void {
@@ -151,6 +177,7 @@ export async function assertHostResolvesToPublicAddress(
       }
     })();
 
+    evictIfFull(cache);
     cache.set(normalizedHost, { pending, at: Date.now() });
   }
 
