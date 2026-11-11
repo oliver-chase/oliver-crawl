@@ -13,9 +13,9 @@ import { publicDns } from '../helpers';
 const target: CrawlTarget = { baseUrl: 'https://pin.example.com', robotsPolicy: 'allow', active: true };
 const privateDns = async () => [{ address: '10.0.0.5', family: 4 }];
 
-const lookup = (resolve = privateDns, host = 'pin.example.com') =>
+const lookup = (resolve = privateDns, host = 'pin.example.com', approvedBy = publicDns) =>
   new Promise<{ error: Error | null; address?: unknown }>((done) => {
-    (pinnedLookup(resolve) as (h: string, o: { all: boolean }, cb: (e: Error | null, a?: unknown) => void) => void)(host, { all: true }, (error, address) =>
+    (pinnedLookup(approvedBy, resolve) as (h: string, o: { all: boolean }, cb: (e: Error | null, a?: unknown) => void) => void)(host, { all: true }, (error, address) =>
       done({ error, address }),
     );
   });
@@ -31,6 +31,14 @@ describe('connections go to approved addresses', () => {
     const result = await lookup(privateDns);
     expect(result.error).toBeNull();
     expect(result.address).toEqual([{ address: '93.184.216.34', family: 4 }]);
+  });
+
+  test('an approval belongs to the resolver that gave it', async () => {
+    const other = async () => [{ address: '8.8.8.8', family: 4 }];
+    await assertHostResolvesToPublicAddress('pin.example.com', publicDns);
+    await assertHostResolvesToPublicAddress('pin.example.com', other);
+    expect((await lookup(privateDns, 'pin.example.com', publicDns)).address).toEqual([{ address: '93.184.216.34', family: 4 }]);
+    expect((await lookup(privateDns, 'pin.example.com', other)).address).toEqual([{ address: '8.8.8.8', family: 4 }]);
   });
 
   test('a host with no approval that resolves private is refused', async () => {

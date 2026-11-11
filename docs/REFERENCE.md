@@ -227,7 +227,7 @@ Every page carries `contentSimhash`, a 64-bit fingerprint of its text as 16 hex
 characters. `crawlSite` compares each page with the ones already collected in the run,
 and a page within `nearDuplicateDistance` bits (default 3, about 95% similar text) lands
 in `run.duplicates` as `{ url, of, distance }` and stays out of `run.pages`. A print view,
-a tracking variant or a mirrored category path costs one extraction instead of two. Set
+a tracking variant or a mirrored category path is reported once. Set
 `nearDuplicateDistance: -1` to turn it off. Pages under 60 words get an empty fingerprint
 and are never compared. Its links and validators are still used.
 
@@ -259,11 +259,11 @@ const store: CrawlStore = {
 await crawlSite(crawler, target, { followLinks: true, store });
 ```
 
-The state is plain JSON: the unfinished queue, the validators and a schedule. A run that
+The state is plain JSON: the unfinished queue, the validators, a schedule and the sitemap date each checked URL had. A run that
 finds an unfinished snapshot continues it, and a finished run clears it. The schedule
 doubles a URL's wait for each unchanged check, from `recrawlMinIntervalMs` (one hour) up to
 `recrawlMaxIntervalMs` (seven days), and a change resets it. Pages a sitemap lists and links the
-crawl discovers are skipped until due and reported in `run.notDue`. Explicit seeds and the base
+crawl discovers are skipped until due and reported in `run.notDue`, and a sitemap entry whose date has not moved since its last check is skipped and reported in `run.skippedByLastmod`. Explicit seeds and the base
 URL always run, because they are where discovery starts. `createMemoryCrawlStore()` is the
 default, and a store that throws never stops the crawl. Saves are spaced `storeIntervalMs` apart
 (one second), and the final state is always saved.

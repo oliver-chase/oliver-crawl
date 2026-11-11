@@ -59,6 +59,35 @@ describe('sitemap dates kept in the store', () => {
   });
 });
 
+describe('a sitemap entry that redirects', () => {
+  test('is skipped on the next run when its date has not moved', async () => {
+    const store = createMemoryCrawlStore();
+    const fetched: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/robots.txt') return new Response('', { status: 404 });
+      if (url.pathname === '/sitemap.xml') {
+        return new Response(
+          '<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://dates.example.com/old</loc><lastmod>2026-01-01</lastmod></url></urlset>',
+          { status: 200, headers: { 'content-type': 'application/xml' } },
+        );
+      }
+      fetched.push(url.pathname);
+      if (url.pathname === '/old') return new Response(null, { status: 301, headers: { location: '/new' } });
+      // A real response reports the URL it was served from, which after a redirect is the new one.
+      const served = new Response(doc('Moved page'), { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+      Object.defineProperty(served, 'url', { value: url.toString() });
+      return served;
+    }) as typeof fetch;
+    await crawlSite(crawler(), target, { ...opts, store });
+    expect(fetched).toContain('/new');
+    fetched.length = 0;
+    await new Promise((r) => setTimeout(r, 5));
+    await crawlSite(crawler(), target, { ...opts, store });
+    expect(fetched).toEqual([]);
+  });
+});
+
 describe('recrawl wait after a change', () => {
   test('a changed page returns to the minimum wait and an unchanged one keeps doubling', async () => {
     const store = createMemoryCrawlStore();

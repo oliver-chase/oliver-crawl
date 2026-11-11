@@ -6,7 +6,7 @@
 // a file, a key-value entry), and `crawlSite` reads it at the start and writes it as it goes.
 // Without a store, an in-memory one is used and nothing outlives the call.
 
-import type { CrawlProgress, SiteCrawlResult } from './crawl-site.js';
+import type { CrawlProgress, SiteCrawlResult } from './crawl-site-types.js';
 
 /** One URL's place in the recrawl schedule. */
 export type ScheduleEntry = {

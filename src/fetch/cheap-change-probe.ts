@@ -10,7 +10,7 @@
 // redirecting source, so their validators were never read and each paid for a
 // full re-crawl every tick.
 
-import { pooledFetch } from './connection-pool.js';
+import { pooledFetchFor } from './connection-pool.js';
 import {
   assertHostResolvesToPublicAddress,
   assertRequestUrlAllowed,
@@ -69,7 +69,7 @@ export async function probeCheapChangeSignal(
     // (PROBE-DNS-SEAM-1: the caller's resolver applies on every hop). Bailing on a redirect made the
     // probe return null for every apex to www source, so unchanged sources paid for a full re-crawl.
     const walk = await followManualRedirects(safeUrl, {
-      doFetch: pooledFetch,
+      doFetch: pooledFetchFor(opts?.dnsLookup),
       maxHops: PROBE_MAX_REDIRECTS,
       init: () => ({ method: 'GET', headers: { 'User-Agent': DEFAULT_USER_AGENT }, signal: controller.signal }),
       onRedirect: async (location, from) => {

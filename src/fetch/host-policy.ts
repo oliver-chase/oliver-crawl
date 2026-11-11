@@ -90,22 +90,28 @@ export function __dnsCacheSizeForTests(lookupFn: DnsLookupFn): number {
 }
 
 // POOL-PIN-1: the addresses a host was approved at, so the connection goes to one of them and not to a
-// second DNS answer. Holds only addresses that passed the public-range check, so it can steer a
-// connection and never answers a check.
-const APPROVED_ADDRESSES = new Map<string, { addresses: DnsAddress[]; at: number }>();
+// second DNS answer. Scoped to the resolver that approved them, like the verdicts, and holding only
+// addresses that passed the public-range check, so it can steer a connection and never answers a check.
+type Approval = { addresses: DnsAddress[]; at: number };
+const APPROVED_ADDRESSES = new Map<DnsLookupFn, Map<string, Approval>>();
 
-function rememberApproved(host: string, addresses: DnsAddress[]): void {
-  if (APPROVED_ADDRESSES.size >= DNS_SAFE_HOST_MAX_ENTRIES) {
-    const oldest = APPROVED_ADDRESSES.keys().next().value;
-    if (oldest !== undefined) APPROVED_ADDRESSES.delete(oldest);
+function rememberApproved(lookupFn: DnsLookupFn, host: string, addresses: DnsAddress[]): void {
+  let scoped = APPROVED_ADDRESSES.get(lookupFn);
+  if (!scoped) {
+    scoped = new Map();
+    APPROVED_ADDRESSES.set(lookupFn, scoped);
   }
-  APPROVED_ADDRESSES.delete(host);
-  APPROVED_ADDRESSES.set(host, { addresses, at: Date.now() });
+  if (scoped.size >= DNS_SAFE_HOST_MAX_ENTRIES) {
+    const oldest = scoped.keys().next().value;
+    if (oldest !== undefined) scoped.delete(oldest);
+  }
+  scoped.delete(host);
+  scoped.set(host, { addresses, at: Date.now() });
 }
 
-/** The public addresses `host` was last approved at, or undefined once the approval has expired. */
-export function approvedAddressesFor(host: string): DnsAddress[] | undefined {
-  const entry = APPROVED_ADDRESSES.get(host.toLowerCase());
+/** The public addresses `lookupFn` approved `host` at, or undefined once the approval has expired. */
+export function approvedAddressesFor(host: string, lookupFn: DnsLookupFn = defaultDnsLookup): DnsAddress[] | undefined {
+  const entry = APPROVED_ADDRESSES.get(lookupFn)?.get(host.toLowerCase());
   return entry && Date.now() - entry.at < DNS_SAFE_HOST_TTL_MS ? entry.addresses : undefined;
 }
 
@@ -157,7 +163,7 @@ export function createDohLookup(endpoint: string = DEFAULT_DOH_ENDPOINT): DnsLoo
   };
 }
 
-const defaultDnsLookup: DnsLookupFn = createDohLookup();
+export const defaultDnsLookup: DnsLookupFn = createDohLookup();
 
 /**
  * Refuse a hostname that resolves anywhere private. THE anti-SSRF check.
@@ -204,7 +210,7 @@ export async function assertHostResolvesToPublicAddress(
   }
 
   try {
-    rememberApproved(normalizedHost, await pending);
+    rememberApproved(lookupFn, normalizedHost, await pending);
   } catch (error) {
     // Never cache a failure: one transient SERVFAIL would otherwise blacklist
     // a legitimate host for the life of the process.

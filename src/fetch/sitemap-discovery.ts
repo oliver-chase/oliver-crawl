@@ -14,7 +14,7 @@
 // Free, deterministic, no LLM, and guarded by the same host policy as every
 // other fetch in this package.
 
-import { pooledFetch } from './connection-pool.js';
+import { pooledFetchFor } from './connection-pool.js';
 import { assertHostResolvesToPublicAddress, assertRequestUrlAllowed } from './host-policy.js';
 import { readBodyCapped } from './http-mechanics.js';
 import { safeFetch } from './safe-fetch.js';
@@ -121,7 +121,7 @@ async function fetchXml(
   url: string,
   options: { userAgent: string; dnsLookup?: DnsLookupFn; sameSiteAs: string },
 ): Promise<string | null> {
-  const response = await safeFetch(url, pooledFetch, 'application/xml,text/xml;q=0.9,*/*;q=0.8', options);
+  const response = await safeFetch(url, pooledFetchFor(options.dnsLookup), 'application/xml,text/xml;q=0.9,*/*;q=0.8', options);
   if (!response || !response.ok) return null;
   return readBodyCapped(response, SITEMAP_MAX_BYTES);
 }

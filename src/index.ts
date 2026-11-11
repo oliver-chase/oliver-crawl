@@ -166,7 +166,7 @@ export { configFromEnv, resolveConfig, availableVendorRungs, DEFAULT_USER_AGENT 
 // Multi-page orchestration: drives crawl() across a target's seeds, with a
 // page budget, retry policy, dedup and optional pagination following.
 export { crawlSite, crawlSites } from './crawl-site.js';
-export { createMemoryCrawlStore, isDue } from './crawl-store.js';
+export { createMemoryCrawlStore } from './crawl-store.js';
 export type { CrawlStore, CrawlState, ScheduleEntry } from './crawl-store.js';
 export { mapSite } from './map-site.js';
 export { searchSite } from './search-site.js';
