@@ -21,6 +21,13 @@
 
 import { urlDedupKey } from './core/url-dedup-key.js';
 import { createNearDuplicateIndex } from './extract/near-duplicate.js';
+import {
+  DEFAULT_RECRAWL_MAX_INTERVAL_MS,
+  DEFAULT_RECRAWL_MIN_INTERVAL_MS,
+  createMemoryCrawlStore,
+  isDue,
+} from './crawl-store.js';
+import type { CrawlState, CrawlStore, ScheduleEntry } from './crawl-store.js';
 import { releaseHostSlot, sleep, tryAcquireHostSlot } from './core/host-throttle.js';
 import { assertRequestUrlAllowed, assertTargetEligible } from './fetch/host-policy.js';
 import { findNextPageUrl } from './extract/pagination-discovery.js';
@@ -102,6 +109,20 @@ export type SiteCrawlOptions = CrawlOptions & {
    * which is about 95% similar text. -1 turns it off. Pages under 60 words are never compared.
    */
   nearDuplicateDistance?: number;
+  /**
+   * CRAWL-STORE-1: where this crawl keeps its queue, validators and recrawl schedule. A run
+   * that finds an unfinished snapshot there continues it, and a run that follows a finished one
+   * skips every discovered URL not yet due. Absent, an in-memory store is used and nothing outlives the call.
+   */
+  store?: CrawlStore;
+  /** Key for this crawl in the store. Defaults to `targetId`, then the target's baseUrl. */
+  storeKey?: string;
+  /** Minimum gap between saves to the store during a run, ms. Default 1000. The final state is always saved. */
+  storeIntervalMs?: number;
+  /** Shortest wait before a URL is checked again, ms. Default one hour. A change resets a URL to this. */
+  recrawlMinIntervalMs?: number;
+  /** Longest wait, ms. Default seven days. Each unchanged check doubles the wait until it gets here. */
+  recrawlMaxIntervalMs?: number;
   /** Pause between page fetches, ms. Sequential is already the default;
    *  this adds breathing room for small origins. 0 = none. */
   politenessDelayMs?: number;
@@ -227,6 +248,8 @@ export type SiteCrawlResult = {
    *  fetched at all. Not failures, and not `notModified` (no request was
    *  made to be answered). */
   skippedByLastmod: string[];
+  /** URLs left unfetched because the recrawl schedule says they are not due yet. */
+  notDue: string[];
   /** Pages left out of `pages` because an earlier page in this run carries the same content. */
   duplicates: { url: string; of: string; distance: number }[];
   /** CRAWL-HOST-STATS-1: per-host behavior of this run, keyed by hostname. */
@@ -262,7 +285,7 @@ async function resolveSeeds(
   target: CrawlTarget,
   options: SiteCrawlOptions,
   maxPages: number,
-): Promise<{ seeds: string[]; lastmod: Record<string, string>; skippedByLastmod: string[] }> {
+): Promise<{ seeds: string[]; lastmod: Record<string, string>; skippedByLastmod: string[]; fromSitemap?: boolean }> {
   const lastmod: Record<string, string> = {};
   const skippedByLastmod: string[] = [];
 
@@ -299,7 +322,7 @@ async function resolveSeeds(
       })
     : entries;
 
-  return { seeds: fresh.map((entry) => entry.url), lastmod, skippedByLastmod };
+  return { seeds: fresh.map((entry) => entry.url), lastmod, skippedByLastmod, fromSitemap: true };
 }
 
 /**
@@ -315,6 +338,44 @@ export async function crawlSite(
   options: SiteCrawlOptions = {},
 ): Promise<SiteCrawlResult> {
   const startedAt = new Date().toISOString();
+
+  // CRAWL-STORE-1: what an earlier run, possibly on another worker, left behind.
+  const store = options.store ?? createMemoryCrawlStore();
+  const storeKey = options.storeKey ?? options.targetId ?? target.baseUrl;
+  let loaded: CrawlState | null = null;
+  try {
+    loaded = await store.load(storeKey);
+  } catch {
+    // A store that cannot be read is treated as empty: the crawl runs, it just starts from scratch.
+  }
+  const schedule: Record<string, ScheduleEntry> = { ...(loaded?.schedule ?? {}) };
+  options = {
+    ...options,
+    resumeFrom: options.resumeFrom ?? loaded?.progress ?? undefined,
+    priorValidators: { ...(loaded?.validators ?? {}), ...(options.priorValidators ?? {}) },
+  };
+  const recrawlMin = Math.max(1, options.recrawlMinIntervalMs ?? DEFAULT_RECRAWL_MIN_INTERVAL_MS);
+  const recrawlMax = Math.max(recrawlMin, options.recrawlMaxIntervalMs ?? DEFAULT_RECRAWL_MAX_INTERVAL_MS);
+  const notDue: string[] = [];
+  let lastProgress: CrawlProgress | null = options.resumeFrom ?? null;
+  let saving: Promise<void> = Promise.resolve();
+  let lastSavedAt = 0;
+  const persist = (progress: CrawlProgress | null, final = false) => {
+    // Without a store of its own, a run keeps nothing, and copying state for it would cost O(pages squared).
+    if (!options.store) return;
+    if (!final && Date.now() - lastSavedAt < (options.storeIntervalMs ?? 1000)) return;
+    lastSavedAt = Date.now();
+    // Chained, so snapshots reach the store in order, and a failing store cannot reach the crawl.
+    const state: CrawlState = { progress, schedule: { ...schedule }, validators: { ...validators } };
+    saving = saving.then(() => store.save(storeKey, state)).catch(() => {});
+  };
+  const touch = (key: string, unchangedNow: boolean) => {
+    schedule[key] = {
+      checkedAt: Date.now(),
+      unchangedStreak: unchangedNow ? (schedule[key]?.unchangedStreak ?? 0) + 1 : 0,
+    };
+  };
+
   const maxPages = Math.max(1, options.maxPages ?? DEFAULT_MAX_PAGES);
   const maxRetries = Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES);
 
@@ -355,7 +416,10 @@ export async function crawlSite(
       }),
     );
 
-  const done = (truncated: boolean): SiteCrawlResult => {
+  const done = async (truncated: boolean): Promise<SiteCrawlResult> => {
+    // A finished run clears its snapshot, and a truncated one keeps it so the next run continues.
+    persist(truncated ? lastProgress : null, true);
+    await saving;
     // Deliver fresh validators to the consumer's persistence hook, fire-and-
     // forget: a slow or throwing sink must not break (or slow) the crawl.
     if (Object.keys(validators).length > 0 && options.onSignals) {
@@ -373,6 +437,7 @@ export async function crawlSite(
       unchanged,
       lastmod,
       skippedByLastmod,
+      notDue,
       duplicates,
       hosts: hostStats(),
       startedAt,
@@ -414,6 +479,15 @@ export async function crawlSite(
     }
   }
 
+  // CRAWL-STORE-1: URLs a sitemap listed are skipped until they are due. Explicit seeds and the base
+  // URL always run, since the caller asked for them and they are where link discovery starts.
+  if (seeded.fromSitemap && !options.resumeFrom) {
+    const now = Date.now();
+    for (let i = queue.length - 1; i >= 0; i--) {
+      if (!isDue(schedule[queue[i]!], now, recrawlMin, recrawlMax)) notDue.unshift(...queue.splice(i, 1));
+    }
+  }
+
   // Dedup across seeds AND everything discovered — a site whose page 2 links
   // back to page 1, or whose nav links every page to every other page, must
   // not loop.
@@ -448,6 +522,11 @@ export async function crawlSite(
       const key = urlDedupKey(safe);
       if (visited.has(key) || depthOf.has(key)) return;
       depthOf.set(key, depth);
+      // CRAWL-STORE-1: a discovered page that is not due yet is remembered as seen and left alone.
+      if (!isDue(schedule[safe], Date.now(), recrawlMin, recrawlMax)) {
+        notDue.push(safe);
+        return;
+      }
       // The QUEUE keeps the real URL — we request exactly what the site
       // published. Only identity is normalised.
       queue.push(safe);
@@ -509,6 +588,7 @@ export async function crawlSite(
         succeeded = true;
         if (result.notModified) {
           notModified.push(url);
+          touch(url, true);
           // The stored validators are still current — carry them forward so
           // the consumer's next run keeps getting free 304s.
           if (prior?.etag || prior?.lastModified) {
@@ -557,6 +637,7 @@ export async function crawlSite(
             ? prev!.contentRegionSha256 === p.contentRegionSha256
             : Boolean(prev?.textSha256 && prev.textSha256 === p.textSha256);
           if (same) unchanged.push(p.url);
+          touch(p.url, same);
           validators[p.url] = {
             etag: p.httpEtag,
             lastModified: p.httpLastModified,
@@ -620,14 +701,14 @@ export async function crawlSite(
         //
         // CRAWL-PARALLEL-1: pages still in flight are not done, so they go
         // back at the head of the queue and out of the visited set.
-        if (options.onProgress) {
-          options.onProgress({
-            queue: [...running.values(), ...queue],
-            visited: [...visited].filter((key) => !running.has(key)),
-            depths: Object.fromEntries(depthOf),
-            collected: collectedSoFar(),
-          });
-        }
+        lastProgress = {
+          queue: [...running.values(), ...queue],
+          visited: [...visited].filter((key) => !running.has(key)),
+          depths: Object.fromEntries(depthOf),
+          collected: collectedSoFar(),
+        };
+        persist(lastProgress);
+        options.onProgress?.(lastProgress);
         if ((options.politenessDelayMs ?? 0) > 0 && queue.length > 0) {
           await sleep(options.politenessDelayMs!);
         }

@@ -245,6 +245,29 @@ run.hosts['example.com'];
 rate climbs needs a slower `minHostIntervalMs` or a different rung. Every `onUsage`
 event also carries `host`, so spend and latency roll up per origin.
 
+### Keeping a crawl's state in a store
+
+`onProgress` and `resumeFrom` hand the state to your code. A `CrawlStore` lets `crawlSite`
+do the round trip itself, so any worker can continue a crawl and every URL knows when it is due:
+
+```ts
+const store: CrawlStore = {
+  load: (key) => db.get(key),        // CrawlState | null
+  save: (key, state) => db.put(key, state),
+};
+
+await crawlSite(crawler, target, { followLinks: true, store });
+```
+
+The state is plain JSON: the unfinished queue, the validators and a schedule. A run that
+finds an unfinished snapshot continues it, and a finished run clears it. The schedule
+doubles a URL's wait for each unchanged check, from `recrawlMinIntervalMs` (one hour) up to
+`recrawlMaxIntervalMs` (seven days), and a change resets it. Pages a sitemap lists and links the
+crawl discovers are skipped until due and reported in `run.notDue`. Explicit seeds and the base
+URL always run, because they are where discovery starts. `createMemoryCrawlStore()` is the
+default, and a store that throws never stops the crawl. Saves are spaced `storeIntervalMs` apart
+(one second), and the final state is always saved.
+
 ### Crawling in parallel
 
 `crawlSite` fetches one page at a time unless you ask for more. Two options raise
