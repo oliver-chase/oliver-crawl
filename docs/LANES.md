@@ -115,11 +115,11 @@ Two hashes are stored per page, and the comparison picks the right one:
 
 `unchanged` uses the structural hash only when **both** runs have it, and falls back to the text hash otherwise. Comparing a structural hash against a text hash across a rung change reports a content change that did not happen, so the two are never compared.
 
-Both need the same loop: store `result.validators`, pass them back as `priorValidators`.
+Both need the same loop. A `store` keeps it for you; without one, keep `result.validators` and pass them back as `priorValidators`.
 
 ## Search is not one of these paths
 
-`crawler.search()` is a separate surface: a query goes in, URLs come out. Its providers are Serper and Tavily, both paid, tried in that order because Serper costs roughly a fifth as much per call.
+`crawler.search()` is a separate surface: a query goes in, URLs come out. Its providers are Serper and Tavily, both paid, tried in that order by default, which `OLIVER_CRAWL_SEARCH_ORDER` changes.
 
 It shares configuration, budgeting and usage reporting with the fetch paths and nothing else. Notably, results are then crawled through the free path by default — searching does not commit you to paying twice.
 

@@ -109,19 +109,14 @@ if (page.structuredData.hasContentData) {
 
 A site may publish `WebSite`, `Organization` and `BreadcrumbList` on every page, so checking that `jsonLd` exists is not enough. `hasContentData` looks for content types such as `Product`, `Article`, `Recipe`, `Event` and `JobPosting`.
 
-**Unchanged pages are detected before expensive processing.** Three signals run from cheapest to dearest. The sitemap `lastmod` skips a page without requesting it. HTTP validators let the server answer `304 Not Modified`. A content comparison skips downstream work for a page that downloaded but did not change.
+**Unchanged pages are detected before expensive processing.** Three signals run from cheapest to dearest. The sitemap `lastmod` skips a page without requesting it. HTTP validators let the server answer `304 Not Modified`. A content comparison skips downstream work for a page that downloaded but did not change. Give `crawlSite` a `store` and it keeps these signals, the recrawl schedule and the unfinished queue between runs:
 
 ```typescript
-const run = await crawlSite(crawler, target, {
-  useSitemap: true,
-  priorLastmod: saved.lastmod,
-  priorValidators: saved.validators,
-});
-// run.skippedByLastmod, run.notModified, run.unchanged
-// Store run.validators and run.lastmod for the next run
+const run = await crawlSite(crawler, target, { useSitemap: true, store });
+// run.skippedByLastmod, run.notModified, run.unchanged, run.notDue
 ```
 
-A site that changes weekly and is checked hourly settles at about one real fetch and one extraction per week. The library does not persist anything, so you store `run.validators` and `run.lastmod` and pass them back.
+A site that changes weekly and is checked hourly settles at about one real fetch and one extraction per week. [ADOPTING](docs/ADOPTING.md#the-re-crawl-loop) shows the store and [LANES](docs/LANES.md#making-re-crawls-cheap) explains the mechanisms.
 
 ## Crawling a site
 
@@ -201,7 +196,7 @@ const crawler = createCrawler(
 
 - `autoRobots` is off by default, so applications that already track robots posture stay the source of truth and no unexpected request goes out per unknown target
 - `headers` on a target carries credentials you already hold. They go only to that target's own host, and a redirect cannot carry a token to another origin. The library never acquires, stores or refreshes credentials
-- The library keeps no database. Your application owns persistence, scheduling and the conversion of pages into your own objects
+- The library ships no database. Your application owns persistence through a `CrawlStore`, plus scheduling and the conversion of pages into your own objects
 
 [REFERENCE](docs/REFERENCE.md) lists every option and return field.
 

@@ -127,14 +127,9 @@ run.truncated;    // true if it stopped at maxPages with URLs still queued
 
 Sequential by design (one request at a time): hammering a small site in parallel is what gets a crawler blocked. Already-visited URLs are never re-fetched, so a "next page" link that loops back to page 1 terminates.
 
-### Cheap re-crawls (the point of scheduled crawling)
+### Cheap re-crawls
 
-Two mechanisms, because origins differ:
-
-- **Origin sends ETag/Last-Modified** → conditional GET → **304, nothing fetched at all**, reported under `notModified`
-- **Origin sends nothing** (most small sites) → the **content-region hash** (nav/footer-insensitive) is compared → the page is fetched, but `unchanged` tells you the real content is identical so extraction/LLM can be skipped
-
-Both use the same loop: store `result.validators`, pass them back as `priorValidators`. A site checked hourly that changes weekly then costs one real fetch a week and 167 free 304s. Wire it with `onSignals` (push) or the return value (pull) — see [ADOPTING.md](ADOPTING.md).
+Origins that send ETag or Last-Modified answer a conditional GET with a 304, reported under `notModified`. For the rest, the content-region hash is compared and `unchanged` lists pages that downloaded but did not change. Pass `result.validators` back as `priorValidators`, or give `crawlSite` a `store` and it does this for you. [LANES](LANES.md#making-re-crawls-cheap) explains both mechanisms.
 
 ### Site-wide change detection in one request
 
@@ -538,7 +533,7 @@ A search provider is untrusted on both counts, so results are filtered before yo
 
 Check `injectionFiltered` if you display snippets; an empty snippet on a real URL is otherwise puzzling, and the flag is itself a useful signal about the page behind it.
 
-Returns an outcome object on purpose: an empty array cannot tell you whether the web had nothing, your key was missing, or your budget said no. Serper is tried before Tavily by default (roughly 5x cheaper per call for the same job). Provider results are filtered through the same URL-safety check as extracted links, so a `javascript:` or private-host result never reaches you.
+Returns an outcome object on purpose: an empty array cannot tell you whether the web had nothing, your key was missing, or your budget said no. Serper is tried before Tavily by default. Provider results are filtered through the same URL-safety check as extracted links, so a `javascript:` or private-host result never reaches you.
 
 ### Conditional GET — the cheapest crawl is the one that doesn't happen
 

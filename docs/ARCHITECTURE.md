@@ -152,4 +152,4 @@ flowchart TB
     style SKIP fill:#e8f5e9
 ```
 
-The structural hash (`contentRegionSha256`) ignores nav/header/footer, so a cookie-banner tweak isn't a content change — but it only exists for HTML. Text-only rungs (Jina, vendor) set it empty and the comparison falls back to `textSha256`, so a rung change can never fake a content change.
+[LANES](LANES.md#making-re-crawls-cheap) explains the two hashes and when each applies.
