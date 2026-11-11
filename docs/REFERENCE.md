@@ -221,6 +221,16 @@ retrying it on resume would just repeat the failure.
 already persisted those when you received them. This resumes the work and leaves the
 results to you.
 
+### Near-duplicate pages
+
+Every page carries `contentSimhash`, a 64-bit fingerprint of its text as 16 hex
+characters. `crawlSite` compares each page with the ones already collected in the run,
+and a page within `nearDuplicateDistance` bits (default 3, about 95% similar text) lands
+in `run.duplicates` as `{ url, of, distance }` and stays out of `run.pages`. A print view,
+a tracking variant or a mirrored category path costs one extraction instead of two. Set
+`nearDuplicateDistance: -1` to turn it off. Pages under 60 words get an empty fingerprint
+and are never compared. Its links and validators are still used.
+
 ### Per-host stats
 
 Every `crawlSite` result carries `hosts`, keyed by hostname, so a run says how each

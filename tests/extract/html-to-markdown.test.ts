@@ -294,3 +294,26 @@ describe('regions that wrap content', () => {
     expect(out).toBe('Real content for the page body.');
   });
 });
+
+// CRAWL-NEARDUP-1 shipped with the extractor change that drops comment sections from the main region.
+describe('comment sections', () => {
+  test('a comments block inside main stays out of the markdown', async () => {
+    const { buildPage } = await import('@/fetch/build-page');
+    const page = await buildPage({
+      url: 'https://x.example.com/a',
+      html: '<html><head><title>T</title></head><body><main><article><h1>Soup</h1><p>Simmer the lentils for twenty five minutes.</p></article><section id="comments"><h3>3 comments</h3><p>Visit my store for deals</p></section></main></body></html>',
+      contentType: 'text/html',
+      etag: null,
+      lastModified: null,
+      baseHost: 'x.example.com',
+      maxTextChars: 10_000,
+      rung: 'fetch',
+      includeHtml: false,
+      maxLinks: 10,
+      maxOutboundHosts: 5,
+    });
+    if ('quarantined' in page) throw new Error('quarantined');
+    expect(page.markdown).toContain('Simmer the lentils');
+    expect(page.markdown).not.toContain('Visit my store');
+  });
+});

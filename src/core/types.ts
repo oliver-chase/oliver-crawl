@@ -201,6 +201,12 @@ export type CrawlPage = {
    *  when nav text changes. Use as the fallback when contentRegionSha256 is
    *  unavailable. */
   textSha256: string;
+  /**
+   * CRAWL-NEARDUP-1: a 64-bit SimHash of the delivered text, as 16 hex characters. Pages whose
+   * hashes differ by a few bits carry the same content. Empty when the page has under 60 words,
+   * because a short page shares too much template text to compare.
+   */
+  contentSimhash: string;
   httpEtag: string | null;
   httpLastModified: string | null;
   /** Structured data found on the page, if any — the free, deterministic

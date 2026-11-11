@@ -1,5 +1,5 @@
 {
-  "overall": 0.994,
+  "overall": 1,
   "pages": {
     "article-listing": 1,
     "div-soup-blog": 1,
@@ -12,7 +12,7 @@
     "news-article": 1,
     "pricing-table": 1,
     "product-jsonld": 1,
-    "recipe": 0.917,
+    "recipe": 1,
     "semantic-article": 1,
     "spa-embedded-data": 1
   }

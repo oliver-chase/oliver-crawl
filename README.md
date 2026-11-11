@@ -67,6 +67,7 @@ A crawl returns structured page objects:
 - `contentKind` is `html`, `calendar`, `csv`, `json`, `feed`, `text` or `pdf`
 - `jsonLd` and `structuredData` hold the structured data the page publishes
 - `links` holds same-site links for pagination and detail pages
+- `contentSimhash` is a fingerprint of the text, and `crawlSite` uses it to report the same content under two URLs in `run.duplicates`
 - `httpEtag` is the validator to send on the next run
 - `extractorVersion` is the version of the extraction logic that produced the page
 

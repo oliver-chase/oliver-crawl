@@ -17,7 +17,8 @@ import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { AnyNode } from 'domhandler';
 
 /** Regions that are page furniture, never content. */
-const CHROME_SELECTOR = 'nav, header, footer, aside, script, style, noscript, template, svg';
+const CHROME_SELECTOR =
+  'nav, header, footer, aside, script, style, noscript, template, svg, #comments, .comments, .comment-list, #disqus_thread, #respond';
 
 /**
  * A form that collects input is page furniture. A form that wraps the whole page (the pattern some

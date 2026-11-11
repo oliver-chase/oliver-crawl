@@ -12,4 +12,4 @@
 //
 // Not the package version: a bugfix to the SSRF guard changes no extraction
 // output and must not invalidate every stored page.
-export const EXTRACTOR_VERSION = '1';
+export const EXTRACTOR_VERSION = '2';

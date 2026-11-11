@@ -37,6 +37,7 @@ import { computeContentRegionHash } from '../extract/content-region-hash.js';
 import { extractInlineScriptContent, shouldRecoverFromScripts } from '../extract/spa-content-extract.js';
 import { sanitizeCrawledText } from '../guard/prompt-injection-guard.js';
 import { looksLikeEmptyState } from '../core/soft-404.js';
+import { simhash } from '../extract/near-duplicate.js';
 import { EXTRACTOR_VERSION } from '../core/extractor-version.js';
 import { sha256Hex } from '../core/hash.js';
 import { hostsMatchAllowingWww } from './host-policy.js';
@@ -156,6 +157,7 @@ export async function buildPage(input: {
     bodySha256: await sha256Hex(input.html),
     contentRegionSha256: await computeContentRegionHash(input.html),
     textSha256: await sha256Hex(sanitized.text),
+    contentSimhash: simhash(sanitizedMarkdown.text || sanitized.text),
     httpEtag: input.etag,
     httpLastModified: input.lastModified,
     jsonLd,
@@ -244,6 +246,7 @@ export async function buildTextPage(input: {
     bodySha256: input.bodySource === undefined ? textSha256 : await sha256Hex(input.bodySource),
     contentRegionSha256: '',
     textSha256,
+    contentSimhash: simhash(input.text),
     httpEtag: input.etag ?? null,
     httpLastModified: input.lastModified ?? null,
     jsonLd: [],

@@ -20,6 +20,7 @@
 // a crawl across many hosts runs in parallel while every host stays polite.
 
 import { urlDedupKey } from './core/url-dedup-key.js';
+import { createNearDuplicateIndex } from './extract/near-duplicate.js';
 import { releaseHostSlot, sleep, tryAcquireHostSlot } from './core/host-throttle.js';
 import { assertRequestUrlAllowed, assertTargetEligible } from './fetch/host-policy.js';
 import { findNextPageUrl } from './extract/pagination-discovery.js';
@@ -95,6 +96,12 @@ export type SiteCrawlOptions = CrawlOptions & {
   /** Requests in flight to one host at once. Default 1: raise it only for
    *  an origin you operate. `Crawl-delay` and the host throttle still apply. */
   perHostConcurrency?: number;
+  /**
+   * CRAWL-NEARDUP-1: a page whose text fingerprint is within this many bits (of 64) of a page
+   * already collected in this run is reported in `duplicates` and left out of `pages`. Default 3,
+   * which is about 95% similar text. -1 turns it off. Pages under 60 words are never compared.
+   */
+  nearDuplicateDistance?: number;
   /** Pause between page fetches, ms. Sequential is already the default;
    *  this adds breathing room for small origins. 0 = none. */
   politenessDelayMs?: number;
@@ -220,6 +227,8 @@ export type SiteCrawlResult = {
    *  fetched at all. Not failures, and not `notModified` (no request was
    *  made to be answered). */
   skippedByLastmod: string[];
+  /** Pages left out of `pages` because an earlier page in this run carries the same content. */
+  duplicates: { url: string; of: string; distance: number }[];
   /** CRAWL-HOST-STATS-1: per-host behavior of this run, keyed by hostname. */
   hosts: Record<string, HostStats>;
   startedAt: string;
@@ -316,6 +325,8 @@ export async function crawlSite(
   const unchanged: string[] = [];
   const lastmod: Record<string, string> = {};
   const skippedByLastmod: string[] = [];
+  const duplicates: SiteCrawlResult['duplicates'] = [];
+  const nearDuplicates = createNearDuplicateIndex(options.nearDuplicateDistance ?? 3);
   const hostTally = new Map<string, { attempts: number; pages: number; transient: number; structural: number; blocked: number; latencies: number[] }>();
   const tallyFor = (host: string) => {
     let entry = hostTally.get(host);
@@ -362,6 +373,7 @@ export async function crawlSite(
       unchanged,
       lastmod,
       skippedByLastmod,
+      duplicates,
       hosts: hostStats(),
       startedAt,
       finishedAt: new Date().toISOString(),
@@ -521,7 +533,13 @@ export async function crawlSite(
           visited.add(key);
           return true;
         });
-        pages.push(...fresh);
+        // CRAWL-NEARDUP-1: the same content under another URL is reported, not returned again. Its
+        // links and validators are still used below, since the page itself was read.
+        for (const p of fresh) {
+          const twin = nearDuplicates.check(p.url, p.contentSimhash);
+          if (twin) duplicates.push({ url: p.url, of: twin.of, distance: twin.distance });
+          else pages.push(p);
+        }
         for (const p of fresh) {
           // CRAWL-UNCHANGED-1: these hashes were computed on every page and
           // then thrown away. Comparing against last run is what makes
