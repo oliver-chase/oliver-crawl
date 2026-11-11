@@ -122,6 +122,8 @@ fi
 # gate must never use it. perl handles the \x{...} ranges natively.
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
+    # Instagram captions are posted copy, and emojis belong in them. The ledgers under data/ hold those captions.
+    case "$file" in data/*.csv|data/*.json|data/*.jsonl) continue ;; esac
     EMOJI_HITS=$(staged_content "$file" 2>/dev/null | perl -CSD -ne 'print "$.: $_" if /'"$EMOJI_PATTERN"'/' || true)
     if [ -n "$EMOJI_HITS" ]; then
       echo "$EMOJI_HITS"
