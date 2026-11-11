@@ -487,6 +487,7 @@ Anything not listed here is not exported.
 | `renderWhenTextBelow` | Escalate to render when a page parsed but is implausibly short — a JS page shipping only nav and footer otherwise reads as a success |
 | `useArchiveFallback` · `archiveMaxAgeDays` | Internet Archive rung — off by default, `allow` posture only |
 | `rungMemory` | Remember which rung works per host (default on) |
+| `proxyFetch` | A `fetch` that routes through your own proxy, tried after a block and before Jina |
 | `cacheTtlMs` · `minHostIntervalMs` · `adaptiveThrottleMultiplier` | Repeat-request and politeness controls |
 
 ## Search

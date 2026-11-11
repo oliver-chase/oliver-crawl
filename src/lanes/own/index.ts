@@ -545,7 +545,7 @@ function withOriginMoved(result: CrawlResult, priorDetail: string, servedBy: str
 /**
  * The remaining FREE rungs, in one order defined once.
  *
- * LANE-EXHAUST-1: local Chromium -> your render service -> Jina. A skipped
+ * LANE-EXHAUST-1: local Chromium -> your render service -> your proxy -> Jina. A skipped
  * free rung pushes the crawl into the paid lane sooner than it needed to go,
  * so every failure path routes through here rather than choosing its own.
  */
@@ -562,6 +562,13 @@ async function freeFallbackLadder(
   const rendered = await renderFallback(url, config, options, started);
   if (rendered) {
     return withOriginMoved(rendered, priorDetail, rendered.ok && !rendered.notModified ? (rendered.pages[0]?.rung ?? 'render') : 'render', url);
+  }
+
+  // CRAWL-PROXY-1: the caller's own proxy comes before the third-party Jina rung
+  // and never sees a credentialed target.
+  if (!credentialed) {
+    const viaProxy = await proxyFallback(url, config, options, started);
+    if (viaProxy) return withOriginMoved(viaProxy, priorDetail, 'proxy', url);
   }
 
   // JINA-CREDENTIAL-1 (found in audit): the Jina rung is a PUBLIC
@@ -725,6 +732,76 @@ async function renderFallback(
     const detail = error instanceof Error ? error.message : String(error);
     emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: detail });
     return null; // broken render service must not end the crawl — Jina may still work
+  }
+}
+
+/**
+ * CRAWL-PROXY-1: retry a blocked page through the caller's `proxyFetch`.
+ * Returns null whenever the rung does not apply or does not help, so the ladder moves on.
+ */
+async function proxyFallback(
+  url: string,
+  config: ResolvedConfig,
+  options: CrawlOptions,
+  started: number,
+): Promise<CrawlResult | null> {
+  if (!config.proxyFetch) return null;
+  const fail = (error: string) =>
+    emitUsage(config, { lane: 'own', rung: 'proxy', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error });
+  try {
+    const requestUrl = new URL(url);
+    const response = await fetchFollowingSafeRedirects(
+      requestUrl,
+      config,
+      options.timeoutMs ?? config.defaults.timeoutMs,
+      {},
+      {},
+      5,
+      config.proxyFetch,
+    );
+    if (!response.ok) {
+      fail(`HTTP ${response.status}`);
+      return null;
+    }
+    const contentType = response.headers.get('content-type') || '';
+    if (classifyContentType(contentType) !== 'html') {
+      fail(`Unsupported content-type: ${contentType || 'unknown'}`);
+      return null;
+    }
+    const page = await buildPage({
+      url: response.url || requestUrl.toString(),
+      html: await readBodyCapped(response, config.limits.maxBodyBytes),
+      contentType,
+      etag: response.headers.get('etag'),
+      lastModified: response.headers.get('last-modified'),
+      baseHost: requestUrl.hostname,
+      maxTextChars: options.maxTextChars ?? config.defaults.maxTextChars,
+      rung: 'proxy',
+      includeHtml: options.includeHtml ?? false,
+      maxLinks: config.limits.maxLinksPerPage,
+      maxOutboundHosts: config.limits.maxOutboundHosts,
+    });
+    if (isQuarantined(page)) {
+      fail('quarantined');
+      const detail = 'Content fetched through the proxy tripped the prompt-injection guard.';
+      emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+      return {
+        ok: false,
+        reason: 'quarantined',
+        detail,
+        lane: 'own',
+        quarantine: { signals: page.signals, text: page.text, title: page.title },
+      };
+    }
+    if (!page.text.trim() || looksLikeBlockPage(page.text)) {
+      fail('still blocked or empty');
+      return null;
+    }
+    emitUsage(config, { lane: 'own', rung: 'proxy', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
+    return { ok: true, pages: [page] };
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+    return null;
   }
 }
 

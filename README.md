@@ -49,11 +49,12 @@ Most pages answer a normal request, so the crawler starts there and moves to mor
 
 1. **Request the page.** A plain HTTP GET works for most of the web
 2. **Render it in a browser.** Some sites return a shell whose content appears after JavaScript runs. With `localRender: true` the page renders in local Chromium. Install it once with `npm install playwright` and `npx playwright install chromium`
-3. **Retry through Jina Reader.** Jina requests the page from its own servers and returns text, which gets past sites that reject automated clients. It is a third-party service, and it never sees a target that carries credentials
-4. **Call a paid API.** Firecrawl and Apify handle sites that defeat the earlier methods
-5. **Read the archived copy.** The Internet Archive may hold a copy when every live method fails
+3. **Retry through your own proxy.** Set `proxyFetch` to a `fetch` that routes through a proxy you run, and a blocked page is retried there before any third party sees it. A target that carries credentials never uses it
+4. **Retry through Jina Reader.** Jina requests the page from its own servers and returns text, which gets past sites that reject automated clients. It is a third-party service, and it never sees a target that carries credentials
+5. **Call a paid API.** Firecrawl and Apify handle sites that defeat the earlier methods
+6. **Read the archived copy.** The Internet Archive may hold a copy when every live method fails
 
-Steps 1 and 2 run on your machine. Step 3 uses a free public service. Paid APIs are opt-in with `lanes: ['own', 'vendor']`, and an API key alone never triggers a paid request. The archive step is off by default (`useArchiveFallback: true`) and runs only for a target whose robots posture is explicitly `allow`.
+Steps 1 to 3 run on your machine or your own proxy. Step 4 uses a free public service. Paid APIs are opt-in with `lanes: ['own', 'vendor']`, and an API key alone never triggers a paid request. The archive step is off by default (`useArchiveFallback: true`) and runs only for a target whose robots posture is explicitly `allow`.
 
 The cheaper methods go first because a `403` usually means the site spotted automated traffic, and a local browser clears many of those blocks without an external cost. The crawler also remembers for 30 minutes which method worked for each host, so the next request starts there. [LANES](docs/LANES.md) lists every rung in order.
 

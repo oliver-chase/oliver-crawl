@@ -539,6 +539,17 @@ export type CrawlConfig = {
    * Node runtime you may prefer to inject `dnsLookup` and use none at all.
    */
   dohEndpoint?: string;
+  /**
+   * CRAWL-PROXY-1: a `fetch` that sends requests through YOUR proxy, for example
+   * one built on undici's `ProxyAgent` or a gateway you run. It is tried when a
+   * direct fetch is blocked, before Jina and before any paid lane, so a blocked
+   * host costs a proxy request and no vendor credit.
+   *
+   * The address check still runs first, and every redirect is checked again. A
+   * target that carries `headers` never uses it, because the library cannot
+   * vouch for what the proxy does with credentials.
+   */
+  proxyFetch?: typeof fetch;
 };
 
 export type VendorKeys = {

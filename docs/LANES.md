@@ -18,10 +18,11 @@ It is a ladder of rungs. Each runs only when the ones above it could not finish 
 | 6 | Hash | free | Full-body + content-region digests for change detection |
 | 7 | Local render | free | Local headless Chromium (`localRender: true` + `npx playwright install chromium`), for JS-only pages |
 | 8 | Remote render | yours | Your own render service (`browserRender`), for deployments that cannot run a browser |
-| 9 | Jina Reader | free | Keyless public service; clears bot walls and JS shells the direct fetch can't. `jinaEndpoint` points at your own deployment of their Apache-2.0 build if you would rather not depend on a third party's uptime |
-| 10 | Internet Archive | free | **Off by default** (`useArchiveFallback`). Only for a target whose robots posture is explicitly `allow`, and only after every live rung has failed |
+| 9 | Your proxy | yours | A `proxyFetch` function that routes the request through a proxy you run. Tried after a block and before Jina, so a blocked host costs a proxy request and no vendor credit. Skipped for a target that carries `headers` |
+| 10 | Jina Reader | free | Keyless public service; clears bot walls and JS shells the direct fetch can't. `jinaEndpoint` points at your own deployment of their Apache-2.0 build if you would rather not depend on a third party's uptime |
+| 11 | Internet Archive | free | **Off by default** (`useArchiveFallback`). Only for a target whose robots posture is explicitly `allow`, and only after every live rung has failed |
 
-### When rungs 7–9 engage
+### When rungs 7–10 engage
 
 The recovery rungs run on **any** failure of the direct fetch, not just one kind:
 
@@ -29,11 +30,11 @@ The recovery rungs run on **any** failure of the direct fetch, not just one kind
 - an **HTTP status** the fetch can't use — a 403 bot wall, a 429, a 5xx
 - **HTML that parsed but had no readable text** — a JavaScript shell
 
-All three take the same path in the same order, and rung 7 runs before rung 9. A 403 is usually a bot wall, and a real browser — with a real TLS fingerprint, real headers and JavaScript execution — clears those where a bare `fetch` does not. Reaching for Jina first would skip infrastructure we control in favour of a third party, and every free rung skipped moves a crawl closer to the paid path.
+All three take the same path in the same order, and rung 7 runs before rung 10, and the proxy at rung 9 runs before Jina. A 403 is usually a bot wall, and a real browser — with a real TLS fingerprint, real headers and JavaScript execution — clears those where a bare `fetch` does not. Reaching for Jina first would skip infrastructure we control in favour of a third party, and every free rung skipped moves a crawl closer to the paid path.
 
 The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lanes/own/index.ts`) so the order can't drift between the failure paths as rungs are added. `tests/lanes/lane-exhaustion.test.ts` asserts it, including that a vendor is never called while a free rung could still have worked.
 
-One rung is skipped conditionally: **a target carrying `headers` (credentials) never reaches rung 9.** Jina is a public third-party service that fetches the URL itself, so sending it a members-only URL would disclose that URL and its query string to a party you never agreed to share it with — and it would fail regardless, because Jina has none of your credentials. Rungs 7 and 8 still run: those are your own infrastructure.
+One rung is skipped conditionally: **a target carrying `headers` (credentials) never reaches rung 9 or 10.** Jina is a public third-party service that fetches the URL itself, so sending it a members-only URL would disclose that URL and its query string to a party you never agreed to share it with — and it would fail regardless, because Jina has none of your credentials. Rungs 7 and 8 still run: those are your own infrastructure. The proxy is skipped too, because the library cannot vouch for what a proxy does with credentials.
 
 ### The archive rung, and why it is gated
 

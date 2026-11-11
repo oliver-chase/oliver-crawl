@@ -115,6 +115,7 @@ export async function fetchFollowingSafeRedirects(
   validators: { etag?: string | null; lastModified?: string | null } = {},
   extraHeaders: Record<string, string> = {},
   maxHops = 5,
+  doFetch: typeof fetch = fetch,
 ): Promise<Response> {
   const baseHost = url.hostname;
   const basePort = url.port || '';
@@ -125,7 +126,7 @@ export async function fetchFollowingSafeRedirects(
   if (validators.lastModified) conditionalHeaders['if-modified-since'] = validators.lastModified;
 
   const walk = await followManualRedirects(url, {
-    doFetch: fetch,
+    doFetch,
     maxHops,
     init: () => ({
       headers: {
