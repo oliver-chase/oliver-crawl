@@ -1,0 +1,21 @@
+{
+  "title": "Upcoming Events - Riverside Hall",
+  "include": [
+    "Jazz Under the Stars",
+    "Tickets $25",
+    "Community Choir Night",
+    "Free admission, donations welcome",
+    "Poetry Open Mic",
+    "Sign up at the door"
+  ],
+  "exclude": [
+    "cookies to improve your experience",
+    "Member login",
+    "Privacy policy"
+  ],
+  "links": [
+    "/events/jazz-under-the-stars",
+    "/events/poetry-open-mic",
+    "/events?page=2"
+  ]
+}

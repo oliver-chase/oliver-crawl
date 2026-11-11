@@ -219,7 +219,8 @@ Open work lives in the `oliver-crawl` GitHub Project named in `docs/backlog-conf
 ## Development
 
 ```bash
-npm run check   # type check, unit tests, decision-record gate, comment-budget gate
+npm run check   # type check, unit tests (extraction accuracy included), decision-record gate, comment-budget gate
+npm run accuracy # scores extraction on the fixed corpus in tests/accuracy
 npm run live    # exercises the library against real websites
 ```
 

@@ -1,0 +1,19 @@
+{
+  "overall": 0.994,
+  "pages": {
+    "article-listing": 1,
+    "div-soup-blog": 1,
+    "docs-page": 1,
+    "event-listing": 1,
+    "faq": 1,
+    "job-posting": 1,
+    "legacy-table-layout": 1,
+    "locations": 1,
+    "news-article": 1,
+    "pricing-table": 1,
+    "product-jsonld": 1,
+    "recipe": 0.917,
+    "semantic-article": 1,
+    "spa-embedded-data": 1
+  }
+}

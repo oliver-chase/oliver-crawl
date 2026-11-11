@@ -1,0 +1,20 @@
+{
+  "title": "Latest Posts | Dev Notes",
+  "include": [
+    "Cache invalidation without tears",
+    "versioned keys",
+    "Sampling logs at scale",
+    "head based sampling",
+    "Feature flags that clean up after themselves",
+    "expiry date on every flag"
+  ],
+  "exclude": [
+    "cookies to improve your experience",
+    "Member login",
+    "Subscribe to our newsletter"
+  ],
+  "links": [
+    "/posts/cache-invalidation",
+    "/posts/feature-flags"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "title": "Our Locations | Greenleaf Dental",
+  "include": [
+    "Downtown Office",
+    "210 Main Street, Springfield",
+    "Phone: 555-0142",
+    "Westside Office",
+    "88 Orchard Road",
+    "Tuesday to Saturday, 9 am to 6 pm"
+  ],
+  "exclude": [
+    "cookies to improve your experience",
+    "Member login"
+  ],
+  "links": []
+}

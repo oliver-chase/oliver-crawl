@@ -1,0 +1,16 @@
+{
+  "title": "Retry Policy | Widget API Docs",
+  "include": [
+    "Retry policy",
+    "up to five times with exponential backoff",
+    "first retry happens after 30 seconds",
+    "POST /v1/webhooks/retry",
+    "marked unhealthy"
+  ],
+  "exclude": [
+    "Copyright 2026",
+    "Subscribe to our newsletter",
+    "Member login"
+  ],
+  "links": []
+}

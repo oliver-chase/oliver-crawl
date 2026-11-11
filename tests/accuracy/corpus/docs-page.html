@@ -1,0 +1,6 @@
+<html><head><title>Retry Policy | Widget API Docs</title></head><body><header><nav><a href="/">Widget API Home</a><a href="/products">Shop everything</a><a href="/about-us">About the company</a><a href="/login">Member login</a></nav></header>
+<div class="docs-layout"><div class="sidebar-nav"><a href="/docs/auth">Authentication</a><a href="/docs/webhooks">Webhooks</a><a href="/docs/changelog">Changelog</a></div>
+<div class="doc-body"><h1>Retry policy</h1><p>The Widget API retries failed webhook deliveries up to five times with exponential backoff.</p>
+<h2>Backoff schedule</h2><p>The first retry happens after 30 seconds, and each later retry doubles the wait.</p>
+<pre><code>POST /v1/webhooks/retry
+{"max_attempts": 5}</code></pre><p>After the fifth failure the endpoint is marked unhealthy and deliveries pause.</p></div></div><footer><p>Copyright 2026 Widget API. All rights reserved.</p><a href="/privacy">Privacy policy</a><a href="/terms">Terms of service</a><p>Subscribe to our newsletter for weekly offers</p></footer></body></html>

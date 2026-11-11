@@ -1,0 +1,15 @@
+{
+  "title": "Harbor Ferry Timetable",
+  "include": [
+    "four times a day between April and October",
+    "8:00, 11:30, 15:00 and 18:30",
+    "Journey time is 25 minutes",
+    "bicycles travel free"
+  ],
+  "exclude": [
+    "Sign our guestbook",
+    "Visitor counter",
+    "Useful links"
+  ],
+  "links": []
+}

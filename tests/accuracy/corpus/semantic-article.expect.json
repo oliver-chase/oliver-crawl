@@ -1,0 +1,19 @@
+{
+  "title": "Why Salt Marshes Matter | Coastal Journal",
+  "include": [
+    "Why Salt Marshes Matter",
+    "store more carbon than a hectare of tropical forest",
+    "Juvenile herring and flounder",
+    "restoration projects now plan room"
+  ],
+  "exclude": [
+    "cookies to improve your experience",
+    "Trending now",
+    "celebrity gossip",
+    "Subscribe to our newsletter",
+    "Member login"
+  ],
+  "links": [
+    "/reports/marsh-restoration"
+  ]
+}

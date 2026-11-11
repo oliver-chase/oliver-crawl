@@ -1,0 +1,17 @@
+{
+  "title": "Pricing | TaskBoard",
+  "include": [
+    "Simple pricing",
+    "Starter",
+    "| 25 |",
+    "$99",
+    "$349",
+    "unlimited projects and a 14 day free trial"
+  ],
+  "exclude": [
+    "cookies to improve your experience",
+    "Member login",
+    "Subscribe to our newsletter"
+  ],
+  "links": []
+}
