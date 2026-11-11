@@ -37,6 +37,7 @@ wrong the moment one changes.
 | `CRAWL-RESUME-1` | Emit a snapshot after each page so a killed run continues. Package stores nothing. | `crawl-site.ts` | `lanes/crawl-resume.test.ts` |
 | `CRAWL-PARALLEL-1` | Fetch in parallel only on request. One request per host at a time by default, counted process-wide, and in-flight pages stay in the resume queue. | `crawl-site.ts`, `core/host-throttle.ts` | `lanes/crawl-concurrency.test.ts` |
 | `DNS-CACHE-BOUND-1` | The DNS verdict cache has a size cap, evicting expired then oldest entries, so a wide crawl does not grow memory without limit. | `fetch/host-policy.ts` | `fetch/dns-cache-bound.test.ts` |
+| `CRAWL-HOST-STATS-1` | Report per-host attempts, pages, failure classes, block rate and median latency from the run itself, and put the host on every usage event. | `crawl-site.ts`, `core/usage.ts` | `lanes/host-stats.test.ts` |
 | `CRAWL-ROBOTS-1` | robots.txt was ported but never called. A governed crawler was only as governed as the caller's bookkeeping. | `lanes/own/index.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-UA-1` | Warn once when a User-Agent carries no contact. Operators block traffic they cannot ask about. | `core/config.ts` | `core/consumer-signals.test.ts` |
 | `CRAWL-UNCHANGED-1` | Hashes were computed and discarded. Comparing them is what makes re-crawls cheap for origins sending no ETag. | `crawl-site.ts` | `lanes/crawl-site.test.ts` |

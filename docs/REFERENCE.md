@@ -221,6 +221,20 @@ retrying it on resume would just repeat the failure.
 already persisted those when you received them. This resumes the work and leaves the
 results to you.
 
+### Per-host stats
+
+Every `crawlSite` result carries `hosts`, keyed by hostname, so a run says how each
+origin behaved without extra tooling:
+
+```ts
+run.hosts['example.com'];
+// { attempts, pages, failures: { transient, structural }, blockRate, medianLatencyMs }
+```
+
+`blockRate` is the share of attempts the origin answered with 403 or 429. A host whose
+rate climbs needs a slower `minHostIntervalMs` or a different rung. Every `onUsage`
+event also carries `host`, so spend and latency roll up per origin.
+
 ### Crawling in parallel
 
 `crawlSite` fetches one page at a time unless you ask for more. Two options raise

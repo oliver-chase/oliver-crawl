@@ -181,6 +181,7 @@ export type {
   SiteCrawlResult,
   SiteCrawlFailure,
   CrawlProgress,
+  HostStats,
   MultiSiteOptions,
   MultiSiteResult,
 } from './crawl-site.js';

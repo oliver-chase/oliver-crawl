@@ -348,6 +348,9 @@ export type UsageEvent = {
   /** 'fetch' | 'render' | 'search' | 'scrape' — coarse, for rollups. */
   kind: string;
   url?: string;
+  /** Hostname of `url`, filled in for every event that carries a URL, so a
+   *  consumer can roll spend and latency up per origin. */
+  host?: string;
   ok: boolean;
   latencyMs: number;
   /** Vendor-reported or estimated cost, when the rung has one. Own-lane

@@ -166,6 +166,20 @@ export type CrawlProgress = {
   collected: number;
 };
 
+/** How one host behaved during a run, for tuning pacing and spotting a failing source. */
+export type HostStats = {
+  /** Fetch attempts made against the host, retries included. */
+  attempts: number;
+  /** Pages returned, including 304s. */
+  pages: number;
+  /** Failed attempts by `failureClass`. */
+  failures: { transient: number; structural: number };
+  /** Attempts the origin answered with 403 or 429, as a share of attempts (0 to 1). */
+  blockRate: number;
+  /** Median wall time of an attempt, ms. */
+  medianLatencyMs: number;
+};
+
 export type SiteCrawlResult = {
   /** Pages successfully fetched and parsed. */
   pages: CrawlPage[];
@@ -206,6 +220,8 @@ export type SiteCrawlResult = {
    *  fetched at all. Not failures, and not `notModified` (no request was
    *  made to be answered). */
   skippedByLastmod: string[];
+  /** CRAWL-HOST-STATS-1: per-host behavior of this run, keyed by hostname. */
+  hosts: Record<string, HostStats>;
   startedAt: string;
   finishedAt: string;
 };
@@ -300,6 +316,33 @@ export async function crawlSite(
   const unchanged: string[] = [];
   const lastmod: Record<string, string> = {};
   const skippedByLastmod: string[] = [];
+  const hostTally = new Map<string, { attempts: number; pages: number; transient: number; structural: number; blocked: number; latencies: number[] }>();
+  const tallyFor = (host: string) => {
+    let entry = hostTally.get(host);
+    if (!entry) {
+      entry = { attempts: 0, pages: 0, transient: 0, structural: 0, blocked: 0, latencies: [] };
+      hostTally.set(host, entry);
+    }
+    return entry;
+  };
+  const hostStats = (): Record<string, HostStats> =>
+    Object.fromEntries(
+      [...hostTally].map(([host, e]) => {
+        const sorted = [...e.latencies].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        const median = sorted.length === 0 ? 0 : sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+        return [
+          host,
+          {
+            attempts: e.attempts,
+            pages: e.pages,
+            failures: { transient: e.transient, structural: e.structural },
+            blockRate: e.attempts === 0 ? 0 : e.blocked / e.attempts,
+            medianLatencyMs: median,
+          },
+        ];
+      }),
+    );
 
   const done = (truncated: boolean): SiteCrawlResult => {
     // Deliver fresh validators to the consumer's persistence hook, fire-and-
@@ -319,6 +362,7 @@ export async function crawlSite(
       unchanged,
       lastmod,
       skippedByLastmod,
+      hosts: hostStats(),
       startedAt,
       finishedAt: new Date().toISOString(),
     };
@@ -436,7 +480,18 @@ export async function crawlSite(
     let succeeded = false;
 
     for (let attempt = 0; attempt <= maxRetries && !succeeded; attempt++) {
+      const attemptStarted = Date.now();
       const result = await crawler.crawl(target, url, perPageOptions);
+      // CRAWL-HOST-STATS-1: the request's own host, so a redirect to www still counts against the origin asked.
+      const tally = tallyFor(hostOf(url));
+      tally.attempts++;
+      tally.latencies.push(Date.now() - attemptStarted);
+      if (result.ok) tally.pages += result.notModified ? 1 : result.pages.length;
+      else {
+        tally[result.failureClass === 'structural' ? 'structural' : 'transient']++;
+        // 403 and 429 are the origin refusing a crawler; a policy refusal of ours never reached the origin.
+        if (/\b(403|429)\b/.test(result.detail)) tally.blocked++;
+      }
 
       if (result.ok) {
         succeeded = true;
