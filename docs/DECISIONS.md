@@ -100,6 +100,7 @@ wrong the moment one changes.
 | `OFFDOMAIN-WWW-1` | `www.` and apex are the same site; anything else is not. | `fetch/host-policy.ts` | `fetch/host-policy.test.ts` |
 | `PROBE-DNS-SEAM-1` | `probeCheapChangeSignal` takes an injectable `dnsLookup` like every other fetch path, so its success path is testable without real DNS. | `fetch/cheap-change-probe.ts` | `core/public-helpers.test.ts` |
 | `POOL-REUSE-1` | Direct fetches share one keep-alive pool whose idle lifetime is shorter than the DNS verdict lifetime, so a repeat request skips the handshake and a pooled socket never outlives the answer that approved it. | `fetch/connection-pool.ts` | `fetch/connection-pool.test.ts` |
+| `SITEMAP-LASTMOD-STORE-1` | The crawl store keeps each checked URL's sitemap date, and only for URLs actually checked, so a recrawl skips unmoved entries without caller plumbing and a failed page is retried. | `crawl-site.ts` | `lanes/recrawl-lastmod.test.ts` |
 
 ## Decisions with no test
 

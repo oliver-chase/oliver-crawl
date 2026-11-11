@@ -22,6 +22,8 @@ export type CrawlState = {
   progress: CrawlProgress | null;
   schedule: Record<string, ScheduleEntry>;
   validators: SiteCrawlResult['validators'];
+  /** The sitemap `<lastmod>` each URL had when it was last checked, so the next run can skip a page the sitemap says has not moved. */
+  lastmod?: Record<string, string>;
 };
 
 export interface CrawlStore {

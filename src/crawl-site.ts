@@ -353,6 +353,8 @@ export async function crawlSite(
     ...options,
     resumeFrom: options.resumeFrom ?? loaded?.progress ?? undefined,
     priorValidators: { ...(loaded?.validators ?? {}), ...(options.priorValidators ?? {}) },
+    // SITEMAP-LASTMOD-STORE-1: the dates the store kept skip unchanged sitemap entries with no caller plumbing.
+    priorLastmod: { ...(loaded?.lastmod ?? {}), ...(options.priorLastmod ?? {}) },
   };
   const recrawlMin = Math.max(1, options.recrawlMinIntervalMs ?? DEFAULT_RECRAWL_MIN_INTERVAL_MS);
   const recrawlMax = Math.max(recrawlMin, options.recrawlMaxIntervalMs ?? DEFAULT_RECRAWL_MAX_INTERVAL_MS);
@@ -366,10 +368,13 @@ export async function crawlSite(
     if (!final && Date.now() - lastSavedAt < (options.storeIntervalMs ?? 1000)) return;
     lastSavedAt = Date.now();
     // Chained, so snapshots reach the store in order, and a failing store cannot reach the crawl.
-    const state: CrawlState = { progress, schedule: { ...schedule }, validators: { ...validators } };
+    const state: CrawlState = { progress, schedule: { ...schedule }, validators: { ...validators }, lastmod: { ...checkedLastmod } };
     saving = saving.then(() => store.save(storeKey, state)).catch(() => {});
   };
+  // Only a URL that was actually checked keeps its date, so a page that failed this run is not skipped on the next.
+  const checkedLastmod: Record<string, string> = { ...(loaded?.lastmod ?? {}) };
   const touch = (key: string, unchangedNow: boolean) => {
+    if (lastmod[key]) checkedLastmod[key] = lastmod[key];
     schedule[key] = {
       checkedAt: Date.now(),
       unchangedStreak: unchangedNow ? (schedule[key]?.unchangedStreak ?? 0) + 1 : 0,
