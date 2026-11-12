@@ -99,6 +99,7 @@ export async function crawlSite(
     // A finished run clears its snapshot, and a truncated one keeps it so the next run continues.
     session.persist(truncated ? lastProgress : null, true);
     await session.settled();
+    const storeError = loadError ?? session.storeError();
     // Deliver fresh validators to the consumer's persistence hook, fire-and-
     // forget: a slow or throwing sink must not break (or slow) the crawl.
     if (Object.keys(validators).length > 0 && options.onSignals) {
@@ -117,7 +118,7 @@ export async function crawlSite(
       lastmod,
       skippedByLastmod,
       notDue,
-      ...((loadError ?? session.storeError()) === undefined ? {} : { storeError: (loadError ?? session.storeError())! }),
+      ...(storeError === undefined ? {} : { storeError }),
       duplicates,
       hosts: stats.snapshot(),
       startedAt,

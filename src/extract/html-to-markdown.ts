@@ -17,7 +17,6 @@ import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { AnyNode } from 'domhandler';
 import { CHROME_SELECTOR, isInputForm, selectMainRegion } from './main-region.js';
 
-export { selectMainRegion };
 
 /** Escape the characters that would otherwise be read as markdown syntax. */
 function escapeInline(text: string): string {
@@ -101,11 +100,6 @@ function renderChildren($: CheerioAPI, node: Cheerio<AnyNode>, blocks: string[],
 }
 
 function renderNode($: CheerioAPI, $el: Cheerio<AnyNode>, el: AnyNode, blocks: string[], ctx: Ctx): void {
-  if (el.type === 'text') {
-    const text = collapse($el.text());
-    if (text.trim()) blocks.push(escapeInline(text.trim()));
-    return;
-  }
   if (el.type !== 'tag') return;
 
   const tag = (el as { name: string }).name.toLowerCase();

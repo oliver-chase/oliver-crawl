@@ -28,8 +28,6 @@ import type { CrawlOptions, CrawlResult } from '../../core/types.js';
  *  which lets the lane try the next rung; it throws only on real errors. */
 type VendorRung = {
   name: string;
-  /** Key present? Checked before the rung is attempted. */
-  isConfigured: (config: ResolvedConfig) => boolean;
   scrape: (url: string, config: ResolvedConfig, timeoutMs: number) => Promise<{ text: string; title: string | null } | null>;
 };
 
@@ -37,7 +35,6 @@ const FIRECRAWL_ENDPOINT = 'https://api.firecrawl.dev/v1/scrape';
 
 const firecrawlRung: VendorRung = {
   name: 'firecrawl',
-  isConfigured: (config) => Boolean(config.vendor?.firecrawl),
   async scrape(url, config, timeoutMs) {
     const response = await fetch(FIRECRAWL_ENDPOINT, {
       method: 'POST',
@@ -69,7 +66,6 @@ const APIFY_BASE = 'https://api.apify.com/v2';
  *  second rung because it succeeds on some sites Firecrawl does not. */
 const apifyRung: VendorRung = {
   name: 'apify',
-  isConfigured: (config) => Boolean(config.vendor?.apify),
   async scrape(url, config, timeoutMs) {
     const token = config.vendor?.apify;
     const response = await fetch(`${APIFY_BASE}/acts/apify~website-content-crawler/run-sync-get-dataset-items`, {

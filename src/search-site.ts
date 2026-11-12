@@ -160,7 +160,6 @@ export async function searchSite(
       if (result.reason === 'blocked' || result.reason === 'quarantined') break;
       continue;
     }
-    if (result.notModified) continue;
 
     const page = result.pages[0];
     if (!page) continue;

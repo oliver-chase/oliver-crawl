@@ -20,7 +20,7 @@
 
 import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { AnyNode } from 'domhandler';
-import { selectMainRegion } from './html-to-markdown.js';
+import { selectMainRegion } from './main-region.js';
 
 /** Filename/path fragments that mark an image as furniture, not content. */
 const FURNITURE_PATTERN =

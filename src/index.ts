@@ -10,12 +10,11 @@
 import { resolveConfig, availableVendorRungs, configFromEnv, DEFAULT_USER_AGENT } from './core/config.js';
 import { approveCrawlPolicy, crawlWithOwnLane, resolveTargetPolicy } from './lanes/own/index.js';
 import { crawlWithVendorLane } from './lanes/vendor/index.js';
-import type { SitemapEntry } from './fetch/sitemap-discovery.js';
 import { classifyFailure } from './core/failure-class.js';
 import { rememberWinningRung } from './core/rung-memory.js';
 import { search, availableSearchProviders } from './search/index.js';
 import { readPageCache, writePageCache } from './core/page-cache.js';
-import { discoverSitemapUrls } from './fetch/sitemap-discovery.js';
+import { discoverSitemapUrls, type SitemapEntry } from './fetch/sitemap-discovery.js';
 import type { SearchOutcome, SearchOptions } from './search/index.js';
 import type { CrawlConfig, CrawlOptions, CrawlResult, CrawlTarget, LaneName } from './core/types.js';
 

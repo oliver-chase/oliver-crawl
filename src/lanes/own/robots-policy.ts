@@ -3,7 +3,7 @@
 // Resolving a target's robots posture, caching it per host, and the policy approval every crawl runs first.
 
 import { assertRequestUrlAllowed, assertTargetEligible } from '../../fetch/host-policy.js';
-import { evaluateRobotsForUrl } from '../../fetch/robots-check.js';
+import { evaluateRobotsForUrl, type RobotsPolicy } from '../../fetch/robots-check.js';
 import type { ResolvedConfig } from '../../core/config.js';
 import type { CrawlTarget } from '../../core/types.js';
 
@@ -26,7 +26,7 @@ import type { CrawlTarget } from '../../core/types.js';
 export const ROBOTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — resolved posture
 export const ROBOTS_FAILURE_TTL_MS = 5 * 60 * 1000; //     5m — unresolved, retry soon
 
-type RobotsPolicyValue = 'allow' | 'disallow' | 'conditional' | 'unknown';
+type RobotsPolicyValue = RobotsPolicy;
 type RobotsCacheEntry = { pending: Promise<RobotsPolicyValue>; expiresAt: number };
 
 /** Hosts remembered per process. The oldest entry goes when a long-lived crawler passes this many. */

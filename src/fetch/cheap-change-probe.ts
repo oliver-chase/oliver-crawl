@@ -81,7 +81,7 @@ export async function probeCheapChangeSignal(
     if (walk.stopped) return null;
     const response: Response = walk.response;
 
-    if (response.status === 0 || response.status < 200 || response.status >= 300) {
+    if (response.status < 200 || response.status >= 300) {
       return null;
     }
 
@@ -92,7 +92,7 @@ export async function probeCheapChangeSignal(
     // most static/server-rendered pages send one of these, and reading a
     // capped body is cheap either way.
     let bodyHash: string | null = null;
-    if (!etag && !lastModified && response.ok) {
+    if (!etag && !lastModified) {
       // A body that cannot be read leaves the hash null, because two failed reads would otherwise match.
       const text = await readBodyCapped(response, PROBE_MAX_BODY_BYTES).catch(() => null);
       bodyHash = text === null ? null : await sha256Hex(text);

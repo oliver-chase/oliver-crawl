@@ -71,7 +71,7 @@ export async function searchAndCrawl(
   options: SearchAndCrawlOptions = {},
 ): Promise<SearchAndCrawlResult> {
   const found = await crawler.search(query, {
-    maxResults: options.maxResults ?? 3,
+    ...(options.maxResults === undefined ? {} : { maxResults: options.maxResults }),
     ...(options.site ? { site: options.site } : {}),
   });
 

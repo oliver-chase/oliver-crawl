@@ -9,12 +9,12 @@
 // one we must never let a crawler reach".
 
 /** Hostnames that are never crawlable, regardless of what DNS says. */
-export const BLOCKED_HOSTNAMES = new Set(['localhost', '0.0.0.0', '127.0.0.1', '::1']);
+const BLOCKED_HOSTNAMES = new Set(['localhost', '0.0.0.0', '127.0.0.1', '::1']);
 
 /** Suffixes that denote a private/internal network namespace. */
-export const BLOCKED_HOST_SUFFIXES = ['.local', '.internal', '.localhost', '.localdomain'];
+const BLOCKED_HOST_SUFFIXES = ['.local', '.internal', '.localhost', '.localdomain'];
 
-export function isIpv4Literal(host: string): boolean {
+function isIpv4Literal(host: string): boolean {
   if (!/^(\d{1,3})(?:\.(\d{1,3})){3}$/.test(host)) return false;
   return host.split('.').every((segment) => {
     const parsed = Number(segment);
@@ -27,7 +27,7 @@ function isValidIpv6Segment(segment: string): boolean {
   return /^[0-9a-f]{1,4}$/i.test(segment);
 }
 
-export function isIpv6Literal(host: string): boolean {
+function isIpv6Literal(host: string): boolean {
   // A dotted tail such as ::ffff:10.0.0.1 is not accepted here. The URL parser rewrites it to
   // hex, and isBlockedHostname refuses any other host that contains a colon.
   if (host.includes('.')) return false;

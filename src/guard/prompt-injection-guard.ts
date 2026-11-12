@@ -127,6 +127,10 @@ const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
   },
 ];
 
+// Compiled once: the guard runs on every crawled page.
+const MATCHERS = new Map(PROMPT_INJECTION_PATTERNS.map((p) => [p.id, new RegExp(p.source, 'i')]));
+const REDACTORS = new Map(PROMPT_INJECTION_PATTERNS.map((p) => [p.id, new RegExp(p.source, 'gi')]));
+
 function truncate(input: string, limit: number) {
   if (input.length <= limit) {
     return input;
@@ -181,7 +185,7 @@ function collectSignals(input: string): PromptInjectionSignal[] {
   const signals: PromptInjectionSignal[] = [];
 
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
-    const regex = new RegExp(pattern.source, 'i');
+    const regex = MATCHERS.get(pattern.id)!;
     // See GUARD-PRECISION-3: only this rule is evaluated URL-free.
     const urlFree = pattern.id === 'encoded-payload';
     const directMatch = (urlFree ? directNoUrls : direct).match(regex);
@@ -253,7 +257,7 @@ export function sanitizeCrawledText(input: string, maxChars = DEFAULT_MAX_TEXT_C
   let redactionCount = 0;
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
     if (!raisedIds.has(pattern.id)) continue;
-    const redactionRegex = new RegExp(pattern.source, 'gi');
+    const redactionRegex = REDACTORS.get(pattern.id)!;
     const redact = (segment: string) =>
       segment.replace(redactionRegex, () => {
         redactionCount += 1;

@@ -67,7 +67,7 @@ export async function fetchViaJina(
   // who set nothing, not a floor that overrides them.
   const timeoutId = setTimeout(() => controller.abort(), opts?.timeoutMs ?? JINA_TIMEOUT_MS);
   try {
-    const res = await doFetch(`${endpoint.replace(/\/+$/, '')}/${target.toString()}`, {
+    const res = await doFetch(`${endpoint}/${target.toString()}`, {
       method: 'GET',
       headers: {
         // Ask Jina for the readable content, not the raw DOM.
