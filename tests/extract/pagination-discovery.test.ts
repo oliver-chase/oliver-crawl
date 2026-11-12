@@ -107,3 +107,13 @@ describe('discoverPaginatedUrls', () => {
     await expect(discoverPaginatedUrls('https://site.example.com/events', { fetchImpl })).resolves.toEqual(['https://site.example.com/events?page=2']);
   });
 });
+
+describe('unquoted next links', () => {
+  test('rel="next" with an unquoted href is found', () => {
+    expect(findNextPageUrl('<a rel="next" href=/events/page/2>More</a>', 'https://site.example.com/events')).toBe('https://site.example.com/events/page/2');
+  });
+
+  test('a labelled link with an unquoted href is found', () => {
+    expect(findNextPageUrl('<a href=/events?page=2>Next</a>', 'https://site.example.com/events')).toBe('https://site.example.com/events?page=2');
+  });
+});

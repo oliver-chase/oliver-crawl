@@ -59,7 +59,7 @@ export function extractInlineScriptContent(html: string, maxChars = 12_000): str
     const body = bodyStart > 0 && bodyEnd > bodyStart ? scriptTag.slice(bodyStart, bodyEnd) : '';
     if (!body) continue;
     // Every double-quoted string literal in the script.
-    const matches = body.match(/"((?:[^"\\]|\\.){12,400})"/g);
+    const matches = body.match(/"((?:[^"\\]|\\.){12,})"/g);
     if (!matches) continue;
     for (const raw of matches) {
       const decoded = unescapeJsString(raw.slice(1, -1));

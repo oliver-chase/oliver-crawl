@@ -40,10 +40,11 @@ export function classifyContentType(contentType: string): ContentKind | null {
 }
 
 /**
- * Some servers send ICS and CSV as `text/plain` or `application/octet-stream`.
- * When the URL itself is unambiguous, trust it over a lazy header — but only
+ * Some servers send ICS and CSV as `text/plain`. When the URL itself is
+ * unambiguous, trust it over a lazy header — but only
  * to REFINE a type we already agreed to read, never to accept one we refused.
- * That keeps the extension from being a way around the content-type gate.
+ * That keeps the extension from being a way around the content-type gate, so a
+ * file served as `application/octet-stream` stays refused whatever its name.
  */
 export function refineKindByUrl(kind: ContentKind, url: string): ContentKind {
   if (kind !== 'text') return kind;

@@ -57,6 +57,8 @@ function decodeXmlEntities(raw: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
     // &amp; last, so &amp;lt; decodes to &lt; and not to <
     .replace(/&amp;/g, '&');
 }

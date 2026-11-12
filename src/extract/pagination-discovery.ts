@@ -54,7 +54,8 @@ function findRelNextHrefs(html: string): string[] {
     // before "rel" (real HTML attributes are always space-separated) closes
     // that gap without missing the genuine rel="next" attribute.
     if (!/\srel\s*=\s*["']?[^"'>]*\bnext\b/i.test(tag)) continue;
-    const href = tag.match(/\shref\s*=\s*["']([^"'#][^"']*)["']/i)?.[1];
+    const hrefMatch = tag.match(/\shref\s*=\s*(?:["']([^"'#][^"']*)["']|([^\s"'>#][^\s>]*))/i);
+    const href = hrefMatch?.[1] ?? hrefMatch?.[2];
     if (href) hrefs.push(href);
   }
   return hrefs;
@@ -63,11 +64,11 @@ function findRelNextHrefs(html: string): string[] {
 /** Fallback: an `<a>` whose LABEL text exactly matches a known pagination
  *  phrase (see NEXT_PAGE_LABELS above). */
 function findLabelMatchHref(html: string): string | null {
-  const anchorPattern = /<a\b[^>]*\shref=["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  const anchorPattern = /<a\b[^>]*\shref\s*=\s*(?:["']([^"'#][^"']*)["']|([^\s"'>#][^\s>]*))[^>]*>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null;
   while ((match = anchorPattern.exec(html)) !== null) {
-    const href = (match[1] ?? '').trim();
-    const label = (match[2] ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    const href = (match[1] ?? match[2] ?? '').trim();
+    const label = (match[3] ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
     if (href && NEXT_PAGE_LABELS.has(label)) return href;
   }
   return null;

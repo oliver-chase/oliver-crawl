@@ -18,7 +18,7 @@ import {
   assertRedirectUrlAllowed,
 } from './host-policy.js';
 import { sha256Hex } from '../core/hash.js';
-import { dropBody, followManualRedirects, readBodyCapped } from './http-mechanics.js';
+import { dropBody, followManualRedirects, readBytesPrefix } from './http-mechanics.js';
 import { DEFAULT_USER_AGENT } from '../core/config.js';
 import type { DnsLookupFn, CrawlTarget } from '../core/types.js';
 
@@ -96,8 +96,9 @@ export async function probeCheapChangeSignal(
     let bodyHash: string | null = null;
     if (!etag && !lastModified) {
       // A body that cannot be read leaves the hash null, because two failed reads would otherwise match.
-      const text = await readBodyCapped(response, PROBE_MAX_BODY_BYTES).catch(() => null);
-      bodyHash = text === null ? null : await sha256Hex(text);
+      // A body past the cap could differ only after it, so a capped read gives no hash to compare.
+      const read = await readBytesPrefix(response, PROBE_MAX_BODY_BYTES).catch(() => null);
+      bodyHash = read === null || read.capped ? null : await sha256Hex(read.bytes);
     } else {
       dropBody(response);
     }

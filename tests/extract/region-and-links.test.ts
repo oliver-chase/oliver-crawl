@@ -77,3 +77,14 @@ describe('script text', () => {
     expect(extractInlineScriptContent(html) ?? '').not.toContain('marketplaceConfigPanelId');
   });
 });
+
+describe('the content-region hash reads what the Markdown shows', () => {
+  test('a changed link target changes the hash', async () => {
+    const page = (href: string) => `<main><p>Tickets <a href="${href}">Buy</a></p></main>`;
+    expect(await computeContentRegionHash(page('/t/1'), 'https://venue.example/')).not.toBe(await computeContentRegionHash(page('/t/2'), 'https://venue.example/'));
+  });
+
+  test('two blocks stay separate', async () => {
+    expect(await computeContentRegionHash('<main><p>Doors</p><p>7 PM</p></main>')).not.toBe(await computeContentRegionHash('<main><p>Doors7 PM</p></main>'));
+  });
+});

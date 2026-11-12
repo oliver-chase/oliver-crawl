@@ -425,7 +425,7 @@ Everything the package exports, grouped by what you would reach for it to do.
 
 | Export | Purpose |
 |---|---|
-| `computeContentRegionHash(html)` | Structural hash, nav/footer-insensitive |
+| `computeContentRegionHash(html, pageUrl?)` | Hash of the page's Markdown, nav/footer-insensitive. Pass the page URL to match `contentRegionSha256` |
 | `probeCheapChangeSignal` · `cheapSignalsMatch` | Cheap pre-fetch change probe |
 | `urlDedupKey(url)` | Canonical URL identity |
 

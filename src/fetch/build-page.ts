@@ -30,10 +30,9 @@ export function isQuarantined(value: unknown): value is QuarantineEvidence {
 }
 
 import type { PromptInjectionSignal } from '../guard/prompt-injection-guard.js';
-import { htmlToMarkdown } from '../extract/html-to-markdown.js';
+import { capMarkdown, htmlToMarkdown } from '../extract/html-to-markdown.js';
 import { summarizeStructuredData } from '../extract/structured-summary.js';
 import { findContentImages } from '../extract/content-images.js';
-import { computeContentRegionHash } from '../extract/content-region-hash.js';
 import { extractInlineScriptContent, shouldRecoverFromScripts } from '../extract/spa-content-extract.js';
 import { sanitizeCrawledText } from '../guard/prompt-injection-guard.js';
 import { looksLikeEmptyState } from '../core/soft-404.js';
@@ -116,7 +115,9 @@ export async function buildPage(input: {
 
   // Built BEFORE the destructive strip below, and from a clone internally, so
   // the link pass further down still sees the whole document.
-  const markdownRaw = htmlToMarkdown($, { maxChars: input.maxTextChars, baseUrl: input.url });
+  // The full Markdown is the content-region hash's input, and the page carries it capped.
+  const markdownFull = htmlToMarkdown($, { baseUrl: input.url });
+  const markdownRaw = capMarkdown(markdownFull, input.maxTextChars);
 
   $('script, style, noscript, template').remove();
   let visibleText = $('body').text().replace(/\s+/g, ' ').trim();
@@ -202,7 +203,7 @@ export async function buildPage(input: {
     ...(input.includeHtml ? { html: input.html } : {}),
     contentType: input.contentType,
     bodySha256: await sha256Hex(input.html),
-    contentRegionSha256: await computeContentRegionHash(input.html),
+    contentRegionSha256: await sha256Hex(markdownFull),
     textSha256: await sha256Hex(sanitized.text),
     // Link targets count by their path alone, so a shared origin in every absolute URL does not make pages alike.
     contentSimhash: simhash((sanitizedMarkdown.text || sanitized.text).replace(/\]\(https?:\/\/[^/)\s]+/g, '](')),

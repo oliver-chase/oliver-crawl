@@ -20,7 +20,7 @@
 
 import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { AnyNode } from 'domhandler';
-import { selectMainRegion } from './main-region.js';
+import { CHROME_SELECTOR, selectMainRegion } from './main-region.js';
 
 /** Filename/path fragments that mark an image as furniture, not content. */
 const FURNITURE_PATTERN =
@@ -61,6 +61,8 @@ export function findContentImages($: CheerioAPI, pageUrl: string, limit = 3): Co
 
   $('img').each((_, img) => {
     const $img = $(img) as Cheerio<AnyNode>;
+    // Header, nav, footer and aside images are page chrome, whatever their size or name.
+    if ($img.closest(CHROME_SELECTOR).length > 0) return;
     // A lazy-loader parks the real URL in data-src and leaves a data: placeholder in src.
     const rawSrc = ($img.attr('src') || '').trim();
     const raw = (/^data:/i.test(rawSrc) || !rawSrc ? $img.attr('data-src') || rawSrc : rawSrc).trim();

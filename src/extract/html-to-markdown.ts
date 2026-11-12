@@ -76,14 +76,17 @@ export function htmlToMarkdown($: CheerioAPI, options: { maxChars?: number; base
   const blocks: string[] = [];
   renderChildren($, scope, blocks, { listDepth: 0 });
 
-  let out = blocks
+  const out = blocks
     .join('\n\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  const cap = options.maxChars;
-  if (cap && out.length > cap) out = `${out.slice(0, cap)}\n[TRUNCATED]`;
-  return out;
+  return capMarkdown(out, options.maxChars);
+}
+
+/** Cut Markdown to `cap` characters and mark the cut, the one form every truncated page takes. */
+export function capMarkdown(markdown: string, cap?: number): string {
+  return cap && markdown.length > cap ? `${markdown.slice(0, cap)}\n[TRUNCATED]` : markdown;
 }
 
 type Ctx = { listDepth: number };

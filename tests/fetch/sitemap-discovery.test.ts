@@ -96,3 +96,12 @@ describe('discoverSitemapUrls', () => {
     expect(result.urls[0]).toBe('https://venue.example.com/events?cat=music&month=7');
   });
 });
+
+describe('sitemap entities', () => {
+  test('numeric character references are decoded', async () => {
+    globalThis.fetch = (async () =>
+      xml(`<?xml version="1.0"?><urlset><url><loc>https://venue.example.com/e?a=1&#038;b=2</loc></url></urlset>`)) as typeof fetch;
+    const result = await discoverSitemapUrls(target, { userAgent: 'T/1', dnsLookup: publicDns });
+    expect(result.urls).toEqual(['https://venue.example.com/e?a=1&b=2']);
+  });
+});

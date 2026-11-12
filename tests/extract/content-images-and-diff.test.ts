@@ -115,3 +115,22 @@ describe('diffContent', () => {
     expect(diff.added).toHaveLength(2_000);
   });
 });
+
+describe('extraction reports the page as it is', () => {
+  test('one changed list item is reported alone', () => {
+    const list = (changed: string) => Array.from({ length: 60 }, (_, i) => `- Item ${i}${i === 30 ? changed : ''}`).join('\n');
+    const diff = diffContent(list(''), list(' moved to Friday'));
+    expect(diff.added).toEqual(['- Item 30 moved to Friday']);
+    expect(diff.removed).toEqual(['- Item 30']);
+    expect(diff.truncated).toBe(false);
+  });
+
+  test('a block cut to the report limit is flagged', () => {
+    expect(diffContent('', 'x'.repeat(500)).truncated).toBe(true);
+  });
+
+  test('an image inside the page header is chrome', () => {
+    const html = '<header><img src="/uploads/venue-hero.jpg" width="400" height="400" alt="Riverside Arts Center"></header><main><p>Events</p></main>';
+    expect(findContentImages(cheerio.load(html), PAGE_URL)).toEqual([]);
+  });
+});

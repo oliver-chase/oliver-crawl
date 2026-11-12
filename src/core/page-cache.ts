@@ -55,7 +55,8 @@ export function readPageCache(url: string, lanes: string[] | undefined, ttlMs: n
     drop(key);
     return null;
   }
-  return hit.result;
+  // A copy, so a caller that edits its result cannot change what the next hit returns.
+  return structuredClone(hit.result);
 }
 
 export function writePageCache(url: string, lanes: string[] | undefined, ttlMs: number, result: CrawlResult, variant: string): void {

@@ -14,7 +14,7 @@
 
 export type ContentDiff = {
   changed: boolean;
-  /** True when more blocks changed than the lists below report. `changed` is exact either way. */
+  /** True when more blocks changed than the lists below report, or a reported block was cut to its first 400 characters. `changed` is exact either way. */
   truncated: boolean;
   added: string[];
   removed: string[];
@@ -24,10 +24,10 @@ const MAX_BLOCK_CHARS = 400;
 /** The most changed blocks reported per side. The comparison itself covers every block. */
 const MAX_REPORTED_BLOCKS = 2000;
 
-/** Split markdown (or text) into comparable blocks. */
+/** Split markdown (or text) into comparable blocks: one per line, so each list item and table row is its own unit. */
 function toBlocks(content: string): string[] {
   return content
-    .split(/\n{2,}/)
+    .split(/\n+/)
     .map((block) => block.trim())
     .filter(Boolean);
 }
@@ -54,18 +54,20 @@ export function diffContent(previous: string, current: string): ContentDiff {
   for (const block of after) {
     const remaining = counts.get(block) ?? 0;
     if (remaining > 0) counts.set(block, remaining - 1);
-    else added.push(block.slice(0, MAX_BLOCK_CHARS));
+    else added.push(block);
   }
 
   // Whatever is left unconsumed was in the old version and is not in the new.
   const removed: string[] = [];
   for (const [block, remaining] of counts) {
-    for (let i = 0; i < remaining; i++) removed.push(block.slice(0, MAX_BLOCK_CHARS));
+    for (let i = 0; i < remaining; i++) removed.push(block);
   }
 
-  const truncated = added.length > MAX_REPORTED_BLOCKS || removed.length > MAX_REPORTED_BLOCKS;
-  const reportedAdded = added.slice(0, MAX_REPORTED_BLOCKS);
-  const reportedRemoved = removed.slice(0, MAX_REPORTED_BLOCKS);
+  const cut = [...added, ...removed].some((block) => block.length > MAX_BLOCK_CHARS);
+  const truncated = cut || added.length > MAX_REPORTED_BLOCKS || removed.length > MAX_REPORTED_BLOCKS;
+  const report = (blocks: string[]) => blocks.slice(0, MAX_REPORTED_BLOCKS).map((block) => block.slice(0, MAX_BLOCK_CHARS));
+  const reportedAdded = report(added);
+  const reportedRemoved = report(removed);
   return {
     changed: added.length > 0 || removed.length > 0,
     truncated,

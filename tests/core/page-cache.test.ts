@@ -25,13 +25,24 @@ describe('writePageCache', () => {
   test('a different variant is a different entry', () => {
     writePageCache('https://a.example.com/x', undefined, 60_000, success, 'with-credentials');
     expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'anonymous')).toBeNull();
-    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'with-credentials')).toBe(success);
+    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'with-credentials')).toEqual(success);
   });
 
   test('replays a success inside its lifetime and nothing when the lifetime is zero', () => {
     writePageCache('https://a.example.com/x', undefined, 60_000, success, 'v');
-    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'v')).toBe(success);
+    expect(readPageCache('https://a.example.com/x', undefined, 60_000, 'v')).toEqual(success);
     writePageCache('https://a.example.com/y', undefined, 0, success, 'v');
     expect(readPageCache('https://a.example.com/y', undefined, 60_000, 'v')).toBeNull();
+  });
+});
+
+describe('a cache hit is a copy', () => {
+  test('editing one hit does not change the next', () => {
+    const result = { ok: true as const, pages: [{ url: 'https://c.example.com/x', text: 'original' }] } as unknown as CrawlResult;
+    writePageCache('https://c.example.com/x', undefined, 60_000, result, 'copy');
+    const first = readPageCache('https://c.example.com/x', undefined, 60_000, 'copy') as typeof result & { pages: { text: string }[] };
+    first.pages[0]!.text = 'edited';
+    const second = readPageCache('https://c.example.com/x', undefined, 60_000, 'copy') as typeof first;
+    expect(second.pages[0]!.text).toBe('original');
   });
 });

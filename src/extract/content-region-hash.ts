@@ -7,29 +7,23 @@
 // This computes a SECOND hash of just the main-content region; the caller
 // treats a page as unchanged when EITHER hash still matches.
 //
-// The region is the one the markdown reads (selectMainRegion), with the same page
-// furniture removed, so an edit to any text the markdown shows changes the hash.
+// The hash reads the page's Markdown, so a change to any text, link or image the
+// Markdown shows changes it, and chrome the Markdown leaves out never does.
 
 import * as cheerio from 'cheerio';
 import { sha256Hex } from '../core/hash.js';
-import { CHROME_SELECTOR, selectMainRegion } from './main-region.js';
+import { htmlToMarkdown } from './html-to-markdown.js';
 
-/**
- * Returns the visible text of the page's main-content region, with chrome
- * (nav/header/footer/aside) and non-visible tags (script/style/noscript) removed.
- * Exported for direct testing.
- */
-export function extractMainContentText(html: string): string {
-  const region = selectMainRegion(cheerio.load(html));
-  if (region.length === 0) return '';
-  const scope = region.clone();
-  scope.find(CHROME_SELECTOR).remove();
-  return scope.text().replace(/\s+/g, ' ').trim();
+/** The page's main content as the hash reads it: its full Markdown, chrome removed. Exported for direct testing. */
+export function extractMainContentText(html: string, pageUrl?: string): string {
+  return htmlToMarkdown(cheerio.load(html), pageUrl ? { baseUrl: pageUrl } : {});
 }
 
-/** Hashes the extracted main-content text. Never throws — an empty/unparsed
- *  page just hashes an empty string, which will simply never match a prior
- *  non-empty hash (correctly treated as "changed," the safe default). */
-export async function computeContentRegionHash(html: string): Promise<string> {
-  return sha256Hex(extractMainContentText(html));
+/**
+ * Hash of the page's main content. Pass the page URL to match a crawled page's
+ * `contentRegionSha256`, since relative links resolve against it. Never throws: an
+ * empty page hashes the empty string, which never matches a non-empty one.
+ */
+export async function computeContentRegionHash(html: string, pageUrl?: string): Promise<string> {
+  return sha256Hex(extractMainContentText(html, pageUrl));
 }

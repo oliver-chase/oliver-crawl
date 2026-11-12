@@ -20,6 +20,10 @@ Correctness
 - `seeds: []` falls back to the base URL, include and exclude patterns with the `g` flag match every time, and `mapSite` reports truncation only when a URL was dropped
 - a reserved header such as `User-Agent` no longer counts as a credential, a thin page or a bot wall records that the origin answered, and a quarantined render is counted once in usage
 - a failure is structural only for an `HTTP 404`-style status, so a duration such as "410 ms" no longer retires a source
+- `diffContent` compares line by line, so one changed list item or table row is reported alone, and `truncated` says when a reported block was cut
+- the content-region hash reads the page's full Markdown, so a changed link or a block boundary changes it; pass the page URL to `computeContentRegionHash` to match a crawled page
+- header, nav, footer and aside images are never content images, `rel="next"` and next links with unquoted hrefs are found, and long strings in a script-rendered page are recovered
+- a cache hit is a copy, sitemap numeric entities such as `&#038;` are decoded, and the change probe gives no body hash when the body passes its cap
 
 ## 0.20.0
 
