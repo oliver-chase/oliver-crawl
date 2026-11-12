@@ -64,7 +64,7 @@ async function archiveFallback(
  *
  * LANE-EXHAUST-1: local Chromium -> your render service -> your proxy -> Jina. A skipped
  * free rung pushes the crawl into the paid lane sooner than it needed to go,
- * so every failure path routes through here rather than choosing its own.
+ * so every failure path routes through here and chooses none of its own.
  */
 export async function freeFallbackLadder(
   url: string,
@@ -126,7 +126,7 @@ export async function freeFallbackLadder(
     return withOriginMoved(viaJina, priorDetail, 'jina', url);
   }
 
-  // BODY-RECEIVED-1 is attached HERE rather than inside each rung. A rung knows
+  // BODY-RECEIVED-1 is attached HERE, outside each rung. A rung knows
   // whether IT got content; only the ladder knows whether the original fetch
   // did, and that is the fact a consumer needs to tell "the site is down" from
   // "the site served a shell".
@@ -186,7 +186,7 @@ async function renderFallback(
     }
     // LADDER-QUALITY-1: a rendered bot-wall interstitial is a rung FAILURE,
     // not content. Accepting it here beat the Jina rung, which retrieves the
-    // real page — success reporting a security notice instead of the site.
+    // real page — success reporting a security notice in place of the site.
     if (localPage.text.trim() && !looksLikeBlockPage(localPage.text)) {
       emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
       return { ok: true, pages: [localPage] };
@@ -217,7 +217,7 @@ async function renderFallback(
     }
 
     // A render that still yields nothing is not a success — let the caller
-    // fall through to Jina rather than returning an empty page.
+    // fall through to Jina and return no empty page.
     if (!page.text.trim() || looksLikeBlockPage(page.text)) return null;
 
     emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: true, latencyMs: Date.now() - started });
@@ -314,8 +314,7 @@ async function jinaFallback(
       emitUsage(config, { lane: 'own', rung: 'guard', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
       // QUARANTINE-EVIDENCE-1. This site was MISSED when the decision shipped,
       // and it is the one that matters most: the Jina rung runs whenever the
-      // direct fetch is bot-walled, so it is the common case rather than an
-      // edge. A consumer whose policy is never to lose a page got a bare
+      // direct fetch is bot-walled, so it is the common case and no edge. A consumer whose policy is never to lose a page got a bare
       // refusal here and had to drop it.
       return {
         ok: false, reason: 'quarantined', detail, lane: 'own',

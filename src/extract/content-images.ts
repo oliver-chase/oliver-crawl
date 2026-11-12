@@ -41,7 +41,7 @@ export type ContentImage = {
  * Rank the images most likely to carry this page's actual content.
  *
  * Scoring favours, in rough order of weight: living inside the main content
- * region rather than page chrome, declaring poster-ish dimensions, and having
+ * region (and never page chrome), declaring poster-ish dimensions, and having
  * descriptive alt text. It penalises anything whose URL looks like site
  * furniture.
  *

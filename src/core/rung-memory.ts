@@ -82,7 +82,7 @@ export function forgetWinningRung(memory: RungMemory, hostname: string): void {
  *
  * A caller that skips the fetch still has every recovery rung available, and
  * on failure must call `forgetWinningRung` and retry the normal path — that
- * pairing is what keeps a stale memory to one extra request rather than a
+ * pairing is what keeps a stale memory to one extra request and never a
  * lost page.
  */
 export function shouldSkipDirectFetch(memory: RungMemory, hostname: string): boolean {

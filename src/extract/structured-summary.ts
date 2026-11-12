@@ -10,8 +10,8 @@
 // actually about the CONTENT, and leaves domain sufficiency to the caller.
 
 /**
- * schema.org types that describe the SITE or the page's furniture rather than
- * its content. Their presence tells you nothing about whether the page's
+ * schema.org types that describe the SITE or the page's furniture, with
+ * no bearing on its content. Their presence tells you nothing about whether the page's
  * subject matter is machine-readable.
  */
 const BOILERPLATE_TYPES = new Set(
@@ -41,7 +41,7 @@ export type StructuredSummary = {
   /** Every distinct `@type` found anywhere in the page's JSON-LD. */
   types: string[];
   /**
-   * The subset of `types` that describes the page's CONTENT rather than the
+   * The subset of `types` that describes the page's CONTENT, excluding the
    * site around it — Event, Product, Recipe, Article, LocalBusiness and so on.
    */
   contentTypes: string[];
@@ -76,7 +76,7 @@ function typesOf(node: Record<string, unknown>): string[] {
  */
 function flattenNodes(value: unknown, out: Array<Record<string, unknown>>, depth = 0): void {
   // Bounded: JSON-LD is caller-untrusted input, and a deeply self-nested
-  // document should cost bounded work rather than blow the stack.
+  // document should cost bounded work and never blow the stack.
   if (depth > 8 || out.length > 500) return;
 
   if (Array.isArray(value)) {

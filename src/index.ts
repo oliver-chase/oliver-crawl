@@ -130,8 +130,8 @@ export function createCrawler(config: CrawlConfig): Crawler {
 
           if (result.ok) {
             // BETTER-RUNGMEMORY-1: recorded HERE, in one place, from the rung
-            // the page itself reports — rather than at each rung's success
-            // site, which would drift the moment a rung is added. Success
+            // the page itself reports. Recording it at each rung's success
+            // site would drift the moment a rung is added. Success
             // only: remembering failures is the trap the robots cache had.
             if (resolved.rungMemory !== false && !result.notModified && !result.originMoved) {
               const page = result.pages[0];

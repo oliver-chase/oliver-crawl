@@ -9,7 +9,7 @@
 // reach the model — Firecrawl's `onlyMainContent`, using logic we already had
 // and were spending only on a change hash.
 //
-// Hand-written rather than pulling in Turndown: the tag set that matters for
+// Hand-written, with no Turndown dependency: the tag set that matters for
 // extraction is small, and a dependency would need the same injection and
 // ReDoS audit as everything else here.
 
@@ -132,7 +132,7 @@ function renderNode($: CheerioAPI, $el: Cheerio<AnyNode>, el: AnyNode, blocks: s
     case 'div':
     case 'section': {
       // A div is a layout box, not a semantic block, so recurse: nested headings, lists and tables
-      // are still recognised rather than flattened.
+      // are still recognised and stay unflattened.
       renderChildren($, $el, blocks, ctx);
       return;
     }
@@ -173,7 +173,7 @@ function renderNode($: CheerioAPI, $el: Cheerio<AnyNode>, el: AnyNode, blocks: s
 
     case 'a': {
       // MARKDOWN-BLOCKLINK-1: a link that is a direct child of a
-      // container rather than inside a paragraph. The `default` branch
+      // container, outside a paragraph. The `default` branch
       // recursed into its text and emitted the label with the href DROPPED,
       // so any site listing links as bare children of a div — search results,
       // index pages, link lists — produced markdown with no URLs at all.
@@ -289,7 +289,7 @@ function inlineNodes($: CheerioAPI, nodes: Cheerio<AnyNode>): string {
       }
       case 'img': {
         // Alt text is often the ONLY description of a flyer image, and event
-        // pages lean on it heavily — keep it rather than dropping the node.
+        // pages lean on it heavily — keep it and do not drop the node.
         parts.push(inlineImage($, $node));
         return;
       }

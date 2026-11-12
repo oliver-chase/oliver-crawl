@@ -56,7 +56,7 @@ export const DEFAULT_USER_AGENT = 'OliverCrawl (+https://github.com/oliver-chase
 /**
  * CRAWL-UA-1: a User-Agent with no way to reach you is a significant cause of
  * being blocked — a site operator seeing unexplained traffic has no contact
- * to try, so they block instead of asking.
+ * to try, so they block without asking.
  *
  * Warned, never thrown: a caller may have a legitimate reason, and breaking
  * their crawl over a style rule would be worse than the problem. Once per
@@ -109,7 +109,7 @@ function pick(env: EnvBag, ...names: string[]): string | undefined {
   for (const name of names) {
     const value = env[name];
     // A blank or obviously-placeholder value is treated as absent, so a
-    // half-filled .env disables a rung instead of failing every call with a
+    // half-filled .env disables a rung and never fails every call with a
     // 401 the consumer then has to diagnose.
     const trimmed = value?.trim();
     if (trimmed && trimmed.length > 6 && !PLACEHOLDER_VALUE.test(trimmed)) return trimmed;

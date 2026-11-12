@@ -1,14 +1,14 @@
 // ─── Search ─────────────────────────────────────────────────────────────────
 //
-// A DIFFERENT SHAPE from crawling, and kept deliberately separate rather than
-// bolted on as a third lane: crawling is "here is a URL, read it"; search is
+// A DIFFERENT SHAPE from crawling, and kept deliberately separate from the lanes,
+// not bolted on as a third lane: crawling is "here is a URL, read it"; search is
 // "here is a question, find URLs". They share config, budgeting and usage
 // reporting, but nothing else — a search provider has no target, no same-site
 // rule, no robots posture, and no page to guard.
 //
 // Every provider is paid, so unlike the own crawl lane there is no free rung
-// here: no key means no search, reported honestly rather than silently
-// returning nothing (a caller cannot tell "found nothing" from "never ran"
+// here: no key means no search, reported honestly, with no silent
+// empty result (a caller cannot tell "found nothing" from "never ran"
 // unless we say which).
 //
 // Providers are tried IN ORDER until one returns results — the same
@@ -31,7 +31,7 @@ export type SearchResult = {
    * and was withheld. The `url` is still returned and still safe to crawl —
    * only the provider-supplied prose was dropped.
    *
-   * Worth surfacing rather than hiding: a result whose own meta description
+   * Worth surfacing: a result whose own meta description
    * is an injection payload is a strong hint about the page behind it.
    */
   injectionFiltered?: boolean;
@@ -164,7 +164,7 @@ export function availableSearchProviders(config: ResolvedConfig): string[] {
  * Search the web, trying configured providers in order until one returns
  * results.
  *
- * Reports WHY it came back empty rather than returning a bare array: a caller
+ * Reports WHY it came back empty, with more than a bare array: a caller
  * building on this needs to distinguish "the web has nothing" from "you never
  * configured a key" or "your budget check said no", and an empty array
  * collapses all three into the same answer.

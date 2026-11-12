@@ -40,7 +40,7 @@ const DEFAULTS = {
   // A whole AREA that never names decisions. User stories (US-TSK-118,
   // US-SDR-202) match the id shape exactly and are work items, not records —
   // demanding a ledger row for each would fill the ledger with the backlog.
-  // Listing the area rather than the ids means a new story needs no config edit.
+  // Listing the area, with no ids, means a new story needs no config edit.
   notDecisionAreas: ['US'],
 };
 
@@ -146,7 +146,7 @@ for (const id of ledgerIds.keys()) {
 
 // A test naming a record that exists nowhere else reads as authoritative. Reported,
 // never fatal: a test may name an id whose code is specced but not yet built, and
-// failing there pushes people to delete the reference rather than build the thing.
+// failing there pushes people to delete the reference and skip building the thing.
 // Docs therefore count as somewhere the id can exist.
 const inventedIds = [...testIds]
   .filter(([id]) => !srcIds.has(id) && !ledgerIds.has(id) && !docIds.has(id))

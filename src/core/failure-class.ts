@@ -18,8 +18,8 @@ export type FailureClass = 'transient' | 'structural';
  * HTTP statuses that mean "this request will fail identically forever" —
  * as opposed to 429/5xx, which are the server having a bad day.
  *
- * 403 is deliberately TRANSIENT: it is overwhelmingly a bot wall rather than
- * a permanent refusal, and those relent (different rung, different time,
+ * 403 is deliberately TRANSIENT: it is overwhelmingly a bot wall and
+ * seldom a permanent refusal, and those relent (different rung, different time,
  * different headers). Treating it as structural would retire sources that
  * would have worked on the very next run.
  */
@@ -52,7 +52,7 @@ export function classifyFailure(reason: CrawlFailureReason, detail: string): Fai
       // Two more that look transient and are not:
       //   - a missing optional parser (CRAWL-PDF-1). Retrying changes nothing
       //     until someone installs the package, so it belongs with the
-      //     failures a human has to act on rather than the ones to wait out.
+      //     failures a human has to act on, which excludes the ones to wait out.
       //   - a PDF with no text layer. A scanned document does not acquire one
       //     by being fetched again; it needs a vision model.
       return /Unsupported content-type/i.test(detail) ||

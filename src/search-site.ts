@@ -53,7 +53,7 @@ export type SiteSearchOptions = {
 };
 
 /**
- * Links that are navigation rather than results.
+ * Links that are site navigation, which no search returns as a result.
  *
  * A search results page carries the site's whole nav, and returning "Home",
  * "Contact" and a login link as search hits would be worse than returning
@@ -62,7 +62,7 @@ export type SiteSearchOptions = {
 const NAV_LINK = /^(home|about|contact|menu|login|log in|sign in|search|cart|account|privacy|terms|back|next|previous|‹|›|\d+)$/i;
 
 /**
- * Paths that are assets rather than pages. A results page links the images
+ * Paths that are assets and have no page behind them. A results page links the images
  * inside each result, and a live run returned `/wp-content/uploads/*.png` as
  * hits — a consumer would then "crawl" a screenshot.
  */
@@ -124,8 +124,8 @@ function resultLinksFromMarkdown(markdown: string, baseUrl: string): Array<{ tex
  * const run = await crawlSite(crawler, target, { seeds: found.urls });
  * ```
  *
- * Returns `ok: false` rather than throwing when the site has no usable search
- * — plenty do not, and that is an ordinary answer rather than an error.
+ * Returns `ok: false` and does not throw when the site has no usable search
+ * — plenty do not, and that is an ordinary answer.
  */
 export async function searchSite(
   crawler: Crawler,

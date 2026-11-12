@@ -46,7 +46,7 @@ const DEFAULT_MAX_RETRIES = 1;
 /**
  * Crawl a whole site: seeds, discovery, budgets, dedup and resume.
  *
- * Takes a `Crawler` rather than a config so lane selection, budgeting and
+ * Takes a `Crawler` so lane selection, budgeting and
  * usage reporting come along for free — this orchestrator never needs to know
  * which lane served a page.
  */
@@ -133,7 +133,7 @@ export async function crawlSite(
   target = await crawler.resolveTarget(target);
 
   // Eligibility is a property of the TARGET, not of any one URL — check it
-  // once, and report it as a single failure rather than N identical ones.
+  // once, and report it as a single failure.
   try {
     assertTargetEligible(target);
   } catch (error) {

@@ -222,3 +222,5 @@ The package is strict TypeScript and builds to `dist/`. CI packs the package and
 ## License
 
 MIT
+
+Sharing: portable. The repo is public under the MIT license and holds no owner data or secrets.

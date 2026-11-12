@@ -2,7 +2,7 @@
 //
 // Reading a response safely, and following redirects without trusting any hop
 // before it has been validated. Separated from the own lane so that file
-// carries policy and the rung ladder rather than transport detail.
+// carries policy and the rung ladder and leaves out transport detail.
 //
 // Everything here is a guard as much as a convenience: the body cap bounds
 // memory against a hostile origin, the manual redirect loop re-validates each
@@ -29,8 +29,8 @@ export function parseRetryAfter(value: string | null): number | undefined {
 }
 
 /**
- * CRAWL-HARDEN-1: read a response body up to `maxBytes`, truncating rather than
- * failing beyond it — the readable prefix of a huge page is still worth
+ * CRAWL-HARDEN-1: read a response body up to `maxBytes`, truncating and
+ * never failing beyond it — the readable prefix of a huge page is still worth
  * extracting from. The cap itself is the point: `response.text()` reads
  * EVERYTHING before returning, so an endless body from a hostile or
  * misconfigured origin ties up memory until the process dies. The sanitiser's
@@ -41,7 +41,7 @@ export async function readBodyCapped(response: Response, maxBytes: number): Prom
   const reader = response.body?.getReader();
   if (!reader) {
     // Runtime without streaming bodies — fall back, but refuse an announced
-    // oversize rather than buffering it.
+    // oversize without buffering it.
     const announced = Number(response.headers.get('content-length') || 0);
     if (announced > maxBytes) throw new Error(`Response too large: content-length ${announced} > ${maxBytes}`);
     const buffer = new Uint8Array(await response.arrayBuffer());

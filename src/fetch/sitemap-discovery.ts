@@ -8,8 +8,8 @@
 // (WordPress, Squarespace, Wix all emit index → children).
 //
 // This feeds crawlSite's `seeds` — a consumer that discovers a site's event
-// pages from its sitemap crawls exactly the right pages instead of guessing
-// paths or burning budget following pagination.
+// pages from its sitemap crawls exactly the right pages with no guessing
+// of paths or burning budget following pagination.
 //
 // Free, deterministic, no LLM, and guarded by the same host policy as every
 // other fetch in this package.
@@ -138,7 +138,7 @@ async function fetchXml(
 
 /**
  * Discover a target's pages from its sitemap. Returns an empty list (with a
- * reason) rather than throwing — no sitemap is a normal condition, not an
+ * reason) and does not throw — no sitemap is a normal condition, not an
  * error.
  */
 export async function discoverSitemapUrls(

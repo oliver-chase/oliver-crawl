@@ -8,7 +8,7 @@
 // Three guards, and failing any of them no-ops to null so the crawl continues to
 // the remote render service, then Jina: a real Node runtime (workerd cannot spawn
 // Chromium), an explicit `localRender: true` so a consumer deploying to both a
-// laptop and a worker chooses where rendering happens instead of finding out by
+// laptop and a worker chooses where rendering happens and never finds out by
 // crash, and playwright actually importing — it is NOT a dependency here.
 //
 // THE IMPORT TRICK: a plain `import('playwright')`, even computed as
@@ -154,8 +154,8 @@ export async function assertLandedSameSite(
   dnsLookup?: DnsLookupFn,
 ): Promise<void> {
   const requested = new URL(requestedUrl);
-  // Delegate to the SAME guard every other rung uses rather than comparing
-  // hostnames here. The first version of this compared hostname only, and QA
+  // Delegate to the SAME guard every other rung uses, with no hostname
+  // comparison here. The first version of this compared hostname only, and QA
   // proved three live bypasses it missed: cross-port (a 302 from
   // host:A to host:B returned an internal admin service), https-to-http
   // downgrade, and a credentialed landing URL. All three are already refused
@@ -176,7 +176,7 @@ export async function assertLandedSameSite(
  * while this module's own import still fails.
  *
  * Uses the SAME import seam the rung uses, so the answer is the rung's answer
- * rather than a guess that happens to agree most of the time.
+ * and no guess that happens to agree most of the time.
  */
 export async function isLocalRenderAvailable(): Promise<boolean> {
   if (!hasNodeRuntime()) return false;
@@ -184,7 +184,7 @@ export async function isLocalRenderAvailable(): Promise<boolean> {
 }
 
 /**
- * Whether a render failure was a SECURITY refusal rather than the rung simply
+ * Whether a render failure was a SECURITY refusal, as opposed to the rung simply
  * being unavailable. Only the first kind is reported (RENDER-SILENT-1): a
  * missing browser, a timeout or a dead render service are ordinary and already
  * visible as a skipped rung, while a blocked redirect is an operator's only
@@ -221,7 +221,7 @@ export function isSecurityRefusal(reason: string): boolean {
  * Null is not always silent: a refusal on SECURITY grounds calls `onBlocked`,
  * because an active redirect attack must not look like a missing browser.
  *
- * Returns HTML rather than extracted text so the caller feeds it through the
+ * Returns HTML, with no extracted text, so the caller feeds it through the
  * SAME buildPage path as every other rung — one parser, one guard, one shape.
  */
 export async function renderViaLocalChromium(
@@ -275,8 +275,8 @@ export async function renderViaLocalChromium(
         }
         return;
       }
-      // RENDER-HOP-2: follow the redirect chain OURSELVES rather than letting
-      // Chromium do it. `route.continue()` hands the request to the network
+      // RENDER-HOP-2: follow the redirect chain OURSELVES, which keeps
+      // Chromium out of it. `route.continue()` hands the request to the network
       // stack, which follows 3xx internally and never shows the handler the
       // hops — driving `site -> off-site -> site` proved the handler saw ONE
       // request while three responses arrived, so the off-site server got a
@@ -284,7 +284,7 @@ export async function renderViaLocalChromium(
       // The guard was present, correct, and never invoked.
       //
       // Fetching each hop with maxRedirects: 0 puts the check BEFORE the
-      // request instead of after the fact.
+      // request, ahead of the fact.
       let current = request.url();
       let response: RenderResponse | null = null;
       let settled = false;

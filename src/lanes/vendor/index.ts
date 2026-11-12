@@ -8,8 +8,8 @@
 //
 // Every rung is optional and independent:
 //   - a missing key disables THAT rung and nothing else
-//   - no keys at all means the lane reports 'no_lane_available' rather than
-//     throwing, so "vendor configured" is a runtime fact a consumer can
+//   - no keys at all means the lane reports 'no_lane_available' and does not
+//     throw, so "vendor configured" is a runtime fact a consumer can
 //     branch on, not a deployment precondition
 //   - each paid call is gated on checkBudget() first, so a consumer's own
 //     spend cap is enforced here without this package knowing what a budget is
@@ -140,7 +140,7 @@ export async function crawlWithVendorLane(
         // BREAK, not continue: the budget is a GLOBAL cap, so if it refuses
         // one paid rung it will refuse every other one too. Continuing just
         // re-asked the same question per rung and reported the last rung's
-        // name instead of the real reason.
+        // name in place of the real reason.
         lastDetail = 'budget check refused the paid vendor call';
         break;
       }
@@ -161,7 +161,7 @@ export async function crawlWithVendorLane(
         emitUsage(config, { lane: 'vendor', rung: rungName, kind: 'scrape', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
         // QUARANTINE-EVIDENCE-1: same evidence the own lane returns. A paid
         // page that trips the guard is still a page a consumer must be able to
-        // review rather than silently drop.
+        // review, so nothing drops silently.
         return {
           ok: false,
           reason: 'quarantined',

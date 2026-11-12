@@ -14,7 +14,7 @@
 // and across concurrent callers. Different hosts never wait on each other.
 //
 // Off by default (0 ms): the own lane's politeness has to be a deliberate,
-// visible setting rather than a hidden latency tax a consumer can't find.
+// visible setting, so a consumer never meets a hidden latency tax.
 
 /** Serialised "next allowed time" per host. */
 const NEXT_ALLOWED_AT = new Map<string, number>();
@@ -98,8 +98,8 @@ export function sleep(ms: number): Promise<void> {
  * Wait until this host is allowed another request, then reserve the next slot.
  *
  * The reservation is made BEFORE awaiting, so concurrent callers for the same
- * host queue behind each other instead of all reading the same "now" and
- * firing together — the bug a naive last-request-time check has.
+ * host queue behind each other, so they never all read the same "now" and
+ * fire together — the bug a naive last-request-time check has.
  */
 export async function throttleHost(hostname: string, minIntervalMs: number, adaptiveMultiplier = 0): Promise<void> {
   const interval = intervalForHost(hostname, minIntervalMs, adaptiveMultiplier);

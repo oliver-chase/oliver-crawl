@@ -6,7 +6,7 @@
 // wrong trade for a library whose value is screening what it fetches.
 //
 // `npm install unpdf` enables it; without it the rung reports a structural
-// failure naming the package rather than skipping silently.
+// failure naming the package, with no silent skip.
 //
 // The import goes through core/optional-import.ts, so bundler tracers cannot
 // see it and serverless builds are unaffected.
@@ -20,7 +20,7 @@ const MAX_PDF_PAGES = 50;
  * PDF-TIMEOUT-1 (found in review): a wall-clock bound on parsing.
  *
  * Every other module that touches remote data has a timeout; this one had
- * none, because it parses bytes rather than fetching them. But those bytes
+ * none, because it parses bytes and fetches nothing. But those bytes
  * are attacker-supplied, and a malformed or deliberately hostile PDF can send
  * a parser into work that does not finish. Without a bound that hangs the
  * crawl, and a crawl that hangs is worse than one that fails: nothing reports,
@@ -48,7 +48,7 @@ export type PdfExtractResult =
  * Extract the text layer from a PDF.
  *
  * A scanned PDF has no text layer and yields nothing. That is reported as
- * `unreadable` rather than as an empty success, because an empty string
+ * `unreadable`, never as an empty success, because an empty string
  * presented as a successful extraction would look like a page that genuinely
  * said nothing — and the honest answer is that this document needs a vision
  * model, which is a different decision for the caller to make.
@@ -65,7 +65,7 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtractResul
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    // Raced rather than cancelled: the parser exposes no abort signal, so the work may continue in
+    // Raced, with no cancellation: the parser exposes no abort signal, so the work may continue in
     // the background, but the crawl is not held by it. The timer is cleared once the race settles.
     const extracted = await Promise.race([
       parser.extractText(bytes, { mergePages: true }),

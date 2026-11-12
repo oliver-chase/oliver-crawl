@@ -41,8 +41,8 @@ export function createPageProcessor(ctx: PageStepContext) {
       etag: prior?.etag ?? options.etag ?? null,
       lastModified: prior?.lastModified ?? options.lastModified ?? null,
       // Pagination discovery reads markup, so the page must carry its HTML.
-      // Requested here rather than left to the caller: otherwise
-      // followPagination would silently do nothing.
+      // Requested here so that
+      // followPagination does not silently do nothing.
       includeHtml: options.includeHtml || options.followPagination === true,
       // This loop does its own retrying; letting crawl() retry too would
       // multiply attempts (3 x 3 = 9 requests for one page).

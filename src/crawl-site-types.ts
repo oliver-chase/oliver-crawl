@@ -25,7 +25,7 @@ export type SiteCrawlOptions = CrawlOptions & {
    *
    * Bounded by maxPages and maxDepth. Breadth-first on purpose: the pages
    * linked from the homepage are the ones a site considers important, so a
-   * truncated crawl keeps the useful pages rather than descending one deep
+   * truncated crawl keeps the useful pages and does not descend one deep
    * branch.
    */
   followLinks?: boolean;
@@ -38,7 +38,7 @@ export type SiteCrawlOptions = CrawlOptions & {
   excludePatterns?: RegExp[];
   /**
    * If set, ONLY follow discovered URLs matching one of these — an allowlist
-   * rather than a blocklist. `[/\/events\//]` crawls a site's events
+   * (the opposite of `excludePatterns`). `[/\/events\//]` crawls a site's events
    * section and nothing else.
    *
    * Seeds are always crawled regardless: you asked for those explicitly.
@@ -188,8 +188,8 @@ export type SiteCrawlResult = {
   notModified: string[];
   /** Per-URL failures. A run with some pages and some failures is normal. */
   failures: SiteCrawlFailure[];
-  /** True when the run stopped because it hit maxPages rather than running
-   *  out of URLs — the caller may want to raise the budget or paginate again. */
+  /** True when the run stopped at maxPages with URLs still queued —
+   *  the caller may want to raise the budget or paginate again. */
   truncated: boolean;
   /** Fresh conditional-GET validators per URL from THIS run. Persist these
    *  and pass them back as `priorValidators` next run — that round-trip is

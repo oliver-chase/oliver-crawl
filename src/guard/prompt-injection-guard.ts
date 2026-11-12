@@ -84,7 +84,7 @@ const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
     id: 'local-secret-access',
     severity: 'high',
     // The gap between the verb and the sensitive token is bounded (like
-    // tool-exfiltration above) rather than `[^\n]*`. normalizeForDetection
+    // tool-exfiltration above) in place of `[^\n]*`. normalizeForDetection
     // flattens all newlines to spaces, so an unbounded gap let a common
     // English verb ("open" as in venue hours) match a "secret"/"credential"
     // word anywhere else on the same now-single-line page — e.g. a cookie or

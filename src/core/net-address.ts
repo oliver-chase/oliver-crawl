@@ -135,7 +135,7 @@ export function isBlockedHostname(hostname: string): boolean {
   if (BLOCKED_HOSTNAMES.has(unwrapped)) return true;
   if (BLOCKED_HOST_SUFFIXES.some((suffix) => unwrapped.endsWith(suffix))) return true;
   // A bare integer is a valid-but-obfuscated IPv4 encoding (2130706433 ==
-  // 127.0.0.1). Refuse rather than decode.
+  // 127.0.0.1). Refuse it without decoding.
   if (/^[0-9]+$/.test(unwrapped)) return true;
 
   const version = getIpVersion(unwrapped);

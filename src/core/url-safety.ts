@@ -30,7 +30,7 @@ export function isSafeHttpUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     // Explicit allowlist: everything else (javascript:, data:, file:, ftp:)
-    // is refused rather than enumerated.
+    // is refused without enumerating the allowed ones.
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
     if (parsed.username || parsed.password) return false;
     if (isBlockedHostname(parsed.hostname)) return false;

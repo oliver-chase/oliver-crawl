@@ -15,8 +15,8 @@
 //   2. A <meta charset> in the first few KB of the document
 //   3. UTF-8
 //
-// Anything the runtime cannot decode falls back to UTF-8 rather than
-// throwing: a mangled page is worse than a clean one, but far better than no
+// Anything the runtime cannot decode falls back to UTF-8 and
+// never throws: a mangled page is worse than a clean one, but far better than no
 // page at all.
 
 const DEFAULT_CHARSET = 'utf-8';

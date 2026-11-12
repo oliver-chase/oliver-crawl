@@ -58,7 +58,7 @@ export type CrawlConfig = {
   localRender?: boolean;
   /**
    * Fetch and evaluate robots.txt automatically when a target's own
-   * robotsPolicy is 'unknown' (or unset), instead of failing closed on the
+   * robotsPolicy is 'unknown' (or unset). Without it the lane fails closed on the
    * caller's missing bookkeeping.
    *
    * Off by default, deliberately: a consumer that already tracks robots
@@ -104,8 +104,8 @@ export type CrawlConfig = {
    * listings, where the first render genuinely lacks the content.
    *
    * Bounded by the library: at most 10 actions and 20 seconds total, no
-   * navigation off the origin, and a failed step is skipped rather than
-   * fatal (a missing "Load more" usually means everything already loaded).
+   * navigation off the origin, and a failed step is skipped and
+   * never fatal (a missing "Load more" usually means everything already loaded).
    *
    * Never derive these from crawled page content. That would let a page you
    * fetched script the browser that fetched it.
@@ -113,12 +113,12 @@ export type CrawlConfig = {
   browserActions?: BrowserAction[];
   /**
    * BETTER-RUNGMEMORY-1: remember which rung actually works per host, and
-   * start there next time instead of re-walking the ladder from the top.
+   * start there next time and skip re-walking the ladder from the top.
    *
    * On by default. A host that always rejects the plain fetch otherwise costs
    * a guaranteed wasted request on every page. Memory expires (30 min) and is
    * only ever a STARTING POINT — the full ladder stays available, so a stale
-   * memory costs one extra request rather than a lost page.
+   * memory costs one extra request and never a lost page.
    *
    * Set false for strictly reproducible per-call behaviour, e.g. in tests
    * that assert an exact request sequence.

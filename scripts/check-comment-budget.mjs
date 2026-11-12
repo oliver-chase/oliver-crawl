@@ -42,7 +42,7 @@ let config = { max: 20, exempt: [] };
 const configPath = join(ROOT, '.comment-budget.json');
 if (existsSync(configPath)) {
   // Both failures below crashed with a raw stack trace, which reads as the gate
-  // being broken rather than the config being wrong.
+  // being broken, which is distinct from the config being wrong.
   let parsed;
   try {
     parsed = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -68,7 +68,7 @@ const files = execFileSync('git', ['-C', ROOT, 'ls-files'], { encoding: 'utf8' }
 /** A JSDoc/docstring tag line. These are interface documentation — a function
  *  with twelve parameters has twelve @param lines and no essay. Counting them
  *  would push people to delete the useful part, so a tag line ends the prose run
- *  rather than extending it. */
+ *  and never extends it. */
 const TAG_LINE = /^[*#\s]*@\w+/;
 
 /**
@@ -100,7 +100,7 @@ function scan(text, hashStyle) {
   // of them was invisible — two 40-line narrative module docstrings passed the
   // cap.
   //
-  // Delimiters are PAIRED across the line rather than matched at its start,
+  // Delimiters are PAIRED across the line and not matched at its start,
   // because lines are trimmed here: a closing `"""` alone on a line is
   // identical to an opening one, and reading it as an opener swallowed the
   // whole rest of the file. Only a region opening at a docstring position is
@@ -211,7 +211,7 @@ function scan(text, hashStyle) {
 // prose checker would be a keyword list, which prose can pass while saying nothing.
 //
 // Arrow consts and class methods match too. A signature wrapped across lines is
-// skipped rather than guessed at.
+// skipped and never guessed at.
 const DECL = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)|^\s*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/;
 // Matched against the comment with markers stripped, so a claim reads the same
 // wherever it sits. Capitalised on purpose: that is what separates a claim about

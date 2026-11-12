@@ -29,7 +29,7 @@ export function classifyContentType(contentType: string): ContentKind | null {
   if (type === 'application/json' || type.endsWith('+json')) return 'json';
   if (type === 'application/rss+xml' || type === 'application/atom+xml') return 'feed';
   // A feed served as generic XML is extremely common; treat XML as a feed
-  // rather than refusing it, since the caller parses it either way.
+  // without refusing it, since the caller parses it either way.
   if (type === 'application/xml' || type === 'text/xml') return 'feed';
   if (type === 'text/plain') return 'text';
   // CRAWL-PDF-1: read only when the optional parser is installed; the rung

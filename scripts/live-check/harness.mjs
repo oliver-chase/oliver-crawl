@@ -27,7 +27,7 @@ const failures = [];
 /**
  * A paid key that is out of credits is not a code regression, and neither is
  * a third-party outage — the same reasoning that keeps this script out of
- * `npm test`. Throw this to report SKIP instead of FAIL.
+ * `npm test`. Throw this to report SKIP in place of FAIL.
  */
 export class Unavailable extends Error {}
 

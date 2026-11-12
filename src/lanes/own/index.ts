@@ -7,7 +7,7 @@
 //
 // Every rung in this lane is free and needs no credentials, except the remote
 // render service, which runs on infrastructure YOU control — that is why it
-// sits here rather than in the vendor lane. Falling through to the vendor lane
+// sits here and stays out of the vendor lane. Falling through to the vendor lane
 // happens only when the caller explicitly asked for it.
 //
 // docs/LANES.md is the rung table and the reasoning behind the order. Keep it
@@ -286,7 +286,7 @@ export async function crawlWithOwnLane(
     // Served HTML had no readable text — a JS shell. Same free ladder.
     // BODY-RECEIVED-1: an origin DID answer here — the page simply had no
     // readable text. The ladder's later rungs cannot know that, so it is
-    // recorded now rather than inferred from wording afterwards.
+    // recorded now, with no inference from wording afterwards.
     return ladder(url, config, options, started, 'No visible text in the served HTML', hasCredentials(target), target, true);
   }
 

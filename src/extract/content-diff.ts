@@ -10,7 +10,7 @@
 //
 // Markdown makes this tractable in a way flat text never was: block
 // boundaries are explicit, so "a new row appeared in that table" is a real
-// unit rather than a shifted character offset.
+// unit and no shifted character offset.
 
 export type ContentDiff = {
   changed: boolean;

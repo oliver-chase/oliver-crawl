@@ -39,8 +39,8 @@ export type RobotsCheckResult = {
 
 /**
  * Ceiling on a published Crawl-delay. Some sites publish absurd values
- * (86400 = one day), which would stall a crawl indefinitely rather than slow
- * it politely. A larger value is clamped to this ceiling.
+ * (86400 = one day), which would stall a crawl indefinitely, where a polite
+ * slowdown is the intent. A larger value is clamped to this ceiling.
  */
 export const MAX_HONORED_CRAWL_DELAY_MS = 30_000;
 

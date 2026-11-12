@@ -41,7 +41,7 @@ function evictOldest(map: Map<string, unknown>): void {
 }
 
 // ROBOTS-DELAY-1: a site's published Crawl-delay, per host, learned whenever
-// robots.txt is resolved. Kept beside the policy cache rather than threaded
+// robots.txt is resolved. Kept beside the policy cache and not threaded
 // through every call, because the throttle runs at a different point in the
 // request than the policy check does.
 const ROBOTS_DELAY_MS = new Map<string, number>();

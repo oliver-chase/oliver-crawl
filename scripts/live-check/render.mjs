@@ -61,7 +61,7 @@ export async function renderChecks() {
         assert(/^[a-f0-9]{64}$/.test(page.textSha256), 'textSha256 missing — change detection would be dead for this rung');
         assert(/^[a-f0-9]{64}$/.test(page.bodySha256), 'bodySha256 missing');
         // Rendered output IS HTML, so the HTML-derived fields must be populated
-        // rather than empty the way a prose rung leaves them.
+        // and not empty the way a prose rung leaves them.
         assert(/^[a-f0-9]{64}$/.test(page.contentRegionSha256), 'contentRegionSha256 empty on an HTML-derived rung');
         assert(page.markdown.length > 0, 'markdown empty on an HTML-derived rung');
         assert(Array.isArray(page.links) && Array.isArray(page.jsonLd), 'array fields not arrays');

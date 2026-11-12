@@ -39,7 +39,7 @@ export type CrawlTarget = {
    *  not-allowed by the default policy — fail closed.
    *
    *  Leave it UNSET (or 'unknown') and turn on `autoRobots` to have the
-   *  crawler fetch and evaluate robots.txt itself instead of trusting your
+   *  crawler fetch and evaluate robots.txt itself, with no trust in your
    *  bookkeeping — see CrawlConfig.autoRobots. */
   robotsPolicy?: 'allow' | 'disallow' | 'conditional' | 'unknown';
   /** Consumer-defined eligibility flag. False short-circuits every fetch. */
@@ -51,7 +51,7 @@ export type CrawlTarget = {
    * a session cookie for a members area you legitimately have access to.
    *
    * This is what makes "it cannot read anything behind a login" a limitation
-   * you can lift yourself rather than a wall. You supply credentials you
+   * you can lift yourself, which makes it more than a wall. You supply credentials you
    * already hold; the package never acquires, stores or refreshes them.
    *
    * Sent ONLY to this target's own host. The same-site rule already refuses
@@ -123,7 +123,7 @@ export type CrawlPage = {
    * `'html'` is the common case and everything else is a data document
    * delivered verbatim in `text` — parsing an ICS feed into events, or a CSV
    * into rows, is domain logic and stays with the caller. Branch on this
-   * rather than sniffing `contentType`, which varies by server.
+   * and never sniffs `contentType`, which varies by server.
    *
    * Non-HTML kinds have no `markdown`, `links`, `jsonLd` or
    * `contentRegionSha256`: there is no HTML to derive them from.
@@ -137,7 +137,7 @@ export type CrawlPage = {
    * Advisory ONLY. The page is still returned in full; this just lets you
    * skip paying a model to read it. Note that an off-season venue really IS
    * "no events scheduled", and that is a true fact you may want to record
-   * rather than discard — so this informs a decision, it never makes one.
+   * and never discards — so this informs a decision, it never makes one.
    */
   likelyEmptyState: boolean;
   /**
@@ -292,7 +292,7 @@ export type CrawlResult =
        * both end with no content from anywhere. Those are different facts for a
        * consumer: the first is worth retrying, the second is a page that was
        * read and had nothing in it, which a catalogue may want to RETAIN for a
-       * later parser pass rather than log as an error.
+       * later parser pass and is not logged as an error.
        *
        * The library reports the answer directly, so a consumer never has to
        * regex-match `detail`.

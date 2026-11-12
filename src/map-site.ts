@@ -11,8 +11,8 @@
 // listing document.
 //
 // That is cheap enough to run BEFORE deciding what a real crawl should target,
-// which turns `maxPages` into a budget you spend deliberately rather than one the
-// queue order spends for you.
+// which turns `maxPages` into a budget you spend deliberately, where the
+// queue order would otherwise spend it for you.
 //
 // Deliberately NOT a crawl: no recursive link-following, no page content, and no
 // `maxDepth` because there is no depth. For content, feed the result to crawlSite

@@ -48,7 +48,7 @@ export function renderServiceFrom(config: ResolvedConfig): { url: string; token:
  *
  * Throws only on a real service failure, so the caller can distinguish
  * "not configured" (null) from "configured but broken" (throw) and report
- * the second honestly rather than silently degrading.
+ * the second honestly, with no silent degrading.
  */
 export async function renderViaService(targetUrl: string, config: ResolvedConfig): Promise<RenderResult | null> {
   const service = renderServiceFrom(config);
@@ -86,7 +86,7 @@ export async function renderViaService(targetUrl: string, config: ResolvedConfig
   // content under the requested URL, which is how a sold or parked domain
   // returns the new owner's page as a success.
   //
-  // Checked HERE rather than at the call site: a caller that forgets is the
+  // Checked HERE, not at the call site: a caller that forgets is the
   // failure mode, and this is the only place the service's answer enters.
   const landed = data.url || targetUrl;
   const requested = new URL(targetUrl);

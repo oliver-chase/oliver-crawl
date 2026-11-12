@@ -106,7 +106,7 @@ export async function buildPage(input: {
   let visibleText = $('body').text().replace(/\s+/g, ' ').trim();
 
   // A JS shell serves no readable body but often ships its content as an
-  // inline JSON payload — recover it rather than reporting the page empty.
+  // inline JSON payload — recover it, so the page is not reported empty.
   if (shouldRecoverFromScripts(visibleText)) {
     const recovered = extractInlineScriptContent(input.html);
     if (recovered && recovered.length > visibleText.length) visibleText = recovered;
@@ -197,7 +197,7 @@ export async function buildPage(input: {
 }
 
 /**
- * Build a CrawlPage for a rung that produced TEXT rather than HTML — the
+ * Build a CrawlPage for a rung that produced TEXT and no HTML — the
  * calendar/CSV/JSON documents, the PDF text layer, Jina, and the vendor lane.
  *
  * These four rungs each hand-assembled the same object literal. Adding a
@@ -207,13 +207,13 @@ export async function buildPage(input: {
  * the kind of difference a consumer discovers as inconsistent data rather
  * than as an error.
  *
- * The HTML-derived fields are empty here rather than faked, which is the same
+ * The HTML-derived fields are empty here and never faked, which is the same
  * honesty rule `contentRegionSha256` follows: a rung change must never look
  * like a content change.
  */
 // PAGE-SHAPE-1: both constructors here are held to one contract by
 // tests/lanes/page-shape.test.ts, which drives every rung end to end and
-// checks what is IN the page rather than that a page came back. A dropped
+// checks what is IN the page, beyond the fact that a page came back. A dropped
 // field surfaces as worse extraction blamed on the sites, not as an error.
 export async function buildTextPage(input: {
   url: string;
@@ -235,7 +235,7 @@ export async function buildTextPage(input: {
    * here would show a page as complete and unmodified while the delivered text
    * contained [TRUNCATED].
    *
-   * Passed in rather than recomputed, because only the caller holds the
+   * Passed in and never recomputed, because only the caller holds the
    * sanitiser result and re-running the guard here would be a second pass over
    * the same text to learn something already known.
    */
@@ -248,7 +248,7 @@ export async function buildTextPage(input: {
    * `onlyMainContent`), so their text is markdown and belongs in both fields —
    * the same value, not a second conversion. Jina returns prose that merely
    * looks markdown-ish, so it leaves this unset and reports an empty
-   * `markdown` rather than claiming structure it did not derive.
+   * `markdown` and claims no structure it did not derive.
    *
    * Defaults to empty, which is the honest answer for a rung with no HTML.
    */
@@ -265,7 +265,7 @@ export async function buildTextPage(input: {
     extractorVersion: EXTRACTOR_VERSION,
     // Defaults only for a caller that genuinely ran no guard; every rung that
     // sanitises passes its own numbers. See the field docs above for why the
-    // previous hardcoded 0/false was a lie rather than a simplification.
+    // previous hardcoded 0/false was a lie, not a simplification.
     redactionCount: input.redactionCount ?? 0,
     truncated: input.truncated ?? false,
     structuredData: summarizeStructuredData([]),

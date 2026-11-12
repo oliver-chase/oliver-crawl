@@ -32,7 +32,7 @@ function unescapeJsString(input: string): string {
     .replace(/\\\\/g, '\\');
 }
 
-// Looks like human prose/content rather than code or a machine token.
+// Looks like human prose/content, excluding code and machine tokens.
 function looksLikeContent(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed.length < 12 || trimmed.length > 400) return false;

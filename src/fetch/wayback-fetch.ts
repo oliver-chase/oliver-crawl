@@ -25,7 +25,7 @@ export type WaybackResult =
 /**
  * Fetch the most recent successful archived capture of a URL.
  *
- * Returns `ok: false` rather than throwing for every failure mode — no
+ * Returns `ok: false` and never throws for every failure mode — no
  * snapshot exists, the archive is unreachable, the capture is unusable. This
  * is a last rung, and a last rung that throws would convert "we could not
  * read the page" into "the crawl crashed".
