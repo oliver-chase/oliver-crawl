@@ -75,11 +75,9 @@ export function createPageProcessor(ctx: PageStepContext) {
           }
           break;
         }
-        // CRAWL-DEDUP-1 (found in a live run): dedup keyed only on the
-        // REQUESTED url, so two different URLs that redirect to the same
-        // page were both crawled and both stored — a real site's
-        // /home, /index and / commonly converge. Mark the RESOLVED url
-        // visited too, and drop a page already collected under it.
+        // CRAWL-DEDUP-1: URLs that redirect to one page, such as /home, /index
+        // and /, are one page. The resolved URL is marked visited too, and a
+        // page already collected under it is dropped.
         const fresh = result.pages.filter((p) => {
           const key = urlDedupKey(p.url);
           if (visited.has(key) && key !== urlKey) return false;

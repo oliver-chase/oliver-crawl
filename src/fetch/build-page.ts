@@ -85,11 +85,8 @@ export async function buildPage(input: {
   maxLinks: number;
   maxOutboundHosts: number;
 }): Promise<CrawlPage | QuarantineEvidence> {
-  // ONE parse (CRAWL-PERF-1, found in self-audit): the first version loaded
-  // the document once for text, then RELOADED it once per JSON-LD script tag
-  // inside the .each — N+1 full parses on a page with N structured-data
-  // blocks. JSON-LD is read from this same tree BEFORE the script tags are
-  // stripped for text extraction.
+  // CRAWL-PERF-1: one parse per page. JSON-LD is read from this tree before
+  // the script tags are stripped for text, so no script tag is parsed again.
   const $ = cheerio.load(input.html);
 
   const jsonLd: unknown[] = [];

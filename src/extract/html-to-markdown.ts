@@ -202,12 +202,8 @@ function renderNode($: CheerioAPI, $el: Cheerio<AnyNode>, el: AnyNode, blocks: s
       // so any site listing links as bare children of a div — search results,
       // index pages, link lists — produced markdown with no URLs at all.
       //
-      // Same shape as the block-level <img> case below: the inline path knew
-      // how to render these, and nothing routed block-level ones to it.
-      //
-      // Rendered from the anchor ITSELF, not via inline() — inline() walks an
-      // element's CHILDREN, so handing it the <a> renders only the label and
-      // drops the href, which is the bug this case exists to fix.
+      // Rendered from the anchor itself, since inline() walks an element's
+      // children and would keep the label without the href.
       const label = inline($, $el).trim();
       const href = $el.attr('href') || '';
       if (label) blocks.push(href ? `[${label}](${escapeHref(href)})` : label);

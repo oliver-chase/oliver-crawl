@@ -256,8 +256,8 @@ describe('crawlSite — whole-site discovery from one URL (followLinks)', () => 
 });
 
 describe('crawlSite — redirect convergence (CRAWL-DEDUP-1)', () => {
-  // Found in a live run: /index and / are the same page on most sites, but
-  // dedup keyed only on the REQUESTED url, so both were crawled and stored.
+  // /index and / are the same page on most sites, so the resolved URL counts
+  // for dedup as well as the requested one.
   test('two URLs redirecting to the same page yield ONE page', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);

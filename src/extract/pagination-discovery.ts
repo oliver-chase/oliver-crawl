@@ -47,12 +47,8 @@ function findRelNextHrefs(html: string): string[] {
   let match: RegExpExecArray | null;
   while ((match = anchorPattern.exec(html)) !== null) {
     const tag = match[0];
-    // Code-review finding: \brel (word-boundary) also matches inside
-    // data-rel="next" — a hyphen IS a word boundary, and data-rel is a real
-    // pattern (carousel/slider JS plugins use it for "next slide", wholly
-    // unrelated to page-level pagination). Requiring whitespace specifically
-    // before "rel" (real HTML attributes are always space-separated) closes
-    // that gap without missing the genuine rel="next" attribute.
+    // Whitespace before "rel" keeps out data-rel="next", which carousel
+    // plugins use for the next slide, since a hyphen is a word boundary.
     if (!/\srel\s*=\s*["']?[^"'>]*\bnext\b/i.test(tag)) continue;
     const hrefMatch = tag.match(/\shref\s*=\s*(?:["']([^"'#][^"']*)["']|([^\s"'>#][^\s>]*))/i);
     const href = hrefMatch?.[1] ?? hrefMatch?.[2];

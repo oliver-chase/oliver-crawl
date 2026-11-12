@@ -3,8 +3,7 @@
 // WAYBACK-RUNG-1: when every live rung fails on transport, the page often
 // still exists in the Internet Archive, whose CDX API is free and keyless.
 //
-// The gate matters more than the feature. An archive fallback is trivially a
-// way to read pages a site refused, so this runs ONLY for an explicit `allow`
+// An archive fallback could read pages a site refused, so this runs ONLY for an explicit `allow`
 // posture — never disallow, never unknown, never for a credentialed target.
 // It is also last: an archived copy is older than the live page by
 // definition, so it runs when the alternative is nothing at all.

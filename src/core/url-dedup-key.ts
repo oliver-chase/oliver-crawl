@@ -8,9 +8,9 @@
 // and `/events/` as different resources, so we still request what the site
 // published.
 //
-// Only unambiguous analytics params are stripped. The failure modes are not
-// symmetric — a missed merge costs a duplicate fetch, a wrong merge means a
-// real page is never crawled and nobody can see its absence.
+// Only unambiguous analytics params are stripped. A missed merge costs a
+// duplicate fetch, and a wrong merge means a real page is never crawled and
+// nobody can see its absence.
 
 /**
  * Parameters that are pure analytics tracking and never affect which document

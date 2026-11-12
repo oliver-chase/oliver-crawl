@@ -5,10 +5,8 @@ import { publicDns } from '../helpers';
 
 // PAGE-SHAPE-1: every rung must return a COMPLETE and self-consistent page.
 //
-// Covers the four rungs that share one constructor and
-// silently dropped `markdown` on the paid lane. 600 tests stayed green,
-// because they asserted that rungs returned pages — never what was IN them.
-// A missing field surfaces as worse extraction, blamed on the sites.
+// A missing field surfaces as worse extraction that looks like a site problem,
+// so these tests check what is in each page as well as that it arrived.
 //
 // Each rung below is driven end to end and checked against the same contract,
 // so a change to any constructor fails here, before a consumer sees it.

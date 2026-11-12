@@ -87,12 +87,10 @@ export function createCrawler(config: CrawlConfig): Crawler {
       // asserts are pure); the own lane still adds its DNS/SSRF check, which
       // only matters when OUR socket connects.
       //
-      // CACHE-POLICY-1 (found in review): this runs BEFORE the
-      // cache read, and the order is load-bearing. The page cache is keyed on
-      // (url, lanes) and NOT on the target, so serving a hit first let a
-      // second target read a page it was never allowed to fetch — an
-      // off-domain URL, an inactive source, a robots-disallowed path. Policy
-      // is a property of the ASKING target; the cache only knows the URL.
+      // CACHE-POLICY-1: policy runs before the cache read. The page cache is
+      // keyed on the URL and lanes, and policy belongs to the asking target, so
+      // a target never reads a cached page it may not fetch, such as an
+      // off-domain URL, an inactive source or a robots-disallowed path.
       try {
         await approveCrawlPolicy(target, url, resolved);
       } catch (error) {

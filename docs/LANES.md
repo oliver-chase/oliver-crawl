@@ -69,7 +69,7 @@ Firecrawl and Apify behind one interface, disabled unless a call passes `lanes: 
 
 **A policy refusal never escalates.** When the free path refuses a URL as `blocked` or `quarantined`, the crawl ends there and never falls through to a vendor.
 
-Paying a third party to retrieve what your own guard refused would buy a way around your own controls. A transport failure is a reason to try harder; a policy decision is not.
+Paying a third party to retrieve what your own guard refused would buy a way around your own controls. A transport failure is a reason to try harder, and a policy decision is final.
 
 ## Deciding what to crawl
 
@@ -129,7 +129,7 @@ It shares configuration, budgeting and usage reporting with the fetch paths and 
 
 Checking a URL's literal hostname is not enough. An attacker who controls DNS for a host they own can point `totally-normal.example.com` at `127.0.0.1` or `169.254.169.254` (cloud instance metadata). So:
 
-- resolution is checked, not just the hostname
+- the resolved addresses are checked as well as the hostname
 - **every** returned record is checked — a rebinding attack needs only one internal answer in a multi-record reply
 - results are cached on **success only**, so a transient resolver failure can't blacklist a real host
 - private, loopback, link-local, CGNAT, benchmarking and multicast ranges all refused

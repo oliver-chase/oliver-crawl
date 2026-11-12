@@ -46,9 +46,8 @@ const DOH_TIMEOUT_MS = 8_000;
 type SafeHostEntry = { pending: Promise<DnsAddress[]>; at: number };
 
 /**
- * DNS-CACHE-BOUND-1: a crawl across many thousands of hosts used to grow this
- * map for the life of the process, because only a failure ever removed an
- * entry. Past the cap, expired verdicts go first, then the oldest.
+ * DNS-CACHE-BOUND-1: the map is bounded for a crawl across many thousands of
+ * hosts. Past the cap, expired verdicts go first, then the oldest.
  */
 const DNS_SAFE_HOST_MAX_ENTRIES = 10_000;
 

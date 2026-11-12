@@ -12,13 +12,9 @@ import type { CrawlTarget } from '../../core/types.js';
 // config.autoRobots on, an 'unknown' posture is resolved for real and cached per
 // HOST — one robots.txt request per host, not per page.
 //
-// ROBOTS-TTL-1: that cache had no expiry, and this comment once claimed
-// long-lived processes never needed one — exactly backwards, since a long-lived
-// process is the only place it matters. It broke both ways. A site ADDING a
-// Disallow after we cached 'allow' kept being crawled for the life of the
-// process, which is the one thing robots compliance exists to prevent. Worse, a
-// transient failure cached 'unknown' permanently, and since unknown fails closed
-// a single network blip meant that host never crawled again, silently.
+// ROBOTS-TTL-1: each answer expires, so a long-lived process sees a site add a
+// Disallow, and a transient failure, cached as 'unknown' and failing closed,
+// does not stop a host for good.
 //
 // The two TTLs are deliberately asymmetric: a successful answer is cheap to
 // trust for hours, a failure must be retried soon, because the cost of holding
@@ -109,8 +105,7 @@ export async function resolveTargetPolicy(target: CrawlTarget, config: ResolvedC
 /**
  * VENDOR-POLICY-1: the lane-independent policy gate — eligibility, robots
  * posture, same-site. Governance is a property of the CRAWL, not of which
- * network makes the request: before this, `lanes: ['vendor']` ran with no
- * vetting at all.
+ * network makes the request, so `lanes: ['vendor']` is vetted like the own lane.
  *
  * Excludes the DNS-resolves-public check on purpose. That guards OUR socket
  * against SSRF, and in the vendor lane our machine never connects.

@@ -24,9 +24,8 @@ import type { StructuredSummary } from '../extract/structured-summary.js';
 export type LaneName = 'own' | 'vendor';
 
 /**
- * A crawl target. Deliberately minimal and NOT any consumer's database row —
- * a consumer's own source registry may have many fields, none of which this package
- * needs. A consumer adapts its record into this shape at the boundary.
+ * A crawl target, deliberately minimal. A consumer's own source registry may
+ * have many fields, and this package needs only these. A consumer adapts its record into this shape at the boundary.
  */
 export type CrawlTarget = {
   /** Canonical https origin the crawl is scoped to. Same-site enforcement is
@@ -189,11 +188,10 @@ export type CrawlPage = {
    * "did the real content change" signal — but only computable from HTML,
    * so it is EMPTY STRING on text-only rungs (Jina, vendor markdown).
    *
-   * CRAWL-HASH-1: it used to be filled on those rungs with a hash of the
-   * extracted text instead, which silently made it non-comparable with the
-   * HTML-derived value — a page fetched normally one run and via Jina the
-   * next would report a false content change. Empty is honest; compare
-   * `textSha256` when this is absent on either side.
+   * CRAWL-HASH-1: those rungs leave it empty, since a hash of their text
+   * could never match the HTML-derived value and would report a false change
+   * when a page arrives through a different rung. Compare `textSha256` when
+   * this is empty on either side.
    */
   contentRegionSha256: string;
   /** Hash of the delivered sanitised text. ALWAYS set, on every rung, so it

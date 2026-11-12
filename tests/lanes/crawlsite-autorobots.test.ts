@@ -4,12 +4,9 @@ import { crawlSite } from '@/crawl-site';
 import type { CrawlTarget } from '@/core/types';
 import { publicDns } from '../helpers';
 
-// CRAWLSITE-AUTOROBOTS-1, measured as whole-site coverage on live
-// sources: crawlSite validated its seeds against the RAW target before the
-// crawler could resolve robots, so with autoRobots on and no stored policy
-// every seed failed closed and the run returned zero pages — while a
-// single-page crawl of the same URL succeeded. No test caught it because
-// every existing test sets robotsPolicy explicitly.
+// CRAWLSITE-AUTOROBOTS-1: with autoRobots on and no stored policy, crawlSite
+// resolves robots before it checks its seeds, so a whole-site crawl agrees with
+// a single-page crawl of the same URL. These targets set no robotsPolicy.
 
 // No robotsPolicy — the shape autoRobots exists to serve.
 const target: CrawlTarget = { baseUrl: 'https://site.example.com', name: 'site' };
@@ -40,7 +37,6 @@ describe('crawlSite honours autoRobots', () => {
   });
 
   test('it agrees with a single-page crawl of the same URL', async () => {
-    // The symptom that exposed this: one path said allowed, the other refused.
     stub();
     const crawler = createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns, autoRobots: true });
 

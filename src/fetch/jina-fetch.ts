@@ -63,8 +63,8 @@ export async function fetchViaJina(
   // to mean something on every rung.
   //
   // The 30s stays as the DEFAULT, because this rung renders the page remotely
-  // and is legitimately slower than a direct fetch; it is a ceiling for callers
-  // who set nothing, not a floor that overrides them.
+  // and is legitimately slower than a direct fetch. It applies only when the
+  // caller sets no timeout, and a caller's timeoutMs always wins.
   const timeoutId = setTimeout(() => controller.abort(), opts?.timeoutMs ?? JINA_TIMEOUT_MS);
   try {
     const res = await doFetch(`${endpoint}/${target.toString()}`, {

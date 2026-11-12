@@ -70,7 +70,7 @@ wrong the moment one changes.
 | `JINA-CREDENTIAL-1` | Never send a credentialed target's URL to a public proxy. It discloses the URL and cannot succeed anyway. | `lanes/own/fallback-rungs.ts` | `lanes/lane-exhaustion.test.ts` |
 | `JINA-SELFHOST-1` | The reader endpoint is configurable. A rung advertised as free should not depend on one third party's uptime. | `core/types.ts` | `fetch/request-shape.test.ts` |
 | `JSONLD-SIGNAL-1` | Report whether structured data is about the CONTENT. `jsonLd.length > 0` is a misleading test. | `core/types.ts` | `extract/structured-summary.test.ts` |
-| `LADDER-QUALITY-1` | A bot-wall interstitial is a rung failure, not content. Accepting it beat the rung holding the real page. | `core/block-page.ts` | `lanes/block-page.test.ts` |
+| `LADDER-QUALITY-1` | A bot-wall interstitial is a rung failure. Accepting it beat the rung holding the real page. | `core/block-page.ts` | `lanes/block-page.test.ts` |
 | `LANE-EXHAUST-1` | Every failure path exhausts the free rungs in one order, defined once. A skipped free rung reaches the paid lane sooner. | `lanes/own/fallback-rungs.ts` | `lanes/lane-exhaustion.test.ts` |
 | `LANE-ONCE-1` | When the remembered rung fails, its ladder has already tried every later rung, so a failed direct fetch does not run the ladder again. | `lanes/own/index.ts` | `lanes/remembered-rung.test.ts` |
 | `MARKDOWN-BLOCKLINK-1` | A bare <a> under a container lost its href. Index and results pages produced markdown with no URLs. | `extract/html-to-markdown.ts` | `extract/html-to-markdown.test.ts` |
@@ -93,7 +93,7 @@ wrong the moment one changes.
 | `ROBOTS-TTL-1` | The robots cache had no expiry, so a transient failure stalled a host permanently and a new Disallow was never seen. | `lanes/own/robots-policy.ts` | `fetch/robots-cache-ttl.test.ts` |
 | `SAFEFETCH-PARITY-1` | safeFetch claimed the same discipline as robots-check and cheap-change-probe but accepted any redirect host and took no injectable resolver. Same-site is now enforced when the caller supplies it, and the resolver is threaded like every other fetch path. | `fetch/safe-fetch.ts` | `fetch/safefetch-parity.test.ts` |
 | `SEARCH-DIAG-1` | Report every provider's failure. Naming only the last one points at the wrong thing to fix. | `search/index.ts` | `search/search.test.ts` |
-| `SEARCH-DIAG-2` | Every provider erroring is an outage, not `no_results`. | `search/index.ts` | `search/search.test.ts` |
+| `SEARCH-DIAG-2` | Every provider erroring is an outage, reported as `error`. | `search/index.ts` | `search/search.test.ts` |
 | `SEARCH-INJECTION-1` | Guard provider titles and snippets. A snippet is the target page's own meta description. | `search/index.ts` | `search/search.test.ts` |
 | `SEARCH-ONSITE-1` | Search a site using its own search. Free, and reaches pages neither links nor a sitemap expose. | `search-site.ts` | `lanes/search-site.test.ts` |
 | `THIN-PAGE-1` | Escalate a page that parsed but is implausibly short. A JS page shipping only nav and footer read as a success. | `lanes/own/index.ts`, `core/config-types.ts` | `lanes/thin-page.test.ts` |

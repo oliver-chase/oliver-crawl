@@ -92,7 +92,7 @@ export async function freeFallbackLadder(
     if (viaProxy) return withOriginMoved(viaProxy, priorDetail, 'proxy', url);
   }
 
-  // JINA-CREDENTIAL-1 (found in audit): the Jina rung is a PUBLIC
+  // JINA-CREDENTIAL-1: the Jina rung is a PUBLIC
   // third-party proxy — we hand it a URL and it fetches the page itself. For a
   // target the caller gave credentials for (a members-only calendar, a partner
   // feed), that is all downside:

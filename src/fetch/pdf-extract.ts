@@ -17,14 +17,9 @@ import { optionalImport } from '../core/optional-import.js';
 const MAX_PDF_PAGES = 50;
 
 /**
- * PDF-TIMEOUT-1 (found in review): a wall-clock bound on parsing.
- *
- * Every other module that touches remote data has a timeout; this one had
- * none, because it parses bytes and fetches nothing. But those bytes
- * are attacker-supplied, and a malformed or deliberately hostile PDF can send
- * a parser into work that does not finish. Without a bound that hangs the
- * crawl, and a crawl that hangs is worse than one that fails: nothing reports,
- * nothing retries, and the process holds its slot indefinitely.
+ * PDF-TIMEOUT-1: a wall-clock bound on parsing. The bytes come from the
+ * page, and a hostile PDF can send a parser into work that does not finish,
+ * so parsing fails after this long and the crawl reports it.
  */
 const PDF_PARSE_TIMEOUT_MS = 20_000;
 

@@ -2,10 +2,9 @@ import { describe, expect, test } from 'vitest';
 import { createCrawler } from '@/index';
 import type { CrawlTarget } from '@/core/types';
 
-// VENDOR-POLICY-1: governance is a property of the crawl, not of which
-// network makes the request. Before this gate, `lanes: ['vendor']` ran with
-// no vetting at all — paying Firecrawl to fetch what our own lane would have
-// refused to touch.
+// VENDOR-POLICY-1: governance belongs to the crawl, whichever network makes
+// the request, so `lanes: ['vendor']` never pays a vendor to fetch what the own
+// lane would refuse.
 
 function vendorStub() {
   const calls: string[] = [];

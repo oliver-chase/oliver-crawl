@@ -241,18 +241,10 @@ export function sanitizeCrawledText(input: string, maxChars = DEFAULT_MAX_TEXT_C
   // GUARD-REDACT-1: redaction FOLLOWS detection. Only patterns that actually
   // raised a signal are redacted.
   //
-  // This loop used to run every pattern over the un-stripped text, while
-  // detection evaluates `encoded-payload` URL-free (GUARD-PRECISION-3). So the
-  // precision fix removed the false QUARANTINE and left the false REDACTION: an
-  // ordinary page kept a long asset path like
-  // `https://static.squarespace.com/<hash>.png` and had it silently replaced
-  // mid-string, destroying a working URL in both `text` and `markdown`.
-  //
-  // It also broke the inference GUARD-TELEMETRY-1 invites, that a non-zero
-  // redactionCount means an injection was present. Now it does.
-  //
-  // A page with no signals is returned unredacted, which is the common case and
-  // the one that was being corrupted.
+  // Only patterns that raised a signal redact, so an ordinary page keeps a long
+  // asset URL that `encoded-payload` would match outside its URL-free check
+  // (GUARD-PRECISION-3), and a non-zero redactionCount means an injection was
+  // present (GUARD-TELEMETRY-1). A page with no signals is returned unredacted.
   const raisedIds = new Set(signals.map((signal) => signal.id));
   let redactionCount = 0;
   for (const pattern of PROMPT_INJECTION_PATTERNS) {

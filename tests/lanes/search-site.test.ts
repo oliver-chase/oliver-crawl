@@ -28,9 +28,8 @@ const crawler = () => createCrawler({ userAgent: 'T/1 (+https://t.example.com)',
 
 describe('results come from the content region, not the whole page', () => {
   test('returns real results and not the navigation', async () => {
-    // The bug this guards: using page.links returned "Membership" and "Plan
-    // your visit" as hits — worse than nothing, since a consumer would crawl
-    // them believing they matched.
+    // Navigation links such as "Membership" and "Plan your visit" are never
+    // hits, since a consumer would crawl them believing they matched.
     serve((url) => (url.includes('?s=') ? new Response(RESULTS, { status: 200, headers: { 'content-type': 'text/html' } }) : new Response('', { status: 404 })));
 
     const found = await searchSite(crawler(), target, 'summer camp');

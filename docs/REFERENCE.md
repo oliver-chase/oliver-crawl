@@ -372,7 +372,7 @@ page.extractorVersion;                // which extractor produced this
 
 **`extractorVersion`** lets an extraction improvement reach pages you already stored. Keep it beside the page, and re-process when it falls behind `EXTRACTOR_VERSION`.
 
-## Feeding an LLM: use `markdown`, not `text`
+## Feeding an LLM: use `markdown`
 
 `page.markdown` is the main content region with headings, lists, tables and links preserved and the page furniture removed. `page.text` is the flat visible text, kept for compatibility. A schedule table in `text` is an unlabelled token soup; in `markdown` the columns keep their meaning. Both fields pass the injection guard. `markdown` is empty on text-only rungs (Jina, vendor), so fall back to `text` when it is.
 

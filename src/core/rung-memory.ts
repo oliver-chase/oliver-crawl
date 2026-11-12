@@ -24,8 +24,8 @@ type Remembered = { rung: string; expiresAt: number };
  *
  * This is the same lesson as HOST-CACHE-SCOPE-1: a module-level Map shared by
  * every crawler in the process leaks one crawler's observations into another's
- * decisions. It is not merely a test-isolation nuisance — a different
- * User-Agent genuinely gets different answers from the same host, so a memory
+ * decisions. A different User-Agent genuinely gets different answers from
+ * the same host, so a memory
  * learned under one identity is not evidence about another.
  */
 export type RungMemory = Map<string, Remembered>;

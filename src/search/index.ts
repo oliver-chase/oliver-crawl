@@ -194,14 +194,9 @@ export async function search(
     };
   }
 
-  // SEARCH-DIAG-1 (found in audit): every provider's outcome is
-  // kept, not just the last one.
-  //
-  // This started as a single `lastDetail` that each provider overwrote. With
-  // Serper and Tavily BOTH out of credits, the caller saw only "Tavily HTTP
-  // 432" — so the obvious move is to top up Tavily, re-run, and fail again,
-  // because Serper is tried first and is equally dead. The report named the
-  // one provider that was not the first thing to fix.
+  // SEARCH-DIAG-1: every provider's outcome is kept, so when Serper and
+  // Tavily both fail the report names both, and the caller fixes the first one
+  // tried.
   const failures: string[] = [];
   // Did any provider actually answer? Distinguishes "your query has no
   // matches" from "none of your providers are working".

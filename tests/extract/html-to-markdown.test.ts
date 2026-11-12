@@ -117,8 +117,8 @@ describe('page chrome never reaches the model', () => {
 
 describe('does not corrupt the surrounding crawl', () => {
   test('the source tree is not mutated — links survive for the link pass', () => {
-    // The bug this guards: stripping chrome in place would delete every nav
-    // link, and a site's calendar link is usually IN the nav.
+    // Chrome is stripped from a copy, so the nav links, where a site's calendar
+    // link usually sits, stay for the link pass.
     const $ = cheerio.load('<body><nav><a href="/calendar">Calendar</a></nav><main><p>Hi there friend.</p></main></body>');
     htmlToMarkdown($);
     expect($('a[href="/calendar"]').length).toBe(1);
