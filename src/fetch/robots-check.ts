@@ -40,22 +40,21 @@ export type RobotsCheckResult = {
 /**
  * Ceiling on a published Crawl-delay. Some sites publish absurd values
  * (86400 = one day), which would stall a crawl indefinitely rather than slow
- * it politely. Above this we treat the site as effectively refusing frequent
- * crawling and let the caller's own pacing govern.
+ * it politely. A larger value is clamped to this ceiling.
  */
 export const MAX_HONORED_CRAWL_DELAY_MS = 30_000;
 
 const ROBOTS_TIMEOUT_MS = 8_000;
 const ROBOTS_MAX_BYTES = 512_000;
 const MAX_ROBOTS_REDIRECTS = 4;
-// The crawler's own product token, lowercased — a robots
-// `User-agent: <token>` group matches this; anything else falls through to
-// `*`. Derived from the caller's configured User-Agent rather than a
-// hardcoded name, so a consumer's robots identity actually matches the UA it
-// sends. "MyBot/1.0 (+https://...)" -> "mybot".
 /** A refusal raised inside a redirect hop, carrying the reason to report. */
 class RobotsRefusal extends Error {}
 
+/**
+ * The crawler's own product token, lowercased: a robots `User-agent: <token>` group matches this and anything
+ * else falls through to `*`. It comes from the configured User-Agent, so a consumer's robots identity matches the
+ * UA it sends: "MyBot/1.0 (+https://...)" gives "mybot".
+ */
 export function userAgentToken(userAgent: string): string {
   return (userAgent.split('/')[0] || userAgent).trim().toLowerCase();
 }

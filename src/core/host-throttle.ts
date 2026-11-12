@@ -29,8 +29,8 @@ const NEXT_ALLOWED_AT = new Map<string, number>();
  * answer should not be asked again in 200ms.
  *
  * Deliberately simpler than Scrapy's: one exponential moving average per
- * host and a multiplier, no concurrency-slot machinery, because this
- * crawler is sequential per run and does not need to solve that problem.
+ * host and a multiplier. The per-host request limit is a separate slot count
+ * in this file.
  */
 const AVG_LATENCY_MS = new Map<string, number>();
 

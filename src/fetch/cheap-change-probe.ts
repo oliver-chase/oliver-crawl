@@ -1,8 +1,8 @@
 // ─── Cheap pre-fetch change probe ───────────────────────────────────────────
 //
-// A HEAD-shaped request that reads ETag/Last-Modified/Content-Length without
-// pulling the body, so an unchanged page can be skipped before it costs a
-// full fetch.
+// A GET that reads ETag/Last-Modified without pulling the page when the origin
+// sends them, and a capped body hash when it does not, so an unchanged page can
+// be skipped before it costs a full fetch.
 //
 // Redirects are followed MANUALLY, re-validating each hop: `follow` would
 // fetch every intermediate before any host on the chain was checked. Bailing

@@ -144,7 +144,7 @@ export type RedirectWalk = {
  * Follows redirects by hand, one hop at a time. `onRedirect` receives each Location value and the
  * URL it came from, and returns the URL to request next or throws to refuse the hop, so the caller
  * validates every destination before a request is made to it. The single redirect loop in this
- * package: robots, the change probe, feed discovery and the direct fetch all walk through it.
+ * package: robots, the change probe, sitemap and pagination discovery and the direct fetch all walk through it.
  */
 export async function followManualRedirects(
   start: URL,

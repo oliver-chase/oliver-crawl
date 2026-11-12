@@ -12,7 +12,7 @@ export type SiteCrawlOptions = CrawlOptions & {
   seeds?: string[];
   /** Hard ceiling on pages fetched in one run, seeds included. */
   maxPages?: number;
-  /** Attempts per URL before giving up on it. 0 = try once, never retry. */
+  /** Retries after the first attempt, per URL. Default 1; 0 tries each URL once. Structural failures are never retried. */
   maxRetries?: number;
   /** Follow "next page" links discovered on crawled pages, up to maxPages.
    *  Narrow by design: only pagination, so a listing's page 2/3 are read. */

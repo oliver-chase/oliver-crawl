@@ -18,7 +18,7 @@
 
 // Below this many visible body chars, treat the page as a shell and try to
 // recover content from its inline scripts.
-export const THIN_BODY_TEXT_THRESHOLD = 400;
+const THIN_BODY_TEXT_THRESHOLD = 400;
 
 // Decode the common JSON/JS string escapes that appear in embedded data.
 function unescapeJsString(input: string): string {

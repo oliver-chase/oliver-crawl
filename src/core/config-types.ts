@@ -16,7 +16,7 @@ export type BudgetCheck = () => boolean | Promise<boolean>;
 export type DnsAddress = { address: string; family: number };
 export type DnsLookupFn = (hostname: string) => Promise<DnsAddress[]>;
 
-/** Everything the package needs to run. Explicit by rule 2 above. */
+/** Everything the package needs to run. Config is explicit (rule 2 in core/types.ts). */
 export type CrawlConfig = {
   /** Identifies the crawler to origins. Set this to YOUR bot name — the
    *  default is generic on purpose; shipping someone else's UA is rude and

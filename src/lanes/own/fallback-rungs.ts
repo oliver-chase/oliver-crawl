@@ -25,7 +25,7 @@ import { withOriginMoved } from './origin-moved.js';
  * failed. Returns null when it does not apply, so the caller falls through to
  * its normal failure.
  */
-export async function archiveFallback(
+async function archiveFallback(
   url: string,
   config: ResolvedConfig,
   options: CrawlOptions,

@@ -1,7 +1,7 @@
 // ─── Sitemap discovery (free) ───────────────────────────────────────────────
 //
 // The cheapest possible answer to "what pages does this site have": the site
-// tells you. /sitemap.xml is fetched once, parsed with two regexes (a
+// tells you. /sitemap.xml is fetched once, parsed with a few regexes (a
 // sitemap's schema is flat enough that a full XML parser buys nothing), and
 // filtered to same-site https URLs. Handles sitemap INDEX files (a sitemap
 // of sitemaps) one level deep, which covers every real-world generator

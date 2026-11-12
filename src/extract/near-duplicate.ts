@@ -10,7 +10,7 @@
 // 16 hex characters so a consumer can store it and compare across runs.
 
 /** Pages with fewer words than this get no fingerprint: a short page shares too much template text. */
-export const NEAR_DUPLICATE_MIN_WORDS = 60;
+const NEAR_DUPLICATE_MIN_WORDS = 60;
 
 const MAX_WORDS = 5000;
 const SHINGLE = 3;

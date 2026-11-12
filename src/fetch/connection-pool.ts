@@ -10,9 +10,9 @@ import { approvedAddressesFor, assertPublicResolvedAddress, defaultDnsLookup } f
 import type { DnsAddress, DnsLookupFn } from '../core/types.js';
 
 /** Idle connections close before the 60-second DNS verdict lifetime, so a pooled socket never outlives the answer that approved it. */
-export const POOL_IDLE_MS = 30_000;
+const POOL_IDLE_MS = 30_000;
 /** Open connections per origin. The per-host request limit in the crawl is lower, so this never queues a crawl. */
-export const POOL_CONNECTIONS_PER_ORIGIN = 8;
+const POOL_CONNECTIONS_PER_ORIGIN = 8;
 
 /**
  * POOL-PIN-1: where a new connection goes. A host the resolver approved connects to the addresses it

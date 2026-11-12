@@ -14,8 +14,6 @@
 // returned record is checked (not just the first), and the answer is cached
 // only on SUCCESS — a transient resolver failure must not be able to poison
 // a host permanently.
-//
-// This takes a CrawlTarget as its input type.
 
 import { getIpVersion, isBlockedHostname, isPrivateIpv4, isPrivateIpv6 } from '../core/net-address.js';
 import type { CrawlTarget, DnsAddress, DnsLookupFn } from '../core/types.js';
