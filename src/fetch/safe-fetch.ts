@@ -4,7 +4,7 @@
 // before a request goes to it: public address, http(s) only, and the target's own site when known.
 
 import { assertHostResolvesToPublicAddress, hostsMatchAllowingWww } from './host-policy.js';
-import { followManualRedirects } from './http-mechanics.js';
+import { dropBody, followManualRedirects } from './http-mechanics.js';
 import type { DnsLookupFn } from '../core/types.js';
 import { DEFAULT_USER_AGENT } from '../core/config.js';
 
@@ -64,7 +64,11 @@ export async function safeFetch(
         return next;
       },
     });
-    return walk.stopped ? null : walk.response;
+    if (walk.stopped) {
+      dropBody(walk.response);
+      return null;
+    }
+    return walk.response;
   } catch {
     return null;
   }

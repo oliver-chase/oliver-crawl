@@ -161,7 +161,10 @@ export async function followManualRedirects(
     if (response.status < 300 || response.status > 399) return { response, finalUrl: current };
     const location = response.headers.get('location');
     if (!location) return { response, finalUrl: current, stopped: 'no-location' };
-    if (hop >= options.maxHops) return { response, finalUrl: current, stopped: 'max-hops' };
+    if (hop >= options.maxHops) {
+      dropBody(response);
+      return { response, finalUrl: current, stopped: 'max-hops' };
+    }
     dropBody(response);
     current = await options.onRedirect(location, current);
   }
@@ -186,6 +189,8 @@ export async function fetchFollowingSafeRedirects(
   if (validators.etag) conditionalHeaders['if-none-match'] = validators.etag;
   if (validators.lastModified) conditionalHeaders['if-modified-since'] = validators.lastModified;
 
+  // One budget for the whole walk, still armed for the caller's body read.
+  const signal = AbortSignal.timeout(timeoutMs);
   const walk = await followManualRedirects(url, {
     doFetch,
     maxHops,
@@ -202,7 +207,7 @@ export async function fetchFollowingSafeRedirects(
         ...extraHeaders,
         ...conditionalHeaders,
       },
-      signal: AbortSignal.timeout(timeoutMs),
+      signal,
       cache: 'no-store',
     }),
     onRedirect: async (location, from) => {

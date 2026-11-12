@@ -131,3 +131,12 @@ describe('total run time budget', () => {
     expect(run.truncated).toBe(false);
   });
 });
+
+describe('the throttle stays bounded over many hosts', () => {
+  test('the oldest host is forgotten once 10,000 others are tracked', () => {
+    recordHostLatency('first.example.com', 1000);
+    expect(intervalForHost('first.example.com', 0, 1)).toBe(1000);
+    for (let i = 0; i < 10_000; i++) recordHostLatency(`h${i}.example.com`, 5);
+    expect(intervalForHost('first.example.com', 0, 1)).toBe(0);
+  });
+});

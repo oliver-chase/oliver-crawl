@@ -16,6 +16,18 @@
 // Off by default (0 ms): the own lane's politeness has to be a deliberate,
 // visible setting, so a consumer never meets a hidden latency tax.
 
+/** Hosts remembered per map. The oldest goes first, so a process that crawls many hosts stays bounded. */
+const MAX_TRACKED_HOSTS = 10_000;
+
+function remember(map: Map<string, number>, host: string, value: number): void {
+  map.delete(host);
+  if (map.size >= MAX_TRACKED_HOSTS) {
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
+  }
+  map.set(host, value);
+}
+
 /** Serialised "next allowed time" per host. */
 const NEXT_ALLOWED_AT = new Map<string, number>();
 
@@ -72,7 +84,7 @@ export function __clearThrottleForTests(): void {
 export function recordHostLatency(hostname: string, latencyMs: number): void {
   const host = hostname.toLowerCase();
   const prior = AVG_LATENCY_MS.get(host);
-  AVG_LATENCY_MS.set(host, prior === undefined ? latencyMs : prior * (1 - LATENCY_SMOOTHING) + latencyMs * LATENCY_SMOOTHING);
+  remember(AVG_LATENCY_MS, host, prior === undefined ? latencyMs : prior * (1 - LATENCY_SMOOTHING) + latencyMs * LATENCY_SMOOTHING);
 }
 
 /**
@@ -111,7 +123,7 @@ export async function throttleHost(hostname: string, minIntervalMs: number, adap
   const runAt = Math.max(now, earliest);
 
   // Reserve first — this is what makes concurrent callers serialise.
-  NEXT_ALLOWED_AT.set(host, runAt + interval);
+  remember(NEXT_ALLOWED_AT, host, runAt + interval);
 
   const waitMs = runAt - now;
   if (waitMs > 0) await sleep(waitMs);

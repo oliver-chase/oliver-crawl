@@ -16,7 +16,7 @@
 
 import { pooledFetchFor } from './connection-pool.js';
 import { assertHostResolvesToPublicAddress, hostsMatchAllowingWww } from './host-policy.js';
-import { followManualRedirects, readBodyCapped } from './http-mechanics.js';
+import { dropBody, followManualRedirects, readBodyCapped } from './http-mechanics.js';
 import { DEFAULT_USER_AGENT } from '../core/config.js';
 import type { DnsLookupFn } from '../core/types.js';
 
@@ -121,6 +121,7 @@ export async function evaluateRobotsForUrl(
         },
       });
       if (walk.stopped) {
+        dropBody(walk.response);
         const why = walk.stopped === 'max-hops' ? 'too many times' : 'with no Location header';
         return { policy: 'unknown', reason: `robots.txt redirected (${walk.response.status}) ${why} — inconclusive`, crawlDelayMs: null };
       }

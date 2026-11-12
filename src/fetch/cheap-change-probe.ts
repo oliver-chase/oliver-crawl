@@ -80,7 +80,10 @@ export async function probeCheapChangeSignal(
         return next;
       },
     });
-    if (walk.stopped) return null;
+    if (walk.stopped) {
+      dropBody(walk.response);
+      return null;
+    }
     const response: Response = walk.response;
 
     if (response.status < 200 || response.status >= 300) {

@@ -25,6 +25,11 @@ Correctness
 - header, nav, footer and aside images are never content images, `rel="next"` and next links with unquoted hrefs are found, and long strings in a script-rendered page are recovered
 - a cache hit is a copy, sitemap numeric entities such as `&#038;` are decoded, and the change probe gives no body hash when the body passes its cap
 
+Cost
+- the local render rung shares one Chromium per process, with a fresh context per page, and closes it after 30 seconds idle
+- a redirect walk that stops early releases its connection, and a direct fetch has one timeout for the whole walk
+- the per-host throttle remembers at most 10,000 hosts
+
 ## 0.20.0
 
 Safety

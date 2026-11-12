@@ -44,12 +44,50 @@ async function importPlaywright(): Promise<{ chromium: unknown } | null> {
   return mod && mod.chromium ? { chromium: mod.chromium } : null;
 }
 
-type ChromiumLike = {
-  launch: (opts: { headless: boolean }) => Promise<{
-    newPage: () => Promise<RenderPage>;
-    close: () => Promise<void>;
-  }>;
+type RenderBrowser = {
+  newContext: () => Promise<{ newPage: () => Promise<RenderPage>; close: () => Promise<void> }>;
+  close: () => Promise<void>;
+  isConnected: () => boolean;
 };
+
+type ChromiumLike = { launch: (opts: { headless: boolean }) => Promise<RenderBrowser> };
+
+/** An idle shared browser closes after this long, so a process that renders once does not keep Chromium running. */
+const BROWSER_IDLE_MS = 30_000;
+
+/**
+ * One Chromium per process, shared by every render, each in its own context so no cookies or storage
+ * cross between pages. Launching costs about a second, which a crawl that renders many pages pays once.
+ */
+let sharedBrowser: Promise<RenderBrowser> | null = null;
+let activeRenders = 0;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function acquireBrowser(chromium: ChromiumLike): Promise<RenderBrowser> {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+  activeRenders += 1;
+  const current = sharedBrowser ? await sharedBrowser.catch(() => null) : null;
+  if (!current || !current.isConnected()) {
+    sharedBrowser = chromium.launch({ headless: true });
+    sharedBrowser.catch(() => {
+      sharedBrowser = null;
+    });
+  }
+  return sharedBrowser!;
+}
+
+function releaseBrowser(): void {
+  activeRenders -= 1;
+  if (activeRenders > 0) return;
+  idleTimer = setTimeout(() => {
+    const closing = sharedBrowser;
+    sharedBrowser = null;
+    void closing?.then((b) => b.close()).catch(() => {});
+  }, BROWSER_IDLE_MS);
+  // The timer never holds the process open.
+  (idleTimer as { unref?: () => void }).unref?.();
+}
 
 type RenderRoute = {
   request: () => {
@@ -271,10 +309,11 @@ export async function renderViaLocalChromium(
   if (!pw) return null;
 
   const chromium = pw.chromium as ChromiumLike;
-  let browser: Awaited<ReturnType<ChromiumLike['launch']>> | null = null;
+  let context: Awaited<ReturnType<RenderBrowser['newContext']>> | null = null;
   try {
-    browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
+    const browser = await acquireBrowser(chromium);
+    context = await browser.newContext();
+    const page = await context.newPage();
     // RENDER-HOP-1: validate every NAVIGATION hop, not just where the chain
     // ended. Checking only the landing let `site -> 127.0.0.1:P -> site` render
     // normally while the private server received a real request — the request
@@ -364,6 +403,7 @@ export async function renderViaLocalChromium(
     if (isSecurityRefusal(reason)) onBlocked?.(reason);
     return null;
   } finally {
-    if (browser) await browser.close().catch(() => {});
+    if (context) await context.close().catch(() => {});
+    releaseBrowser();
   }
 }
