@@ -370,3 +370,10 @@ export type { BudgetCheck, CrawlConfig, DnsAddress, DnsLookupFn, VendorKeys } fr
 export const DEFAULT_MAX_TEXT_CHARS = 12000;
 export const DEFAULT_TIMEOUT_MS = 20000;
 export const DEFAULT_MAX_PAGES = 5;
+
+// ─── Extraction version ─────────────────────────────────────────────────────
+//
+// Bump when text, markdown, link or JSON-LD extraction changes in a way that would produce a DIFFERENT result
+// for the same bytes, so a consumer holding a stored page can tell it came from an older extractor. It is not
+// the package version: a fix to the address guard changes no extraction output and must not invalidate stored pages.
+export const EXTRACTOR_VERSION = '2';

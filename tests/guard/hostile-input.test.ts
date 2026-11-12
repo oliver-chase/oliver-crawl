@@ -45,12 +45,12 @@ describe('image alt text is guarded', () => {
 });
 
 describe('address checks', () => {
-  test('a private IPv6 address is refused even when the resolver labels it IPv4', () => {
-    expect(() => assertPublicResolvedAddress('::1', 4, 'h.example.com')).toThrow(/private/i);
+  test('a private IPv6 address is refused whatever family the resolver reports', () => {
+    expect(() => assertPublicResolvedAddress('::1', 'h.example.com')).toThrow(/private/i);
   });
 
-  test('a private IPv4 address is refused even when the resolver labels it IPv6', () => {
-    expect(() => assertPublicResolvedAddress('10.0.0.5', 6, 'h.example.com')).toThrow(/private/i);
+  test('a private IPv4 address is refused whatever family the resolver reports', () => {
+    expect(() => assertPublicResolvedAddress('10.0.0.5', 'h.example.com')).toThrow(/private/i);
   });
 });
 

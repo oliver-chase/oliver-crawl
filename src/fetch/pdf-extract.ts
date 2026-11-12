@@ -8,8 +8,10 @@
 // `npm install unpdf` enables it; without it the rung reports a structural
 // failure naming the package rather than skipping silently.
 //
-// The import uses the same Function-constructor trick as local-render.ts, so
-// bundler tracers cannot see it and serverless builds are unaffected.
+// The import goes through core/optional-import.ts, so bundler tracers cannot
+// see it and serverless builds are unaffected.
+
+import { optionalImport } from '../core/optional-import.js';
 
 /** The page count reported to the caller is capped here. The parse itself is bounded by the timeout below. */
 const MAX_PDF_PAGES = 50;
@@ -34,13 +36,8 @@ type UnpdfLike = {
 };
 
 async function importPdfParser(): Promise<UnpdfLike | null> {
-  try {
-    const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<Partial<UnpdfLike>>;
-    const mod = await dynamicImport('unpdf');
-    return mod && typeof mod.extractText === 'function' ? (mod as UnpdfLike) : null;
-  } catch {
-    return null;
-  }
+  const mod = await optionalImport<Partial<UnpdfLike>>('unpdf');
+  return mod && typeof mod.extractText === 'function' ? (mod as UnpdfLike) : null;
 }
 
 export type PdfExtractResult =

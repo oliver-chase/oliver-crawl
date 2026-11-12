@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { createCrawler } from '@/index';
 import { classifyFailure } from '@/core/failure-class';
 import { looksLikeEmptyState } from '@/core/soft-404';
-import { EXTRACTOR_VERSION } from '@/core/extractor-version';
+import { EXTRACTOR_VERSION } from '@/core/types';
 import { resolveConfig } from '@/core/config';
 import type { CrawlTarget } from '@/core/types';
 import { publicDns } from '../helpers';

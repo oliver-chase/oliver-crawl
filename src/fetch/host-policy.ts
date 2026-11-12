@@ -121,7 +121,7 @@ export function assertPublicHost(hostname: string): void {
   }
 }
 
-export function assertPublicResolvedAddress(address: string, _family: number, hostname: string): void {
+export function assertPublicResolvedAddress(address: string, hostname: string): void {
   // The checker is chosen from the address itself, because a resolver's family label can be wrong.
   const version = getIpVersion(address);
   if (version === 4 && isPrivateIpv4(address)) {
@@ -203,7 +203,7 @@ export async function assertHostResolvesToPublicAddress(
         if (getIpVersion(record.address) === 0) {
           throw new Error(`DNS lookup returned invalid address for crawl host "${hostname}": ${record.address}`);
         }
-        assertPublicResolvedAddress(record.address, record.family, hostname);
+        assertPublicResolvedAddress(record.address, hostname);
       }
       return records;
     })();
@@ -269,31 +269,29 @@ export function hostsMatchAllowingWww(a: string, b: string): boolean {
 }
 
 /** Same-site enforcement for a URL the crawler intends to REQUEST. */
-export function assertRequestUrlAllowed(target: CrawlTarget, requestUrl: string): URL {
-  const base = validateBaseUrl(target);
-
+/** One rule for a crawl URL and a redirect target: https, no credentials, public host, the target's site and port. */
+function assertUrlAllowedForHost(baseHost: string, basePort: string, requestUrl: string, kind: 'crawl' | 'redirect'): URL {
   let parsed: URL;
   try {
     parsed = new URL(requestUrl);
   } catch {
-    throw new Error(`Invalid crawl URL: ${requestUrl}`);
+    throw new Error(`Invalid ${kind} URL: ${requestUrl}`);
   }
 
-  if (parsed.protocol !== 'https:') throw new Error(`Blocked non-https crawl URL: ${requestUrl}`);
-  if (parsed.username || parsed.password) throw new Error(`Blocked credentialed crawl URL: ${requestUrl}`);
+  if (parsed.protocol !== 'https:') throw new Error(`Blocked non-https ${kind} URL: ${requestUrl}`);
+  if (parsed.username || parsed.password) throw new Error(`Blocked credentialed ${kind} URL: ${requestUrl}`);
   assertPublicHost(parsed.hostname);
-
-  if (!hostsMatchAllowingWww(parsed.hostname, base.host)) {
-    throw new Error(`Blocked off-domain crawl URL: ${requestUrl}`);
-  }
-  if ((parsed.port || '') !== base.port) {
-    throw new Error(`Blocked cross-port crawl URL: ${requestUrl}`);
-  }
+  if (!hostsMatchAllowingWww(parsed.hostname, baseHost.toLowerCase())) throw new Error(`Blocked off-domain ${kind} URL: ${requestUrl}`);
+  if ((parsed.port || '') !== basePort) throw new Error(`Blocked cross-port ${kind} URL: ${requestUrl}`);
 
   return parsed;
 }
 
-/** Same guarantees, for a redirect the origin asked us to FOLLOW. */
+export function assertRequestUrlAllowed(target: CrawlTarget, requestUrl: string): URL {
+  const base = validateBaseUrl(target);
+  return assertUrlAllowedForHost(base.host, base.port, requestUrl, 'crawl');
+}
+
 export function assertRedirectUrlAllowed(target: CrawlTarget, requestUrl: string): URL {
   const base = validateBaseUrl(target);
   return assertRedirectUrlAllowedForHost(base.host, base.port, requestUrl);
@@ -301,20 +299,5 @@ export function assertRedirectUrlAllowed(target: CrawlTarget, requestUrl: string
 
 /** URL-level core, for call sites holding only a host (no target record). */
 export function assertRedirectUrlAllowedForHost(baseHost: string, basePort: string, requestUrl: string): URL {
-  let parsed: URL;
-  try {
-    parsed = new URL(requestUrl);
-  } catch {
-    throw new Error(`Invalid redirect URL: ${requestUrl}`);
-  }
-
-  if (parsed.protocol !== 'https:') throw new Error(`Blocked non-https redirect URL: ${requestUrl}`);
-  if (parsed.username || parsed.password) throw new Error(`Blocked credentialed redirect URL: ${requestUrl}`);
-  assertPublicHost(parsed.hostname);
-  if (!hostsMatchAllowingWww(parsed.hostname, baseHost.toLowerCase())) {
-    throw new Error(`Blocked off-domain redirect URL: ${requestUrl}`);
-  }
-  if ((parsed.port || '') !== basePort) throw new Error(`Blocked cross-port redirect URL: ${requestUrl}`);
-
-  return parsed;
+  return assertUrlAllowedForHost(baseHost, basePort, requestUrl, 'redirect');
 }

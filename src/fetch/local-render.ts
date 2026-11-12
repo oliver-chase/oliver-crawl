@@ -20,6 +20,7 @@
 
 import { assertHostResolvesToPublicAddress, assertRedirectUrlAllowedForHost } from './host-policy.js';
 import type { DnsLookupFn } from '../core/types.js';
+import { optionalImport } from '../core/optional-import.js';
 
 const RENDER_TIMEOUT_MS = 20_000;
 
@@ -37,13 +38,8 @@ function hasNodeRuntime(): boolean {
 }
 
 async function importPlaywright(): Promise<{ chromium: unknown } | null> {
-  try {
-    const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<{ chromium?: unknown }>;
-    const mod = await dynamicImport('playwright');
-    return mod && mod.chromium ? { chromium: mod.chromium } : null;
-  } catch {
-    return null;
-  }
+  const mod = await optionalImport<{ chromium?: unknown }>('playwright');
+  return mod && mod.chromium ? { chromium: mod.chromium } : null;
 }
 
 type ChromiumLike = {

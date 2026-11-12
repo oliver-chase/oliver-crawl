@@ -26,7 +26,7 @@ wrong the moment one changes.
 | `CI-NODE20-1` | Cross-runtime SHA-256 without assuming a Node-only API. | `core/hash.ts` | — |
 | `CRAWL-BACKOFF-1` | Obey Retry-After as stated. Our own schedule is a guess; the origin's is an instruction. | `crawl-site.ts` | `fetch/request-shape.test.ts` |
 | `CRAWL-CONCURRENCY-1` | Parallelism is safe in searchAndCrawl only because host-throttle already serialises per host. Default 1. | `search-and-crawl.ts` | — |
-| `CRAWL-CONTENTKIND-1` | Stamp extractorVersion so an extraction improvement can reach pages already stored. Cannot be added retroactively. | `core/extractor-version.ts` | `core/consumer-signals.test.ts` |
+| `CRAWL-CONTENTKIND-1` | Stamp extractorVersion so an extraction improvement can reach pages already stored. Cannot be added retroactively. | `core/types.ts` | `core/consumer-signals.test.ts` |
 | `CRAWL-DEDUP-1` | Dedup on the RESOLVED url too — /home, /index and / commonly converge. | `crawl-site.ts` | `lanes/crawl-site.test.ts` |
 | `CRAWL-DEGRADE-1` | failureClass separates "retry later" from "needs a human". The useful distinction is not in `reason`. | `core/failure-class.ts` | `core/consumer-signals.test.ts` |
 | `CRAWL-FEED-1` | Read feeds, calendars, CSV and JSON, so a feed that discovery finds can also be fetched. | `core/content-kind.ts` | `lanes/content-kinds.test.ts` |

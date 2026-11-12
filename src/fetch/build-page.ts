@@ -38,9 +38,9 @@ import { extractInlineScriptContent, shouldRecoverFromScripts } from '../extract
 import { sanitizeCrawledText } from '../guard/prompt-injection-guard.js';
 import { looksLikeEmptyState } from '../core/soft-404.js';
 import { simhash } from '../extract/near-duplicate.js';
-import { EXTRACTOR_VERSION } from '../core/extractor-version.js';
 import { sha256Hex } from '../core/hash.js';
 import { hostsMatchAllowingWww } from './host-policy.js';
+import { EXTRACTOR_VERSION } from '../core/types.js';
 import type { CrawlPage, PageLink } from '../core/types.js';
 
 const MAX_JSON_LD_STRINGS = 500;

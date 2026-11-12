@@ -8,10 +8,9 @@
 // escalate only for pages the free ladder genuinely cannot read.
 
 import { resolveConfig, availableVendorRungs, configFromEnv, DEFAULT_USER_AGENT } from './core/config.js';
-import { crawlWithOwnLane } from './lanes/own/index.js';
+import { approveCrawlPolicy, crawlWithOwnLane, resolveTargetPolicy } from './lanes/own/index.js';
 import { crawlWithVendorLane } from './lanes/vendor/index.js';
 import type { SitemapEntry } from './fetch/sitemap-discovery.js';
-import { approveCrawlPolicy, resolveTargetPolicy } from './lanes/own/index.js';
 import { classifyFailure } from './core/failure-class.js';
 import { rememberWinningRung } from './core/rung-memory.js';
 import { search, availableSearchProviders } from './search/index.js';
@@ -230,7 +229,7 @@ export { classifyFailure } from './core/failure-class.js';
 export type { FailureClass } from './core/failure-class.js';
 export { looksLikeEmptyState } from './core/soft-404.js';
 export { looksLikeBlockPage } from './core/block-page.js';
-export { EXTRACTOR_VERSION } from './core/extractor-version.js';
+export { EXTRACTOR_VERSION } from './core/types.js';
 export { urlDedupKey } from './core/url-dedup-key.js';
 export { evaluateRobotsForUrl, parseRobots, userAgentToken, MAX_HONORED_CRAWL_DELAY_MS } from './fetch/robots-check.js';
 export { publishedCrawlDelayMs } from './lanes/own/index.js';

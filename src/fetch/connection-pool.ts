@@ -32,7 +32,7 @@ export function pinnedLookup(
     void (async () => {
       const addresses = approvedAddressesFor(hostname, lookupFn) ?? (await resolve(hostname));
       if (!addresses.length) throw new Error(`No address for ${hostname}`);
-      for (const a of addresses) assertPublicResolvedAddress(a.address, a.family, hostname);
+      for (const a of addresses) assertPublicResolvedAddress(a.address, hostname);
       return addresses;
     })().then(
       (addresses) => (options.all ? done(null, addresses) : done(null, addresses[0]!.address, addresses[0]!.family)),

@@ -3,19 +3,14 @@
 // CRAWL-HOST-STATS-1: how each host behaved during one run: attempts, pages, failure classes, how
 // often it refused the crawler, and its median latency.
 
+import { hostnameOf } from './core/usage.js';
 import type { CrawlResult } from './core/types.js';
 import type { HostStats } from './crawl-site-types.js';
 
 type Tally = { attempts: number; pages: number; transient: number; structural: number; blocked: number; latencies: number[] };
 
 /** The lowercase hostname of a URL, or an empty string when it does not parse. */
-export function hostOf(candidate: string): string {
-  try {
-    return new URL(candidate).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
+export const hostOf = (candidate: string): string => hostnameOf(candidate) ?? '';
 
 export function createHostStats() {
   const hostTally = new Map<string, Tally>();

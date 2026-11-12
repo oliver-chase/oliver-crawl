@@ -8,7 +8,8 @@
 import type { ResolvedConfig } from './config.js';
 import type { UsageEvent } from './types.js';
 
-function hostnameOf(url: string): string | undefined {
+/** The lowercase hostname of a URL, or undefined when it does not parse. */
+export function hostnameOf(url: string): string | undefined {
   try {
     return new URL(url).hostname.toLowerCase();
   } catch {
