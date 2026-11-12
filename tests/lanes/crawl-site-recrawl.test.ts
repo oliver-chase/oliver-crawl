@@ -287,11 +287,15 @@ describe('state stays with its own URL and target', () => {
       if (url.pathname === '/old') return new Response(null, { status: 301, headers: { location: '/new' } });
       const etag = new Headers(init?.headers).get('if-none-match');
       sent.push(etag);
-      if (etag === '"v1"') return new Response(null, { status: 304, headers: { etag: '"v1"' } });
-      return new Response('<html><head><title>T</title></head><body><main><p>The page that moved, with its full text here.</p></main></body></html>', {
-        status: 200,
-        headers: { 'content-type': 'text/html', etag: '"v1"' },
-      });
+      // A real fetch reports the URL it answered for, which after a redirect is the new one.
+      const answered = (res: Response) => Object.defineProperty(res, 'url', { value: url.toString() });
+      if (etag === '"v1"') return answered(new Response(null, { status: 304, headers: { etag: '"v1"' } }));
+      return answered(
+        new Response('<html><head><title>T</title></head><body><main><p>The page that moved, with its full text here.</p></main></body></html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html', etag: '"v1"' },
+        }),
+      );
     }) as typeof fetch;
     const seeds = ['https://venue.example.com/old'];
     const first = await crawlSite(crawler(), target, { seeds });
