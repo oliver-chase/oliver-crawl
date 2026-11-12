@@ -75,17 +75,19 @@ export async function freeFallbackLadder(
   credentialed: boolean,
   target?: CrawlTarget,
   bodyReceived = false,
+  /** False when the origin said the page is gone (404 or 410): no live rung can bring it back, but the archive still can. */
+  liveRungs = true,
 ): Promise<CrawlResult> {
   // Neither render rung gets the target's headers, so a credentialed target would render logged out and the login
   // page could replace the real one. Credentialed targets skip rendering.
-  const rendered = credentialed ? null : await renderFallback(url, config, options, started);
+  const rendered = credentialed || !liveRungs ? null : await renderFallback(url, config, options, started);
   if (rendered) {
     return withOriginMoved(rendered, priorDetail, rendered.ok && !rendered.notModified ? (rendered.pages[0]?.rung ?? 'render') : 'render', url);
   }
 
   // CRAWL-PROXY-1: the caller's own proxy comes before the third-party Jina rung
   // and never sees a credentialed target.
-  if (!credentialed) {
+  if (!credentialed && liveRungs) {
     const viaProxy = await proxyFallback(url, config, options, started);
     if (viaProxy) return withOriginMoved(viaProxy, priorDetail, 'proxy', url);
   }
@@ -112,7 +114,9 @@ export async function freeFallbackLadder(
     };
   }
 
-  const viaJina = await jinaFallback(url, config, options, started, priorDetail);
+  const viaJina: CrawlResult = liveRungs
+    ? await jinaFallback(url, config, options, started, priorDetail)
+    : { ok: false, reason: 'unreachable', detail: priorDetail, lane: 'own' };
   if (viaJina.ok) {
     // ORIGIN-MOVED-1: this rung stepped past a POLICY refusal, not a failed
     // fetch. Jina follows the same redirect from its own IPs, so a sold or

@@ -71,9 +71,16 @@ function evictIfFull(scoped: Map<string, { at: number }>): void {
 const DNS_SAFE_HOST_CACHE = new Map<DnsLookupFn, Map<string, SafeHostEntry>>();
 
 /** The map a resolver owns inside a process-wide cache, created on first use. */
+/** Resolvers kept per cache. A caller that makes a new resolver closure per crawl would otherwise grow the maps for the life of the process. */
+const MAX_RESOLVERS = 64;
+
 function scopedMap<V>(root: Map<DnsLookupFn, Map<string, V>>, lookupFn: DnsLookupFn): Map<string, V> {
   let scoped = root.get(lookupFn);
   if (!scoped) {
+    if (root.size >= MAX_RESOLVERS) {
+      const oldest = root.keys().next().value;
+      if (oldest !== undefined) root.delete(oldest);
+    }
     scoped = new Map();
     root.set(lookupFn, scoped);
   }

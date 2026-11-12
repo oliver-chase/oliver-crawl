@@ -68,14 +68,14 @@ To find pages without hardcoding paths, `mapSite(crawler, target)` reads the sit
 
 ## The re-crawl loop
 
-Scheduled crawling is affordable only when unchanged pages stop costing anything. A `CrawlStore` over your storage does the round trip:
+A `CrawlStore` over your storage keeps the validators, the sitemap dates and the recrawl schedule between runs:
 
 ```ts
 const store: CrawlStore = { load: (key) => db.get(key), save: (key, state) => db.put(key, state) };
 await crawlSite(crawler, target, { useSitemap: true, store });
 ```
 
-The store keeps the validators (ETag and Last-Modified per URL), the sitemap dates and the recrawl schedule. Pages the sitemap reports unchanged are never requested, and pages the server reports unchanged answer 304 and are never downloaded. A site that changes weekly and is polled hourly settles at about one real fetch per week. [LANES](LANES.md#making-re-crawls-cheap) explains the mechanisms, and [REFERENCE](REFERENCE.md#keeping-a-crawls-state-in-a-store) lists the options. Callers that keep their own storage can pass `priorValidators` and `priorLastmod` instead.
+Unchanged pages cost nothing: the sitemap skips them, or the server answers 304. [LANES](LANES.md#making-re-crawls-cheap) explains the mechanisms and [REFERENCE](REFERENCE.md#keeping-a-crawls-state-in-a-store) lists the options. Callers that keep their own storage can pass `priorValidators` and `priorLastmod` instead.
 
 ## Replacing a crawler you already run
 

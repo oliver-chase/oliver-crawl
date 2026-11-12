@@ -42,6 +42,7 @@ export function pinnedLookup(
 }
 
 const AGENTS = new Map<DnsLookupFn, Agent>();
+const MAX_POOLS = 16;
 // The fetch the runtime started with. A test or host that replaces globalThis.fetch is called as given.
 const RUNTIME_FETCH = globalThis.fetch;
 
@@ -49,6 +50,12 @@ const RUNTIME_FETCH = globalThis.fetch;
 function agentFor(lookupFn: DnsLookupFn): Agent {
   let agent = AGENTS.get(lookupFn);
   if (!agent) {
+    // One pool per resolver, capped, so a caller that builds a resolver closure per crawl cannot grow the process without bound.
+    if (AGENTS.size >= MAX_POOLS) {
+      const [oldestKey, oldest] = AGENTS.entries().next().value as [DnsLookupFn, Agent];
+      AGENTS.delete(oldestKey);
+      void oldest.close().catch(() => {});
+    }
     agent = new Agent({
       keepAliveTimeout: POOL_IDLE_MS,
       keepAliveMaxTimeout: POOL_IDLE_MS,

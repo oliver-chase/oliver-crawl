@@ -173,13 +173,7 @@ if (found.ok) {
 
 Only `userAgent` is needed, and it defaults to an identifier that names this library and not your deployment, so set your own. A `userAgent` with no contact URL logs a warning once. `configFromEnv()` reads the options below from environment variables:
 
-```bash
-OLIVERCRAWL_USER_AGENT="MyBot/1.0 (+https://mysite.example/bot)"
-OLIVERCRAWL_LOCAL_RENDER=1
-OLIVERCRAWL_AUTO_ROBOTS=1
-OLIVERCRAWL_FIRECRAWL_KEY=...
-OLIVERCRAWL_SERPER_KEY=...
-```
+The environment variables are listed in [`.env.example`](.env.example) and [REFERENCE](docs/REFERENCE.md#from-env--envlocal).
 
 ```typescript
 import { createCrawler, configFromEnv } from '@oliver/crawl-core';

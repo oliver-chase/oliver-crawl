@@ -43,7 +43,7 @@ export function createPageProcessor(ctx: PageStepContext) {
       // Pagination discovery reads markup, so the page must carry its HTML.
       // Requested here rather than left to the caller: otherwise
       // followPagination would silently do nothing.
-      includeHtml: options.includeHtml || options.followPagination === true || options.followLinks === true,
+      includeHtml: options.includeHtml || options.followPagination === true,
       // This loop does its own retrying; letting crawl() retry too would
       // multiply attempts (3 x 3 = 9 requests for one page).
       retries: 0,
@@ -91,7 +91,7 @@ export function createPageProcessor(ctx: PageStepContext) {
         for (const p of fresh) {
           const twin = nearDuplicates.check(p.url, p.contentSimhash);
           if (twin) duplicates.push({ url: p.url, of: twin.of, distance: twin.distance });
-          else pages.push(p);
+          else pages.push(options.includeHtml ? p : { ...p, html: undefined });
         }
         for (const p of fresh) {
           // CRAWL-UNCHANGED-1: these hashes were computed on every page and

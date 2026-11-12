@@ -9,16 +9,32 @@
 
 import type { CrawlResult } from './types.js';
 
-type Entry = { result: CrawlResult; expiresAt: number };
+type Entry = { result: CrawlResult; expiresAt: number; chars: number };
 
 const CACHE = new Map<string, Entry>();
 
 /** Bounded so a long-lived process crawling many URLs cannot grow forever. */
 const MAX_ENTRIES = 500;
+/** And bounded by size: 500 full pages with html could otherwise hold about a gigabyte. */
+const MAX_CACHED_CHARS = 50_000_000;
+let cachedChars = 0;
 
 /** Test seam. */
 export function __clearPageCacheForTests(): void {
   CACHE.clear();
+  cachedChars = 0;
+}
+
+function drop(key: string): void {
+  const entry = CACHE.get(key);
+  if (entry) cachedChars -= entry.chars;
+  CACHE.delete(key);
+}
+
+/** The text a result holds, which is what the cache's size budget counts. */
+function charsOf(result: CrawlResult): number {
+  if (!result.ok || result.notModified) return 0;
+  return result.pages.reduce((sum, page) => sum + page.text.length + (page.markdown?.length ?? 0) + (page.html?.length ?? 0), 0);
 }
 
 /**
@@ -36,7 +52,7 @@ export function readPageCache(url: string, lanes: string[] | undefined, ttlMs: n
   const hit = CACHE.get(key);
   if (!hit) return null;
   if (hit.expiresAt <= Date.now()) {
-    CACHE.delete(key);
+    drop(key);
     return null;
   }
   return hit.result;
@@ -49,10 +65,16 @@ export function writePageCache(url: string, lanes: string[] | undefined, ttlMs: 
   // it to a caller who sent none would be a lie).
   if (!result.ok || result.notModified) return;
 
-  if (CACHE.size >= MAX_ENTRIES) {
-    // Simple FIFO eviction — insertion order is Map's iteration order.
+  const chars = charsOf(result);
+  if (chars > MAX_CACHED_CHARS) return;
+  const key = keyFor(url, lanes, variant);
+  drop(key);
+  // Simple FIFO eviction — insertion order is Map's iteration order.
+  while (CACHE.size >= MAX_ENTRIES || (cachedChars + chars > MAX_CACHED_CHARS && CACHE.size > 0)) {
     const oldest = CACHE.keys().next().value;
-    if (oldest !== undefined) CACHE.delete(oldest);
+    if (oldest === undefined) break;
+    drop(oldest);
   }
-  CACHE.set(keyFor(url, lanes, variant), { result, expiresAt: Date.now() + ttlMs });
+  CACHE.set(key, { result, expiresAt: Date.now() + ttlMs, chars });
+  cachedChars += chars;
 }

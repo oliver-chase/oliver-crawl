@@ -149,7 +149,9 @@ export async function crawlWithOwnLane(
     emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
     // A 403/429/503 is where a real browser most often succeeds — render
     // rungs come BEFORE Jina here (LANE-EXHAUST-1).
-    const fallback = await ladder(url, config, options, started, detail, hasCredentials(target), target);
+    // A 404 or 410 is the origin saying the page is gone, so no live rung can bring it back. Only the archive can.
+    const gone = response.status === 404 || response.status === 410;
+    const fallback = await ladder(url, config, options, started, detail, hasCredentials(target), target, false, !gone);
     if (!fallback.ok && retryAfterMs) return { ...fallback, retryAfterMs };
     return fallback;
   }

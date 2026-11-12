@@ -374,53 +374,21 @@ can never look like a content change.
 
 ## Deciding what to do next
 
-Three fields exist so you don't have to re-derive them from prose:
-
 ```ts
-if (!result.ok) {
-  result.failureClass;  // 'transient' | 'structural'
-}
-
-page.likelyEmptyState;  // page loaded but appears to say nothing
-page.extractorVersion;  // which version of extraction produced this
+if (!result.ok) result.failureClass;  // 'transient' | 'structural'
+page.likelyEmptyState;                // loaded, but appears to say nothing
+page.extractorVersion;                // which extractor produced this
 ```
 
-**`failureClass`** answers "is retrying worth it?". `transient` means the
-world might differ next time — DNS blips, timeouts, 5xx, and bot walls.
-`structural` means retrying changes nothing until something is fixed — a 404,
-a robots disallow, an inactive target, an unsupported content-type. Count
-consecutive `structural` failures per source to retire a dead one
-automatically; counting `transient` ones tells you only that the internet is
-the internet. Note a **403 is transient**: it is a bot wall far more often
-than a permanent refusal, and treating it as structural would retire sources
-that work on the next run.
+**`failureClass`** answers "is retrying worth it?". `transient` means the world might differ next time: timeouts, 5xx, bot walls (a 403 is transient, since it is a bot wall far more often than a permanent refusal) and resolver outages. `structural` means retrying changes nothing until something is fixed: a 404, a robots disallow, an inactive target, an unsupported content-type. Count consecutive `structural` failures per source to retire a dead one.
 
-**`likelyEmptyState`** flags pages that loaded successfully and say nothing —
-"no results", "coming soon", parked domains, soft-404s. These return HTTP 200
-and cost a full model call to learn nothing.
+**`likelyEmptyState`** flags pages that loaded and say nothing ("no results", "coming soon", parked domains, soft-404s). It is advisory and the page is still returned in full, because an empty state is often a true fact worth recording.
 
-It is advisory and the page is still returned in full, because an empty state
-is often a true fact worth recording. A supplier listing with no stock this
-month genuinely has no stock this month; that is data and no error.
-
-**`extractorVersion`** lets an extraction improvement reach pages you already
-stored. Keep it beside the page; when it falls behind `EXTRACTOR_VERSION`,
-re-process. It cannot be added retroactively with any value.
+**`extractorVersion`** lets an extraction improvement reach pages you already stored. Keep it beside the page, and re-process when it falls behind `EXTRACTOR_VERSION`.
 
 ## Feeding an LLM: use `markdown`, not `text`
 
-`page.markdown` is the main content region as Markdown — headings, lists,
-tables and links preserved, nav/header/footer/sidebar removed. `page.text` is
-the flat visible text of the whole page, kept for compatibility.
-
-Prefer `markdown`. A schedule table in `text` is an unlabelled token soup, and
-an extractor has to guess which token is a date and which row it belonged to;
-in `markdown` the columns still carry their meaning. Both fields go through the
-prompt-injection guard.
-
-`markdown` is an empty string on text-only rungs (Jina, vendor) where there is
-no HTML to convert — those rungs already deliver prose in `text`. Fall back to
-`text` when it is empty.
+`page.markdown` is the main content region with headings, lists, tables and links preserved and the page furniture removed. `page.text` is the flat visible text, kept for compatibility. A schedule table in `text` is an unlabelled token soup; in `markdown` the columns keep their meaning. Both fields pass the injection guard. `markdown` is empty on text-only rungs (Jina, vendor), so fall back to `text` when it is.
 
 ## Complete API surface
 
@@ -587,13 +555,7 @@ crawler.vendorRungs(); // ['firecrawl'] — what's actually usable right now
 
 ## Design rules
 
-These rules keep it reusable across projects:
-
-1. **No database.** Nothing imports a DB client. State leaves through `onUsage` / `checkBudget` callbacks, so one consumer can write Postgres, another a spreadsheet, another nothing.
-2. **No env reads in core.** Config is passed explicitly; `configFromEnv()` is opt-in convenience. You can hold two differently-configured crawlers in one process.
-3. **Fail soft across the boundary.** Ordinary failure returns a result. Only programmer error throws.
-4. **Every rung optional.** No key means that rung is skipped, never an error.
-5. **The guard runs before you see the text.** `page.text` has already been through prompt-injection sanitising.
+[ARCHITECTURE](ARCHITECTURE.md#why-the-boundaries-are-where-they-are) lists the boundaries: no database, no env reads in core, extraction into your records is yours, the two paths are separate and policy refusals never escalate. A failure is a returned value and only programmer error throws, every rung is optional, and the guard runs before you see the text.
 
 ---
 
