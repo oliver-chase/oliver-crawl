@@ -166,10 +166,15 @@ const inventedIds = [...testIds]
 const ID_SHAPE = new RegExp(`^${ID_PATTERN.source}$`);
 
 if (existsSync(cfg.ledger)) {
+  // One row per id in each table, so a second row cannot record a different decision under the same id.
+  let seenInTable = new Set();
   for (const line of readFileSync(cfg.ledger, 'utf8').split('\n')) {
+    if (line.startsWith('#')) seenInTable = new Set();
     const first = line.match(/^\|\s*`([^`]+)`\s*\|/);
     if (!first) continue;
     const id = first[1];
+    if (seenInTable.has(id)) problems.push(`${id}: ledger has two rows for this id in one table`);
+    seenInTable.add(id);
     if (!ID_SHAPE.test(id)) {
       problems.push(`${id}: ledger row id is not AREA-TOPIC-N, so no check can read it (CODE_INTENT_STANDARD §2)`);
       continue;

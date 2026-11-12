@@ -6,8 +6,8 @@
 // of requests for something the site mostly already publishes.
 //
 // It reads only the cheap sources: /sitemap.xml and one level of index
-// files, RSS/Atom/ICS feeds linked from the homepage, and the homepage's own
-// links. Exactly one page body is fetched — the homepage. Everything else is a
+// files, the RSS, Atom and ICS feed links on the homepage (listed, never
+// fetched), and the homepage's own links. Exactly one page body is fetched — the homepage. Everything else is a
 // listing document.
 //
 // That is cheap enough to run BEFORE deciding what a real crawl should target,

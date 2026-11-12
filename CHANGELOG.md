@@ -30,6 +30,11 @@ Cost
 - a redirect walk that stops early releases its connection, and a direct fetch has one timeout for the whole walk
 - the per-host throttle remembers at most 10,000 hosts
 
+Docs
+- `docs/API.md` holds every export, the search surface and the configuration, and REFERENCE keeps the guide
+- `closeSharedPool` is exported, and messages and docs name the `OLIVERCRAWL_*` keys
+- the decisions ledger has one row per id, and `check-decisions.mjs` fails on a repeated row
+
 ## 0.20.0
 
 Safety

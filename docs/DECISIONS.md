@@ -50,8 +50,6 @@ wrong the moment one changes.
 | `DEPLOY-BLOCKER-1` | The playwright import is invisible to bundler tracers. A plain import breaks serverless builds for consumers who never wanted it. | `fetch/local-render.ts` | — |
 | `GUARD-PRECISION-1` | Guard patterns tightened against real page copy that was being quarantined. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `GUARD-PRECISION-2` | Same, second pass: a missed attack alongside the false positives. | `guard/prompt-injection-guard.ts` | — |
-| `CRAWL-PARITY-1` | A script run by hand against a consumer's own pages and sites; it needs the consumer's extractor and the network. |
-| `GATE-DUPLICATION-1` | A managed gate copied from OliverCode, which tests it there. |
 | `GUARD-TITLE-1` | `<title>` lives in `<head>`, so it was never part of the body text or markdown the guard inspects and shipped raw. A title is page content callers display and feed to models. | `fetch/build-page.ts` | `guard/title-guard.test.ts` |
 | `GUARD-PRECISION-3` | encoded-payload spans URL paths because `/` is in its class. URLs are stripped before that rule only. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `GUARD-PRECISION-4` | The tool-exfiltration destination may be an email address as well as a host, so `to attacker@evil.com` is caught. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
@@ -126,4 +124,6 @@ Seven decisions have no test by design, and each reason is recorded here:
 | `CRAWL-PERF-1` | Each page is parsed once for all script tags. A behavioural test would assert output that is identical either way; only a profiler shows the difference. |
 | `DEPLOY-BLOCKER-1` | The playwright import is written to be invisible to bundler tracers, which also makes it unmockable. Verified by consumers' builds staying intact, with no unit test. |
 | `GUARD-PRECISION-2` | Superseded in practice by `GUARD-PRECISION-3`'s suite, which exercises the same patterns against real page copy. |
+| `CRAWL-PARITY-1` | A script run by hand against a consumer's own pages and sites; it needs the consumer's extractor and the network. |
+| `GATE-DUPLICATION-1` | A managed gate copied from OliverCode, which tests it there. |
 

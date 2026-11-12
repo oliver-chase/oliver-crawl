@@ -124,3 +124,15 @@ Both need the same loop. A `store` keeps it for you; without one, keep `run.vali
 It shares configuration, budgeting and usage reporting with the fetch paths and nothing else. Notably, results are then crawled through the free path by default — searching does not commit you to paying twice.
 
 ---
+
+## The SSRF guard
+
+Checking a URL's literal hostname is not enough. An attacker who controls DNS for a host they own can point `totally-normal.example.com` at `127.0.0.1` or `169.254.169.254` (cloud instance metadata). So:
+
+- resolution is checked, not just the hostname
+- **every** returned record is checked — a rebinding attack needs only one internal answer in a multi-record reply
+- results are cached on **success only**, so a transient resolver failure can't blacklist a real host
+- private, loopback, link-local, CGNAT, benchmarking and multicast ranges all refused
+- bare-integer hosts (`2130706433` == `127.0.0.1`) refused without decoding
+
+Covered by the host-policy suite.

@@ -14,8 +14,8 @@
 //   - each paid call is gated on checkBudget() first, so a consumer's own
 //     spend cap is enforced here without this package knowing what a budget is
 //
-// Adding a vendor means adding one VendorRung and a key — call sites,
-// budgeting, and usage reporting need no changes.
+// Adding a vendor means one VendorRung, its entry in RUNGS below, its key in
+// the config and its name in availableVendorRungs (core/config.ts).
 
 import { availableVendorRungs } from '../../core/config.js';
 import { emitUsage } from '../../core/usage.js';
@@ -118,7 +118,7 @@ export async function crawlWithVendorLane(
     return {
       ok: false,
       reason: 'no_lane_available',
-      detail: 'Vendor lane requested but no vendor API key is configured. Set one (e.g. FIRECRAWL_API_KEY) or use the own lane.',
+      detail: 'Vendor lane requested but no vendor API key is configured. Set OLIVERCRAWL_FIRECRAWL_KEY or OLIVERCRAWL_APIFY_TOKEN, or use the own lane.',
       lane: 'vendor',
     };
   }

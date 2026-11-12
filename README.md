@@ -154,26 +154,13 @@ Images, video and other binaries are refused. PDFs are read when the optional `u
 
 ## Search
 
-Fetching a known URL needs no provider. Finding URLs needs one, and search providers charge per query, so `crawler.search()` requires a key:
-
-```typescript
-const found = await crawler.search('industrial flow meter suppliers');
-
-if (found.ok) {
-  found.results;
-  found.provider;
-} else {
-  found.reason; // no_provider_configured, no_results, budget_refused or error
-}
-```
-
-`searchAndCrawl(crawler, query)` searches and crawls the results, returning `found.pages` and `found.skipped`. Results pass through the same hostname checks as every other URL, since a provider can return sites you have not vetted.
+Fetching a known URL needs no provider. Finding URLs needs one, and search providers charge per query, so `crawler.search()` requires a key. `searchAndCrawl(crawler, query)` searches and crawls the results. Results pass through the same hostname checks as every other URL, since a provider can return sites you have not vetted. [API](docs/API.md#search) shows the result shape and how results are filtered.
 
 ## Configuration
 
 Only `userAgent` is needed, and it defaults to an identifier that names this library and not your deployment, so set your own. A `userAgent` with no contact URL logs a warning once. `configFromEnv()` reads the options below from environment variables:
 
-The environment variables are listed in [`.env.example`](.env.example) and [REFERENCE](docs/REFERENCE.md#from-env--envlocal).
+The environment variables are listed in [`.env.example`](.env.example) and [API](docs/API.md#from-env--envlocal).
 
 ```typescript
 import { createCrawler, configFromEnv } from '@oliver/crawl-core';

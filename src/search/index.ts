@@ -13,9 +13,8 @@
 //
 // Providers are tried IN ORDER until one returns results — the same
 // degrade-gracefully contract as the vendor crawl lane. Serper is the default
-// first rung because it is roughly 5x cheaper per call than Tavily for the
-// same corroboration job, and it returns Google results, which is usually
-// what a corroboration query actually wants.
+// first rung because it costs less per call than Tavily and returns Google
+// results, which is usually what a corroboration query wants.
 
 import type { ResolvedConfig } from '../core/config.js';
 import { emitUsage } from '../core/usage.js';
@@ -191,7 +190,7 @@ export async function search(
     return {
       ok: false,
       reason: 'no_provider_configured',
-      detail: 'No search provider is configured. Set SERPER_API_KEY or TAVILY_API_KEY.',
+      detail: 'No search provider is configured. Set OLIVERCRAWL_SERPER_KEY or OLIVERCRAWL_TAVILY_KEY.',
     };
   }
 

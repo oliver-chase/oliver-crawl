@@ -1,16 +1,18 @@
 // ─── Live checks: web search ───────────────────────────────────────────────
 
-import { createCrawler, searchAndCrawl } from '../../dist/index.js';
+import { configFromEnv, createCrawler, searchAndCrawl } from '../../dist/index.js';
 import { USER_AGENT, dns, check, assert, skipIfProviderUnavailable } from './harness.mjs';
 
 export async function searchChecks() {
   console.log('\nSearch (skipped without a key)');
-  if (process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY) {
+  // Reads the keys the way the library does, OLIVERCRAWL_* first and the bare names second.
+  const { vendor } = configFromEnv(process.env);
+  if (vendor?.serper || vendor?.tavily) {
     const searchCrawler = createCrawler({
       userAgent: USER_AGENT,
       dnsLookup: dns,
       autoRobots: true,
-      vendor: { serper: process.env.SERPER_API_KEY, tavily: process.env.TAVILY_API_KEY },
+      vendor: { serper: vendor.serper, tavily: vendor.tavily },
     });
 
     await check('web search returns usable results', async () => {

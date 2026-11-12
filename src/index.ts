@@ -240,6 +240,7 @@ export type { SitemapDiscoveryResult, SitemapEntry } from './fetch/sitemap-disco
 export { fetchViaWayback } from './fetch/wayback-fetch.js';
 export type { WaybackResult } from './fetch/wayback-fetch.js';
 export { isLocalRenderAvailable, renderViaLocalChromium, MAX_ACTIONS, MAX_ACTION_TOTAL_MS } from './fetch/local-render.js';
+export { closeSharedPool } from './fetch/connection-pool.js';
 export type { BrowserAction } from './fetch/local-render.js';
 export { createDohLookup, DEFAULT_DOH_ENDPOINT } from './fetch/host-policy.js';
 export { renderViaService, renderServiceFrom } from './fetch/browser-render.js';

@@ -140,7 +140,7 @@ Editing olivercrawl changes nothing in a consumer until that consumer bumps its 
 
 **A page comes back `quarantined`.** The prompt-injection guard found instructions aimed at whatever model reads the page, and withheld it. A page that quotes an injection payload in an article trips the same patterns. `result.quarantine.signals` names the rules that fired and the text that matched, and `result.quarantine.text` is the sanitized page, so you can open a review task. A rule that fires on ordinary copy is a bug to report.
 
-**Search returns `no_provider_configured`.** `crawler.search()` needs `SERPER_API_KEY` or `TAVILY_API_KEY`. To search within a known site, `searchSite` submits to the site's own search form and is free.
+**Search returns `no_provider_configured`.** `crawler.search()` needs `OLIVERCRAWL_SERPER_KEY` or `OLIVERCRAWL_TAVILY_KEY`. To search within a known site, `searchSite` submits to the site's own search form and is free.
 
 **Crawls are slower than expected.** Requests go out one at a time per host and honor any published `Crawl-delay`. `adaptiveThrottleMultiplier` gives a slow origin more room. `searchAndCrawl` accepts a `concurrency` option across hosts.
 
