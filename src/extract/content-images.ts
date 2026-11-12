@@ -61,7 +61,9 @@ export function findContentImages($: CheerioAPI, pageUrl: string, limit = 3): Co
 
   $('img').each((_, img) => {
     const $img = $(img) as Cheerio<AnyNode>;
-    const raw = ($img.attr('src') || $img.attr('data-src') || '').trim();
+    // A lazy-loader parks the real URL in data-src and leaves a data: placeholder in src.
+    const rawSrc = ($img.attr('src') || '').trim();
+    const raw = (/^data:/i.test(rawSrc) || !rawSrc ? $img.attr('data-src') || rawSrc : rawSrc).trim();
     if (!raw) return;
 
     let url: string;

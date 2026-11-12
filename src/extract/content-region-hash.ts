@@ -7,56 +7,24 @@
 // This computes a SECOND hash of just the main-content region; the caller
 // treats a page as unchanged when EITHER hash still matches.
 //
-// Pure string/regex, not a cheerio DOM — reusable by both the html lane
-// (which parses with cheerio) and the browser lane (which extracts text via
-// its own regex helpers, no cheerio dependency) without adding a DOM library
-// to either. Matches this codebase's lightweight-regex convention
-// (see feed-discovery.ts).
+// The region is the one the markdown reads (selectMainRegion), with the same page
+// furniture removed, so an edit to any text the markdown shows changes the hash.
 
+import * as cheerio from 'cheerio';
 import { sha256Hex } from '../core/hash.js';
-
-const CHROME_TAGS = ['nav', 'header', 'footer', 'aside', 'script', 'style', 'noscript'];
-
-function stripTagBlocks(html: string, tagNames: string[]): string {
-  let out = html;
-  for (const tag of tagNames) {
-    out = out.replace(new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, 'gi'), ' ');
-  }
-  return out;
-}
-
-function stripTagsToText(html: string): string {
-  return html
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** Extracts the first `<main>...</main>` or `<article>...</article>` block's
- *  inner HTML, when present — the tightest, most reliable scope. Non-greedy
- *  match to the FIRST matching close tag; nested main/article tags are
- *  invalid HTML anyway (at most one `<main>` per page per spec), so this
- *  doesn't need real tag-depth tracking. */
-function extractSemanticContentBlock(html: string): string | null {
-  for (const tag of ['main', 'article']) {
-    const match = html.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-    if (match && match[1] !== undefined) return match[1];
-  }
-  return null;
-}
+import { CHROME_SELECTOR, selectMainRegion } from './main-region.js';
 
 /**
- * Returns the visible text of the page's "main content" — a `<main>`/
- * `<article>` block when the page has one, else the whole page with
- * chrome regions (nav/header/footer/aside) and non-visible tags
- * (script/style/noscript) stripped out. Exported for direct testing.
+ * Returns the visible text of the page's main-content region, with chrome
+ * (nav/header/footer/aside) and non-visible tags (script/style/noscript) removed.
+ * Exported for direct testing.
  */
 export function extractMainContentText(html: string): string {
-  const semanticBlock = extractSemanticContentBlock(html);
-  if (semanticBlock) return stripTagsToText(stripTagBlocks(semanticBlock, ['script', 'style', 'noscript']));
-  return stripTagsToText(stripTagBlocks(html, CHROME_TAGS));
+  const region = selectMainRegion(cheerio.load(html));
+  if (region.length === 0) return '';
+  const scope = region.clone();
+  scope.find(CHROME_SELECTOR).remove();
+  return scope.text().replace(/\s+/g, ' ').trim();
 }
 
 /** Hashes the extracted main-content text. Never throws — an empty/unparsed

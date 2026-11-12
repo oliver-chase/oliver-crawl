@@ -28,12 +28,8 @@ export function isInputForm($form: Cheerio<AnyNode>): boolean {
  *      vote for their parent — and take the winning cluster.
  *   3. `<body>`, when nothing scores — chrome stripping is then all we have.
  *
- * On the change hash: extract/content-region-hash.ts stays on its regex
- * region (semantic-or-body), so on div-soup pages the hash covers a SUPERSET
- * of the markdown scope. The divergence is deliberate and safe in exactly
- * one direction — the hash may report "changed" when the markdown region
- * did not move (a wasted re-extraction), never "unchanged" when it did
- * (silently stale data).
+ * The change hash (extract/content-region-hash.ts) reads this same region, so
+ * a change to any text the markdown shows changes the hash.
  */
 export function selectMainRegion($: CheerioAPI): Cheerio<AnyNode> {
   const main = $('main').first();
@@ -58,6 +54,8 @@ export function selectMainRegion($: CheerioAPI): Cheerio<AnyNode> {
  *   - a winner must hold a meaningful share (>= 40%) of the page's total
  *     paragraph mass — a page whose text is spread thin has no clear main
  *     region, and body-with-chrome-stripped is the honest answer;
+ *   - every other container holding >= 15% of the mass is kept with it, so two
+ *     articles, or a post beside event blocks, are not reduced to the biggest;
  *   - fewer than 2 scoring paragraphs is no signal at all.
  */
 function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
@@ -103,5 +101,10 @@ function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
   }
 
   if (!best || bestScore / totalMass < 0.4) return null;
-  return $(best) as Cheerio<AnyNode>;
+
+  // The winner and every container that holds a real share of the prose. A container that holds another kept
+  // one is left out, because taking it would bring back everything around the content.
+  const kept = [...scores].filter(([, score]) => score / totalMass >= 0.15).map(([node]) => node);
+  const leaves = kept.filter((node) => !kept.some((other) => other !== node && $(other as never).parents().toArray().includes(node as never)));
+  return $(leaves) as Cheerio<AnyNode>;
 }

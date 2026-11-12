@@ -41,7 +41,7 @@ function looksLikeContent(value: string): boolean {
   if (/[=;{}]|=>|\bfunction\b|\bvar\b|\bconst\b|\breturn\b|\|\||&&/.test(trimmed)) return false;
   // Require either two adjacent word tokens (prose) or a date/price/time.
   const hasProse = /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(trimmed);
-  const hasSignal = /\b(19|20)\d{2}\b|\$\d|\d{1,2}:\d{2}|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(trimmed);
+  const hasSignal = /\b(19|20)\d{2}\b|\$\d|\d{1,2}:\d{2}|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b(?=[\s.,]*\d)/i.test(trimmed);
   return hasProse || hasSignal;
 }
 

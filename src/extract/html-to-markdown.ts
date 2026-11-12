@@ -256,7 +256,7 @@ function inlineImage($: CheerioAPI, $img: Cheerio<AnyNode>): string {
 
   if (/^data:/i.test(src) || (!alt && !src)) return alt ? escapeInline(alt) : '';
   if (!src) return escapeInline(alt);
-  return `![${escapeInline(alt)}](${src})`;
+  return `![${escapeInline(alt)}](${escapeHref(src)})`;
 }
 
 /** Inline-render an element's contents: links, emphasis and images kept. */
@@ -343,7 +343,11 @@ function inlineNodes($: CheerioAPI, nodes: Cheerio<AnyNode>): string {
 function renderTable($: CheerioAPI, $table: Cheerio<AnyNode>): string {
   const rows: string[][] = [];
 
-  $table.find('tr').each((_, tr) => {
+  // Only this table's own rows: a table nested in a cell has its own.
+  $table
+    .find('tr')
+    .filter((_, tr) => $(tr).closest('table').get(0) === $table.get(0))
+    .each((_, tr) => {
     const cells: string[] = [];
     $(tr)
       .children('th, td')
