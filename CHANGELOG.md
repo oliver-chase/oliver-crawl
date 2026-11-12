@@ -24,6 +24,7 @@ Correctness
 - the content-region hash reads the page's full Markdown, so a changed link or a block boundary changes it; pass the page URL to `computeContentRegionHash` to match a crawled page
 - header, nav, footer and aside images are never content images, `rel="next"` and next links with unquoted hrefs are found, and long strings in a script-rendered page are recovered
 - a cache hit is a copy, sitemap numeric entities such as `&#038;` are decoded, and the change probe gives no body hash when the body passes its cap
+- when /sitemap.xml is missing, sitemap discovery reads the same-site sitemaps robots.txt lists
 
 Cost
 - the local render rung shares one Chromium per process, with a fresh context per page, and closes it after 30 seconds idle

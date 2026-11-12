@@ -138,6 +138,35 @@ async function fetchXml(
   return { xml: new TextDecoder().decode(bytes), capped };
 }
 
+/** Robots.txt is small, so this much holds every Sitemap line a real site writes. */
+const ROBOTS_MAX_BYTES = 512_000;
+
+/** The first same-site sitemap that robots.txt lists and that answers, or null. */
+async function sitemapFromRobots(
+  target: CrawlTarget,
+  options: { userAgent: string; dnsLookup?: DnsLookupFn },
+): Promise<{ xml: string; capped: boolean } | null> {
+  try {
+    const robotsUrl = new URL('/robots.txt', new URL(target.baseUrl).origin).toString();
+    const response = await safeFetch(robotsUrl, pooledFetchFor(options.dnsLookup), 'text/plain', { ...options, sameSiteAs: target.baseUrl });
+    if (!response?.ok) return null;
+    const { bytes } = await readBytesPrefix(response, ROBOTS_MAX_BYTES);
+    const listed = [...new TextDecoder().decode(bytes).matchAll(/^\s*sitemap\s*:\s*(\S+)/gim)].map((m) => m[1]!);
+    for (const candidate of listed.slice(0, MAX_CHILD_SITEMAPS)) {
+      try {
+        const safe = assertRequestUrlAllowed(target, candidate);
+        const fetched = await fetchXml(safe.toString(), { ...options, sameSiteAs: target.baseUrl });
+        if (fetched) return fetched;
+      } catch {
+        // an off-site or failing sitemap is skipped
+      }
+    }
+  } catch {
+    // no robots.txt is a normal condition
+  }
+  return null;
+}
+
 /**
  * Discover a target's pages from its sitemap. Returns an empty list (with a
  * reason) and does not throw — no sitemap is a normal condition, not an
@@ -164,7 +193,9 @@ export async function discoverSitemapUrls(
   } catch (error) {
     return { urls: [], entries: [], truncated: false, reason: error instanceof Error ? error.message : String(error) };
   }
-  if (!root) return { urls: [], entries: [], truncated: false, reason: 'No sitemap.xml (or it did not answer 200).' };
+  // A site whose sitemap lives elsewhere names it in robots.txt, read only when /sitemap.xml is missing.
+  if (!root) root = await sitemapFromRobots(target, options);
+  if (!root) return { urls: [], entries: [], truncated: false, reason: 'No sitemap.xml, and robots.txt names none that answered 200.' };
   const xml = root.xml;
   let readCapped = root.capped;
 

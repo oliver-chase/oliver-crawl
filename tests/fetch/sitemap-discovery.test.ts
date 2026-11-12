@@ -105,3 +105,28 @@ describe('sitemap entities', () => {
     expect(result.urls).toEqual(['https://venue.example.com/e?a=1&b=2']);
   });
 });
+
+describe('sitemaps named in robots.txt', () => {
+  test('a sitemap at another path is found through robots.txt', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/robots.txt') return new Response('User-agent: *\nAllow: /\nSitemap: https://venue.example.com/sitemaps/main.xml\n', { status: 200 });
+      if (path === '/sitemaps/main.xml') return xml(`<?xml version="1.0"?><urlset><url><loc>https://venue.example.com/events</loc></url></urlset>`);
+      return new Response('', { status: 404 });
+    }) as typeof fetch;
+    const result = await discoverSitemapUrls(target, { userAgent: 'T/1', dnsLookup: publicDns });
+    expect(result.urls).toEqual(['https://venue.example.com/events']);
+  });
+
+  test('an off-site sitemap in robots.txt is not fetched', async () => {
+    const asked: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      asked.push(String(input));
+      if (new URL(String(input)).pathname === '/robots.txt') return new Response('Sitemap: https://other.example.net/sitemap.xml\n', { status: 200 });
+      return new Response('', { status: 404 });
+    }) as typeof fetch;
+    const result = await discoverSitemapUrls(target, { userAgent: 'T/1', dnsLookup: publicDns });
+    expect(result.urls).toEqual([]);
+    expect(asked.some((u) => u.includes('other.example.net'))).toBe(false);
+  });
+});
