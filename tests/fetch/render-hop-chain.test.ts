@@ -40,10 +40,13 @@ const navigationBranch = navigationBranchRaw
   .replace(/\/\/.*$/gm, '');
 
 describe('the render rung follows redirects itself', () => {
-  test('navigation hops are fetched with redirects disabled', () => {
-    // The whole defect in one assertion: maxRedirects: 0 is what stops
-    // Chromium following the chain where the guard cannot see it.
-    expect(navigationBranch).toMatch(/maxRedirects:\s*0/);
+  test('navigation hops are fetched by the pinned pool with redirects disabled', () => {
+    // redirect: 'manual' is what stops the fetch following the chain where the guard cannot see it,
+    // and the pinned pool is what stops Chromium resolving a host the check did not approve.
+    const helper = source.slice(source.indexOf('async function pinnedRequest('), source.indexOf('export async function renderViaLocalChromium('));
+    expect(helper).toMatch(/redirect:\s*'manual'/);
+    expect(source).toMatch(/const pinnedFetch = pooledFetchFor\(dnsLookup\)/);
+    expect(navigationBranch).toMatch(/pinnedRequest\(pinnedFetch, request, current\)/);
   });
 
   test('the navigation branch does not hand the request back to Chromium', () => {
@@ -54,7 +57,7 @@ describe('the render rung follows redirects itself', () => {
 
   test('each hop is validated before its request is made', () => {
     const guardAt = navigationBranch.indexOf('assertLandedSameSite');
-    const fetchAt = navigationBranch.indexOf('route.fetch');
+    const fetchAt = navigationBranch.indexOf('pinnedRequest(');
     expect(guardAt).toBeGreaterThan(-1);
     expect(fetchAt).toBeGreaterThan(-1);
     // Order is the point. Validating after the fetch is the original bug in a

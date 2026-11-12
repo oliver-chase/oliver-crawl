@@ -178,6 +178,8 @@ export async function fetchFollowingSafeRedirects(
 ): Promise<Response> {
   const baseHost = url.hostname;
   const basePort = url.port || '';
+  // The pool's pinned lookup never runs for an IP literal, so the first hop is checked here like every later one.
+  await assertHostResolvesToPublicAddress(url.hostname, config.dnsLookup);
 
   // CRAWL-VALIDATE-1: the validators go on the wire on every hop, so a real origin can answer 304.
   const conditionalHeaders: Record<string, string> = {};

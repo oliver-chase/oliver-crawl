@@ -52,11 +52,9 @@ describe('connection pool', () => {
     expect(requests).toEqual([]);
   });
 
-  test('a redirect to a private address is refused with no request sent to it, even on a warm connection', async () => {
-    await (await fetchFollowingSafeRedirects(new URL(`http://127.0.0.1:${port}/warm`), config(), 5_000)).text();
-    requests = [];
+  test('a fetch that starts at a private IP literal is refused before any request', async () => {
     await expect(fetchFollowingSafeRedirects(new URL(`http://127.0.0.1:${port}/redirect`), config(), 5_000)).rejects.toThrow();
-    expect(requests).toEqual(['/redirect']);
+    expect(requests).toEqual([]);
   });
 });
 

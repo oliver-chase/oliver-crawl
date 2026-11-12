@@ -14,6 +14,7 @@ import { pooledFetchFor } from './connection-pool.js';
 import {
   assertHostResolvesToPublicAddress,
   assertRequestUrlAllowed,
+  assertTargetEligible,
   assertRedirectUrlAllowed,
 } from './host-policy.js';
 import { sha256Hex } from '../core/hash.js';
@@ -51,6 +52,7 @@ export async function probeCheapChangeSignal(
 ): Promise<CheapChangeSignal | null> {
   let safeUrl: URL;
   try {
+    assertTargetEligible(source);
     safeUrl = assertRequestUrlAllowed(source, url);
     // Static string checks alone don't catch DNS rebinding (a hostname
     // that reads as public but resolves to a private address) — the same

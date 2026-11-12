@@ -17,7 +17,8 @@ const POOL_CONNECTIONS_PER_ORIGIN = 8;
 /**
  * POOL-PIN-1: where a new connection goes. A host the resolver approved connects to the addresses it
  * was approved at. A host with no live approval is resolved by the system and every answer must be
- * public, so a fetch path that skipped the check still cannot reach a private address.
+ * public. Node never calls this lookup for an IP literal, so every fetch path checks its first hop's
+ * host before the request (fetchFollowingSafeRedirects does).
  */
 export function pinnedLookup(
   lookupFn: DnsLookupFn,

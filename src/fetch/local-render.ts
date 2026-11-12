@@ -19,6 +19,8 @@
 // is invisible to every tracer — resolved at real runtime, only past guards 1-2.
 
 import { assertHostResolvesToPublicAddress, assertRedirectUrlAllowedForHost } from './host-policy.js';
+import { pooledFetchFor } from './connection-pool.js';
+import { dropBody, readBytesPrefix } from './http-mechanics.js';
 import type { DnsLookupFn } from '../core/types.js';
 import { optionalImport } from '../core/optional-import.js';
 
@@ -49,22 +51,49 @@ type ChromiumLike = {
   }>;
 };
 
-/** A fetched hop. Only the parts RENDER-HOP-2 needs to walk a redirect chain. */
-type RenderResponse = {
-  status: () => number;
-  headers: () => Record<string, string>;
-  body: () => Promise<{ length: number }>;
+type RenderRoute = {
+  request: () => {
+    url: () => string;
+    method: () => string;
+    headers: () => Record<string, string>;
+    postDataBuffer: () => Buffer | null;
+    isNavigationRequest: () => boolean;
+  };
+  abort: () => Promise<unknown>;
+  // Every request is made by the crawler's own pinned fetch and handed back to the page, so Chromium
+  // never resolves a host itself and a name cannot answer public to the check and private to the browser.
+  fulfill: (options: { status: number; headers: Record<string, string>; body: Buffer }) => Promise<unknown>;
 };
 
-type RenderRoute = {
-  request: () => { url: () => string; isNavigationRequest: () => boolean };
-  abort: () => Promise<unknown>;
-  continue: () => Promise<unknown>;
-  // RENDER-HOP-2 follows redirects by hand, so it needs to make each request
-  // itself and hand the final response back to the page.
-  fetch: (options: { url: string; maxRedirects: number }) => Promise<RenderResponse>;
-  fulfill: (options: { response: RenderResponse; body?: unknown }) => Promise<unknown>;
-};
+/** Headers that describe the wire encoding, which the fetch has already undone. */
+const WIRE_HEADERS = new Set(['content-encoding', 'content-length', 'transfer-encoding', 'connection']);
+
+/** Make one request through the pinned pool with redirects off, and read at most the render cap of its body. */
+async function pinnedRequest(
+  pinnedFetch: typeof fetch,
+  request: ReturnType<RenderRoute['request']>,
+  url: string,
+): Promise<{ status: number; headers: Record<string, string>; location: string | null; body: Buffer; capped: boolean }> {
+  const postData = request.postDataBuffer();
+  const response = await pinnedFetch(url, {
+    method: request.method(),
+    headers: request.headers(),
+    ...(postData ? { body: new Uint8Array(postData) } : {}),
+    redirect: 'manual',
+    signal: AbortSignal.timeout(RENDER_TIMEOUT_MS),
+  });
+  const location = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null;
+  if (location) {
+    dropBody(response);
+    return { status: response.status, headers: {}, location, body: Buffer.alloc(0), capped: false };
+  }
+  const { bytes, capped } = await readBytesPrefix(response, MAX_RENDER_BODY_BYTES);
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    if (!WIRE_HEADERS.has(key)) headers[key] = value;
+  });
+  return { status: response.status, headers, location: null, body: Buffer.from(bytes), capped };
+}
 
 type RenderPage = {
   goto: (u: string, o: { waitUntil: string; timeout: number }) => Promise<unknown>;
@@ -121,8 +150,8 @@ export async function runActions(page: RenderPage, actions: BrowserAction[], ori
         await page.waitForTimeout(Math.min(Math.max(0, action.ms), MAX_SINGLE_WAIT_MS));
       }
     } catch {
-      // A missing selector usually means the list is fully loaded already.
-      continue;
+      // A missing selector usually means the list is fully loaded already. A failed click may still
+      // have navigated, so the origin check below runs either way.
     }
 
     // A click can navigate. If it left the origin, stop before running
@@ -253,76 +282,59 @@ export async function renderViaLocalChromium(
     // The direct-fetch rung validates each hop; this brings the render rung to
     // the same standard.
     const blockedHops: string[] = [];
+    const pinnedFetch = pooledFetchFor(dnsLookup);
     await page.route('**/*', async (route) => {
       const request = route.request();
       if (!request.isNavigationRequest()) {
-        // RENDER-SUBRESOURCE-1: a page's own JavaScript can fetch a
-        // CORS-permissive service on a private address and land the response
-        // body in the DOM, which then leaves in `page.content()`. The
-        // navigation guard never saw those requests.
-        //
-        // Only the private-address check applies here, NOT same-site: real
-        // pages legitimately load images, fonts and scripts from public CDNs,
-        // and refusing those would break ordinary rendering. What is refused
-        // is a subresource pointed at an address the crawler may not reach.
+        // RENDER-SUBRESOURCE-1: a page's own JavaScript can fetch a service on a private address and land
+        // the response in the DOM, which then leaves in `page.content()`. Subresources may come from any
+        // public host, such as a CDN, so only the private-address check applies. A refused one is
+        // aborted and the page still renders.
         try {
           await assertHostResolvesToPublicAddress(new URL(request.url()).hostname, dnsLookup);
-          await route.continue();
+          const sub = await pinnedRequest(pinnedFetch, request, request.url());
+          if (sub.location || sub.capped) {
+            await route.abort();
+            return;
+          }
+          await route.fulfill({ status: sub.status, headers: sub.headers, body: sub.body });
         } catch {
-          // Not fatal to the render — a blocked tracker or internal beacon
-          // should not lose the page. The request simply never happens.
           await route.abort();
         }
         return;
       }
-      // RENDER-HOP-2: follow the redirect chain OURSELVES, which keeps
-      // Chromium out of it. `route.continue()` hands the request to the network
-      // stack, which follows 3xx internally and never shows the handler the
-      // hops — driving `site -> off-site -> site` proved the handler saw ONE
-      // request while three responses arrived, so the off-site server got a
-      // real request and the landing check passed because the chain came home.
-      // The guard was present, correct, and never invoked.
-      //
-      // Fetching each hop with maxRedirects: 0 puts the check BEFORE the
-      // request, ahead of the fact.
+      // RENDER-HOP-2: follow the redirect chain OURSELVES, with each hop checked before its request,
+      // so an off-site or private hop is refused ahead of the fact.
       let current = request.url();
-      let response: RenderResponse | null = null;
-      let settled = false;
+      let final: Awaited<ReturnType<typeof pinnedRequest>> | null = null;
       try {
         for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
           await assertLandedSameSite(current, url, dnsLookup);
-          response = await route.fetch({ url: current, maxRedirects: 0 });
-          const status = response.status();
-          if (status < 300 || status >= 400) {
-            settled = true;
-            break;
-          }
-          const location = response.headers()['location'];
-          if (!location) {
-            settled = true;
+          const response = await pinnedRequest(pinnedFetch, request, current);
+          if (!response.location) {
+            final = response;
             break;
           }
           // Resolved against the CURRENT hop, so a relative Location behaves
           // the way the browser would have resolved it.
-          current = new URL(location, current).toString();
+          current = new URL(response.location, current).toString();
         }
       } catch (error) {
         blockedHops.push(`${current}: ${error instanceof Error ? error.message : String(error)}`);
         await route.abort();
         return;
       }
-      if (!response || !settled) {
+      if (!final) {
         blockedHops.push(`${current}: redirect chain exceeded ${MAX_REDIRECT_HOPS} hops`);
         await route.abort();
         return;
       }
-      const body = await response.body();
-      if (body.length > MAX_RENDER_BODY_BYTES) {
-        blockedHops.push(`${current}: body of ${body.length} bytes passes the ${MAX_RENDER_BODY_BYTES} byte cap`);
+      if (final.capped) {
+        blockedHops.push(`${current}: body passes the ${MAX_RENDER_BODY_BYTES} byte cap`);
         await route.abort();
         return;
       }
-      await route.fulfill({ response, body });
+      await route.fulfill({ status: final.status, headers: final.headers, body: final.body });
     });
 
     try {

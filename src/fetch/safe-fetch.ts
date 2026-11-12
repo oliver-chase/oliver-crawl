@@ -20,9 +20,8 @@ const MAX_REDIRECTS = 4;
  * followed; and it took no injectable resolver, so a crawler running its own
  * DNS had it bypassed here entirely.
  *
- * Both are closed. `sameSiteAs` enforces the destination stays on the target's
- * site when the caller knows it — discovery is triggered by a target, so it
- * always does. `dnsLookup` is threaded like every other fetch path.
+ * Both are closed. A redirect stays on the starting URL's site, or on `sameSiteAs`
+ * when the caller names the target's site. `dnsLookup` is threaded like every other fetch path.
  *
  * `http:` is still accepted here, unlike the crawl path. Feed and sitemap URLs
  * are frequently published as http even by sites served over https, and
@@ -44,6 +43,8 @@ export async function safeFetch(
   }
   // The signal stays armed after this function returns, so the caller's body read has the same bound.
   const signal = AbortSignal.timeout(opts?.timeoutMs ?? FETCH_TIMEOUT_MS);
+  // A redirect stays on the site it started from unless the caller names another.
+  const siteHost = new URL(opts?.sameSiteAs ?? current.toString()).hostname;
   try {
     await assertHostResolvesToPublicAddress(current.hostname, opts?.dnsLookup);
     const walk = await followManualRedirects(current, {
@@ -54,9 +55,9 @@ export async function safeFetch(
         const next = new URL(location, from);
         if (next.protocol !== 'https:' && next.protocol !== 'http:') throw new Error('not http(s)');
         // A redirect may not move to another explicit port, the same rule the crawl path applies.
-        if (next.port && next.port !== from.port) throw new Error('cross-port redirect');
+        if ((next.port || '') !== (from.port || '')) throw new Error('cross-port redirect');
         // SAFEFETCH-PARITY-1: a redirect may not leave the target's site.
-        if (opts?.sameSiteAs && !hostsMatchAllowingWww(next.hostname, new URL(opts.sameSiteAs).hostname)) {
+        if (!hostsMatchAllowingWww(next.hostname, siteHost)) {
           throw new Error('off-site redirect');
         }
         await assertHostResolvesToPublicAddress(next.hostname, opts?.dnsLookup);

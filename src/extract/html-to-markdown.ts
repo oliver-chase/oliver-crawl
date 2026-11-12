@@ -16,6 +16,7 @@
 import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { AnyNode } from 'domhandler';
 import { CHROME_SELECTOR, isInputForm, selectMainRegion } from './main-region.js';
+import { isSafeHttpUrl } from '../core/url-safety.js';
 
 
 /** Escape the characters that would otherwise be read as markdown syntax. */
@@ -35,7 +36,7 @@ function collapse(text: string): string {
  * lose every nav link — which is exactly how a site's calendar link
  * disappears.
  */
-export function htmlToMarkdown($: CheerioAPI, options: { maxChars?: number } = {}): string {
+export function htmlToMarkdown($: CheerioAPI, options: { maxChars?: number; baseUrl?: string } = {}): string {
   const region = selectMainRegion($);
   if (region.length === 0) return '';
 
@@ -44,6 +45,32 @@ export function htmlToMarkdown($: CheerioAPI, options: { maxChars?: number } = {
   scope.find(CHROME_SELECTOR).remove();
   scope.find('form').each((_, form) => {
     if (isInputForm($(form) as Cheerio<AnyNode>)) $(form).remove();
+  });
+
+  // Links and images leave as absolute http(s) URLs or not at all: a javascript: or private-address
+  // href in the Markdown would reach whatever renders it. Unsafe ones keep their label or alt text.
+  const safeUrl = (raw: string | undefined) => {
+    if (!raw) return null;
+    try {
+      const resolved = new URL(raw.trim(), options.baseUrl).toString();
+      return isSafeHttpUrl(resolved) ? resolved : null;
+    } catch {
+      return null;
+    }
+  };
+  scope.find('a[href]').each((_, a) => {
+    const url = safeUrl($(a).attr('href'));
+    if (url) $(a).attr('href', url);
+    else $(a).removeAttr('href');
+  });
+  scope.find('img').each((_, img) => {
+    for (const attr of ['src', 'data-src']) {
+      const raw = $(img).attr(attr);
+      if (raw === undefined || /^data:/i.test(raw.trim())) continue;
+      const url = safeUrl(raw);
+      if (url) $(img).attr(attr, url);
+      else $(img).removeAttr(attr);
+    }
   });
 
   const blocks: string[] = [];

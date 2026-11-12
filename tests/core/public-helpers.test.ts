@@ -122,6 +122,21 @@ describe('probeCheapChangeSignal — the pre-fetch change probe', () => {
     expect(called).toBe(false);
   });
 
+  test('an inactive or robots-disallowed target is refused without a request', async () => {
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response('', { status: 200 });
+    }) as typeof fetch;
+
+    const dnsLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+    const inactive = { baseUrl: 'https://x.example.com', robotsPolicy: 'allow' as const, active: false };
+    const disallowed = { baseUrl: 'https://x.example.com', robotsPolicy: 'disallow' as const, active: true };
+    await expect(probeCheapChangeSignal(inactive, 'https://x.example.com/a', { dnsLookup })).resolves.toBeNull();
+    await expect(probeCheapChangeSignal(disallowed, 'https://x.example.com/a', { dnsLookup })).resolves.toBeNull();
+    expect(called).toBe(false);
+  });
+
   test('an unreachable host yields null and does not throw', async () => {
     globalThis.fetch = (async () => {
       throw new Error('ECONNRESET');

@@ -68,4 +68,16 @@ describe('crawlSite honours autoRobots', () => {
 
     expect(run.pages).toEqual([]);
   });
+
+  test('a Disallow below the base URL refuses that path and allows the rest', async () => {
+    stub('User-agent: *\nDisallow: /private/');
+    const crawler = createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns, autoRobots: true });
+
+    const refused = await crawler.crawl(target, 'https://site.example.com/private/a');
+    const allowed = await crawler.crawl(target, 'https://site.example.com/a');
+
+    expect(refused.ok).toBe(false);
+    expect(refused.ok ? null : refused.reason).toBe('blocked');
+    expect(allowed.ok).toBe(true);
+  });
 });

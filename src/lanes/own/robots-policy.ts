@@ -3,7 +3,7 @@
 // Resolving a target's robots posture, caching it per host, and the policy approval every crawl runs first.
 
 import { assertRequestUrlAllowed, assertTargetEligible } from '../../fetch/host-policy.js';
-import { evaluateRobotsForUrl, type RobotsPolicy } from '../../fetch/robots-check.js';
+import { evaluateRobotsForUrl, parseRobots, userAgentToken, type RobotsPolicy } from '../../fetch/robots-check.js';
 import type { ResolvedConfig } from '../../core/config.js';
 import type { CrawlTarget } from '../../core/types.js';
 
@@ -27,71 +27,70 @@ export const ROBOTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — resolved postur
 export const ROBOTS_FAILURE_TTL_MS = 5 * 60 * 1000; //     5m — unresolved, retry soon
 
 type RobotsPolicyValue = RobotsPolicy;
-type RobotsCacheEntry = { pending: Promise<RobotsPolicyValue>; expiresAt: number };
+/** One host's robots.txt: the posture for the URL first resolved, the rules text when it was read, and its Crawl-delay. */
+type RobotsCacheEntry = { pending: Promise<RobotsPolicyValue>; expiresAt: number; rules: string | null; crawlDelayMs: number | null };
 
 /** Hosts remembered per process. The oldest entry goes when a long-lived crawler passes this many. */
 const MAX_ROBOTS_HOSTS = 2_000;
 
 const ROBOTS_CACHE = new Map<string, RobotsCacheEntry>();
 
-function evictOldest(map: Map<string, unknown>): void {
-  if (map.size < MAX_ROBOTS_HOSTS) return;
-  const oldest = map.keys().next().value;
-  if (oldest !== undefined) map.delete(oldest);
-}
-
-// ROBOTS-DELAY-1: a site's published Crawl-delay, per host, learned whenever
-// robots.txt is resolved. Kept beside the policy cache and not threaded
-// through every call, because the throttle runs at a different point in the
-// request than the policy check does.
-const ROBOTS_DELAY_MS = new Map<string, number>();
-
-/** The site's own Crawl-delay for this host, if we have seen its robots.txt. */
+/**
+ * ROBOTS-DELAY-1: the site's own Crawl-delay for this host, while its robots.txt answer is current.
+ * Read from the policy cache, so a delay the site drops expires with the answer that carried it.
+ */
 export function publishedCrawlDelayMs(hostname: string): number | null {
-  return ROBOTS_DELAY_MS.get(hostname.toLowerCase()) ?? null;
+  const entry = ROBOTS_CACHE.get(hostname.toLowerCase());
+  return entry && Date.now() < entry.expiresAt ? entry.crawlDelayMs : null;
 }
 
 /** Test seam. */
 export function __clearRobotsCacheForTests(): void {
   ROBOTS_CACHE.clear();
-  ROBOTS_DELAY_MS.clear();
 }
 
+/** The robots posture for this URL's own path, from one robots.txt fetch per host. */
 async function resolveRobotsPolicy(url: string, config: ResolvedConfig): Promise<RobotsPolicyValue> {
-  const host = new URL(url).hostname.toLowerCase();
+  const parsedUrl = new URL(url);
+  const host = parsedUrl.hostname.toLowerCase();
+  const path = (parsedUrl.pathname || '/') + parsedUrl.search;
   const now = Date.now();
 
-  const hit = ROBOTS_CACHE.get(host);
-  if (hit && now < hit.expiresAt) return hit.pending;
-
-  // Held in a mutable entry so the TTL can be set from the OUTCOME once it is
-  // known, while concurrent callers still share the one in-flight request.
-  const entry: RobotsCacheEntry = {
-    expiresAt: now + ROBOTS_FAILURE_TTL_MS,
-    pending: Promise.resolve('unknown'),
-  };
-
-  entry.pending = evaluateRobotsForUrl(url, { userAgent: config.userAgent, dnsLookup: config.dnsLookup })
-    .then((r) => {
-      // 'unknown' from a real answer is still unresolved — retry it soon.
-      entry.expiresAt = Date.now() + (r.policy === 'unknown' ? ROBOTS_FAILURE_TTL_MS : ROBOTS_CACHE_TTL_MS);
-      if (r.crawlDelayMs !== null) {
-        evictOldest(ROBOTS_DELAY_MS);
-        ROBOTS_DELAY_MS.set(host, r.crawlDelayMs);
-      }
-      return r.policy;
+  let entry = ROBOTS_CACHE.get(host);
+  if (!entry || now >= entry.expiresAt) {
+    // Held in a mutable entry so the TTL can be set from the OUTCOME once it is
+    // known, while concurrent callers still share the one in-flight request.
+    const fresh: RobotsCacheEntry = { expiresAt: now + ROBOTS_FAILURE_TTL_MS, pending: Promise.resolve('unknown'), rules: null, crawlDelayMs: null };
+    fresh.pending = evaluateRobotsForUrl(url, {
+      userAgent: config.userAgent,
+      dnsLookup: config.dnsLookup,
+      onRules: (text) => {
+        fresh.rules = text;
+      },
     })
-    // A robots fetch that itself fails leaves the posture unknown, which still
-    // fails closed downstream — never upgrade a failure to 'allow'. But it
-    // expires quickly, so the failure cannot become permanent.
-    .catch(() => {
-      entry.expiresAt = Date.now() + ROBOTS_FAILURE_TTL_MS;
-      return 'unknown' as const;
-    });
-
-  evictOldest(ROBOTS_CACHE);
-  ROBOTS_CACHE.set(host, entry);
-  return entry.pending;
+      .then((r) => {
+        // 'unknown' from a real answer is still unresolved — retry it soon.
+        fresh.expiresAt = Date.now() + (r.policy === 'unknown' ? ROBOTS_FAILURE_TTL_MS : ROBOTS_CACHE_TTL_MS);
+        fresh.crawlDelayMs = r.crawlDelayMs;
+        return r.policy;
+      })
+      // A robots fetch that itself fails leaves the posture unknown, which still
+      // fails closed downstream — never upgrade a failure to 'allow'. But it
+      // expires quickly, so the failure cannot become permanent.
+      .catch(() => {
+        fresh.expiresAt = Date.now() + ROBOTS_FAILURE_TTL_MS;
+        return 'unknown' as const;
+      });
+    if (ROBOTS_CACHE.size >= MAX_ROBOTS_HOSTS) {
+      const oldest = ROBOTS_CACHE.keys().next().value;
+      if (oldest !== undefined) ROBOTS_CACHE.delete(oldest);
+    }
+    ROBOTS_CACHE.set(host, fresh);
+    entry = fresh;
+  }
+  const policy = await entry.pending;
+  // With the rules in hand every path is judged on its own: a Disallow below the base URL applies to it.
+  return entry.rules === null ? policy : parseRobots(entry.rules, userAgentToken(config.userAgent), path).policy;
 }
 
 /**
@@ -101,9 +100,9 @@ async function resolveRobotsPolicy(url: string, config: ResolvedConfig): Promise
  * it needs the same resolution `crawl()` does internally. An explicit policy
  * is never overridden.
  */
-export async function resolveTargetPolicy(target: CrawlTarget, config: ResolvedConfig): Promise<CrawlTarget> {
+export async function resolveTargetPolicy(target: CrawlTarget, config: ResolvedConfig, url = target.baseUrl): Promise<CrawlTarget> {
   if (!config.autoRobots || (target.robotsPolicy ?? 'unknown') !== 'unknown') return target;
-  const policy = await resolveRobotsPolicy(target.baseUrl, config);
+  const policy = await resolveRobotsPolicy(URL.canParse(url) ? url : target.baseUrl, config);
   return { ...target, robotsPolicy: policy };
 }
 
@@ -123,7 +122,7 @@ export async function approveCrawlPolicy(
   url: string,
   config: ResolvedConfig,
 ): Promise<{ requestUrl: URL; effectiveTarget: CrawlTarget }> {
-  const effectiveTarget = await resolveTargetPolicy(target, config);
+  const effectiveTarget = await resolveTargetPolicy(target, config, url);
   assertTargetEligible(effectiveTarget);
   const requestUrl = assertRequestUrlAllowed(effectiveTarget, url);
   return { requestUrl, effectiveTarget };

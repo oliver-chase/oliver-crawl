@@ -5,7 +5,21 @@ import { htmlToMarkdown } from '@/extract/html-to-markdown';
 // VENDOR-PARITY-1: markdown is an accuracy lever, not a format preference.
 // Each case below is structure an extractor needs that plain text destroys.
 
-const md = (html: string) => htmlToMarkdown(cheerio.load(html));
+const md = (html: string) => htmlToMarkdown(cheerio.load(html), { baseUrl: 'https://venue.example/' });
+
+describe('links leave as absolute http(s) URLs or as their label', () => {
+  test('a javascript: link keeps its label and loses its target', () => {
+    expect(md('<main><p>Buy <a href="javascript:alert(1)">now</a> today.</p></main>')).toBe('Buy now today.');
+  });
+
+  test('a relative link is resolved against the page URL', () => {
+    expect(md('<main><p><a href="tickets">Tickets</a></p></main>')).toBe('[Tickets](https://venue.example/tickets)');
+  });
+
+  test('a link to a private address keeps only its label', () => {
+    expect(md('<main><p><a href="http://127.0.0.1/admin">Admin</a></p></main>')).toBe('Admin');
+  });
+});
 
 describe('structure the page author encoded survives', () => {
   test('headings keep their level', () => {
@@ -39,14 +53,14 @@ describe('structure the page author encoded survives', () => {
 
   test('links keep text attached to href', () => {
     expect(md('<main><p>See the <a href="/calendar">full calendar</a> online.</p></main>')).toBe(
-      'See the [full calendar](/calendar) online.',
+      'See the [full calendar](https://venue.example/calendar) online.',
     );
   });
 
   test('image alt text is kept', () => {
     // Often the ONLY description of a flyer.
     expect(md('<main><img src="/flyer.jpg" alt="Concert July 11 at 7pm"></main>')).toBe(
-      '![Concert July 11 at 7pm](/flyer.jpg)',
+      '![Concert July 11 at 7pm](https://venue.example/flyer.jpg)',
     );
   });
 
@@ -62,18 +76,18 @@ describe('MARKDOWN-BLOCKLINK-1 — a bare link keeps its href', () => {
   // container, and the href was dropped for every one of them.
   test('a link that is a direct child of main keeps its URL', () => {
     expect(md('<main><a href="/education/summer-camp/">Summer Camp Programme Details</a></main>')).toBe(
-      '[Summer Camp Programme Details](/education/summer-camp/)',
+      '[Summer Camp Programme Details](https://venue.example/education/summer-camp/)',
     );
   });
 
   test('a list of bare links keeps every URL', () => {
     const out = md('<main><a href="/a">First Article Title</a><a href="/b">Second Article Title</a></main>');
-    expect(out).toContain('](/a)');
-    expect(out).toContain('](/b)');
+    expect(out).toContain('](https://venue.example/a)');
+    expect(out).toContain('](https://venue.example/b)');
   });
 
   test('a link inside a paragraph still works', () => {
-    expect(md('<main><p>See the <a href="/x">details</a>.</p></main>')).toBe('See the [details](/x).');
+    expect(md('<main><p>See the <a href="/x">details</a>.</p></main>')).toBe('See the [details](https://venue.example/x).');
   });
 });
 
@@ -237,7 +251,7 @@ describe('MARKDOWN-DATAURI-1 — inline data URIs must not reach the guard', () 
 
   test('a real image URL is still emitted', () => {
     const out = md('<main><img src="/uploads/banner.webp" alt="Banner"></main>');
-    expect(out).toContain('/uploads/banner.webp');
+    expect(out).toContain('https://venue.example/uploads/banner.webp');
   });
 
   test('a page carrying placeholders is not quarantined', async () => {
@@ -252,12 +266,12 @@ describe('MARKDOWN-DATAURI-1 — inline data URIs must not reach the guard', () 
 describe('inline content is not split by its container', () => {
   test('a sentence with bold text and a link inside a div stays one paragraph', () => {
     expect(md('<main><div>Doors at <b>seven</b> and <a href="/tickets">tickets</a> are free.</div></main>')).toBe(
-      'Doors at **seven** and [tickets](/tickets) are free.',
+      'Doors at **seven** and [tickets](https://venue.example/tickets) are free.',
     );
   });
 
   test('a run of bare links keeps one block per link', () => {
-    expect(md('<main><div><a href="/a">Alpha</a> <a href="/b">Beta</a></div></main>')).toBe('[Alpha](/a)\n\n[Beta](/b)');
+    expect(md('<main><div><a href="/a">Alpha</a> <a href="/b">Beta</a></div></main>')).toBe('[Alpha](https://venue.example/a)\n\n[Beta](https://venue.example/b)');
   });
 
   test('a blockquote with two paragraphs keeps them apart', () => {
@@ -273,7 +287,7 @@ describe('inline content is not split by its container', () => {
 
 describe('link targets stay valid Markdown', () => {
   test('parentheses and spaces in an href are percent-encoded', () => {
-    expect(md('<main><p>See <a href="/a_(b) c">the page</a> now.</p></main>')).toBe('See [the page](/a_%28b%29%20c) now.');
+    expect(md('<main><p>See <a href="/a_(b) c">the page</a> now.</p></main>')).toBe('See [the page](https://venue.example/a_%28b%29%20c) now.');
   });
 });
 

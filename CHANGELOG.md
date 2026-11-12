@@ -6,6 +6,15 @@ Rename
 - the project is now OliverCrawl and its repo is `oliver-chase/olivercrawl`, so install from `github:oliver-chase/olivercrawl`. The npm scope `@oliver/crawl-core` is unchanged
 - every environment variable starts with `OLIVERCRAWL_` where it started with `OLIVER_CRAWL_`, so rename any you set
 
+Safety
+- Markdown links and images are absolute http(s) URLs, and a `javascript:` or private-address target keeps only its label
+- with `autoRobots`, robots.txt is judged for each page's own path, so a `Disallow` below the base URL is honored
+- every fetch checks its first host before the request, including an IP literal, and the render rung makes every request through the crawler's pinned connection pool
+- `safeFetch` keeps a redirect on the starting site when `sameSiteAs` is not given, and refuses any change of port
+- the change probe refuses an inactive or robots-disallowed target, a failed render action still runs the origin check, and the title is returned sanitized
+- JSON-LD keys are scanned too, and JSON-LD too deep or too large to scan is dropped
+- a site's Crawl-delay expires with the robots.txt answer that carried it
+
 ## 0.20.0
 
 Safety

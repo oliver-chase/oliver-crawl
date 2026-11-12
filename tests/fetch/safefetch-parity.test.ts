@@ -35,12 +35,11 @@ describe('a redirect may not leave the target site', () => {
     expect(res?.ok).toBe(true);
   });
 
-  test('without sameSiteAs the old permissive behaviour is unchanged', async () => {
-    // The option is opt-in so existing callers are not broken silently.
+  test('without sameSiteAs a redirect stays on the starting site', async () => {
     const res = await safeFetch('https://site.example.com/feed', redirectTo('https://other.example.net/x'), 'text/calendar', {
       dnsLookup: publicDns,
     });
-    expect(res?.ok).toBe(true);
+    expect(res).toBeNull();
   });
 });
 

@@ -102,6 +102,33 @@ describe('a quarantine refusal carries what tripped it', () => {
   });
 });
 
+describe('structured data and the title pass the guard in full', () => {
+  const crawl = () =>
+    createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(target, 'https://site.example.com/x');
+
+  test('JSON-LD nested past the scan depth is dropped', async () => {
+    let deep: unknown = 'leaf value long enough to scan';
+    for (let i = 0; i < 12; i++) deep = { child: deep };
+    serveHtml(`<html><head><title>Events</title><script type="application/ld+json">${JSON.stringify(deep)}</script></head><body><main><p>Real event copy here, plenty of it.</p></main></body></html>`);
+    const result = await crawl();
+    if (!result.ok || result.notModified) throw new Error('expected a page');
+    expect(result.pages[0]!.jsonLd).toEqual([]);
+  });
+
+  test('a payload in a JSON-LD key is quarantined', async () => {
+    serveHtml(`<html><head><title>Events</title><script type="application/ld+json">${JSON.stringify({ [PAYLOAD]: 'x' })}</script></head><body><main><p>Real event copy here, plenty of it.</p></main></body></html>`);
+    const result = await crawl();
+    expect(result.ok).toBe(false);
+  });
+
+  test('the title is returned with control characters stripped', async () => {
+    serveHtml(`<html><head><title>Spring\u0007 Fair</title></head><body><main><p>Real event copy here, plenty of it.</p></main></body></html>`);
+    const result = await crawl();
+    if (!result.ok || result.notModified) throw new Error('expected a page');
+    expect(result.pages[0]!.title).not.toContain('\u0007');
+  });
+});
+
 describe('every rung that can quarantine reports its evidence', () => {
   // Each of the seven quarantine sites is asserted individually, so stripping
   // the evidence from any one of them fails a test.

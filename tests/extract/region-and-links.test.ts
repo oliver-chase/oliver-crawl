@@ -9,7 +9,7 @@ import { buildPage } from '@/fetch/build-page';
 // A page keeps all of its content, the change hash reads what the markdown reads, and links come out absolute.
 
 const para = (text: string) => `<p>${text} is on the program this week at the riverside stage for everyone.</p>`;
-const md = (html: string) => htmlToMarkdown(cheerio.load(html));
+const md = (html: string) => htmlToMarkdown(cheerio.load(html), { baseUrl: 'https://venue.example/' });
 const base = {
   url: 'https://a.example.com/events/', contentType: 'text/html', etag: null, lastModified: null, baseHost: 'a.example.com',
   maxTextChars: 5000, rung: 'fetch', includeHtml: false, maxLinks: 10, maxOutboundHosts: 10,
@@ -67,7 +67,7 @@ describe('tables, images and links', () => {
 
   test('image paths with spaces and brackets are escaped', () => {
     const out = md('<html><body><main><img src="/img/flyer (1).png" alt="Flyer"></main></body></html>');
-    expect(out).toContain('![Flyer](/img/flyer%20%281%29.png)');
+    expect(out).toContain('![Flyer](https://venue.example/img/flyer%20%281%29.png)');
   });
 });
 

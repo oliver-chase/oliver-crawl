@@ -46,15 +46,31 @@ import type { CrawlPage, PageLink } from '../core/types.js';
 const MAX_JSON_LD_STRINGS = 500;
 const MIN_JSON_LD_STRING = 12;
 
-/** The string values inside parsed JSON-LD, bounded in depth and count so hostile nesting costs a fixed amount. */
-function jsonLdStrings(value: unknown, out: string[] = [], depth = 0): string[] {
-  if (out.length >= MAX_JSON_LD_STRINGS) return out;
-  if (typeof value === 'string') {
-    if (value.length >= MIN_JSON_LD_STRING) out.push(value);
-  } else if (depth < 8 && value && typeof value === 'object') {
-    for (const inner of Object.values(value)) jsonLdStrings(inner, out, depth + 1);
-  }
-  return out;
+/**
+ * The keys and string values inside parsed JSON-LD, bounded in depth and count so hostile nesting costs a
+ * fixed amount. `complete` is false when a bound cut the walk short, so the caller drops what it could not scan.
+ */
+function jsonLdStrings(value: unknown): { strings: string[]; complete: boolean } {
+  const strings: string[] = [];
+  let complete = true;
+  const walk = (node: unknown, depth: number) => {
+    if (!complete) return;
+    if (typeof node === 'string') {
+      if (node.length >= MIN_JSON_LD_STRING) strings.push(node);
+    } else if (node && typeof node === 'object') {
+      if (depth >= 8) {
+        complete = false;
+        return;
+      }
+      for (const [key, inner] of Object.entries(node)) {
+        if (!Array.isArray(node) && key.length >= MIN_JSON_LD_STRING) strings.push(key);
+        walk(inner, depth + 1);
+      }
+    }
+    if (strings.length > MAX_JSON_LD_STRINGS) complete = false;
+  };
+  walk(value, 0);
+  return { strings, complete };
 }
 
 export async function buildPage(input: {
@@ -96,11 +112,11 @@ export async function buildPage(input: {
   if (titleGuard && titleGuard.signals.length > 0) {
     return { quarantined: true, signals: titleGuard.signals, text: titleGuard.text, title: null };
   }
-  const title = rawTitle || null;
+  const title = titleGuard?.text || null;
 
   // Built BEFORE the destructive strip below, and from a clone internally, so
   // the link pass further down still sees the whole document.
-  const markdownRaw = htmlToMarkdown($, { maxChars: input.maxTextChars });
+  const markdownRaw = htmlToMarkdown($, { maxChars: input.maxTextChars, baseUrl: input.url });
 
   $('script, style, noscript, template').remove();
   let visibleText = $('body').text().replace(/\s+/g, ' ').trim();
@@ -135,7 +151,10 @@ export async function buildPage(input: {
 
   // JSON-LD reaches the caller as structured data and in the summary, so every string in it passes the guard
   // like the page text does. A page can carry its payload there while its visible text stays ordinary.
-  for (const text of jsonLdStrings(jsonLd)) {
+  const scanned = jsonLdStrings(jsonLd);
+  // JSON-LD too large or too deep to scan in full is dropped, since an unscanned part could carry the payload.
+  if (!scanned.complete) jsonLd.length = 0;
+  for (const text of scanned.strings) {
     const jsonLdGuard = sanitizeCrawledText(text, input.maxTextChars);
     if (jsonLdGuard.signals.length > 0) return { quarantined: true, signals: jsonLdGuard.signals, text: jsonLdGuard.text, title };
   }
@@ -185,7 +204,8 @@ export async function buildPage(input: {
     bodySha256: await sha256Hex(input.html),
     contentRegionSha256: await computeContentRegionHash(input.html),
     textSha256: await sha256Hex(sanitized.text),
-    contentSimhash: simhash(sanitizedMarkdown.text || sanitized.text),
+    // Link targets count by their path alone, so a shared origin in every absolute URL does not make pages alike.
+    contentSimhash: simhash((sanitizedMarkdown.text || sanitized.text).replace(/\]\(https?:\/\/[^/)\s]+/g, '](')),
     httpEtag: input.etag,
     httpLastModified: input.lastModified,
     jsonLd,

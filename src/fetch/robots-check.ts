@@ -61,7 +61,7 @@ export function userAgentToken(userAgent: string): string {
 
 export async function evaluateRobotsForUrl(
   rawUrl: string,
-  opts?: { fetchImpl?: typeof fetch; userAgent?: string; dnsLookup?: DnsLookupFn },
+  opts?: { fetchImpl?: typeof fetch; userAgent?: string; dnsLookup?: DnsLookupFn; onRules?: (text: string) => void },
 ): Promise<RobotsCheckResult> {
   const doFetch = opts?.fetchImpl ?? pooledFetchFor(opts?.dnsLookup);
   const userAgent = opts?.userAgent ?? DEFAULT_USER_AGENT;
@@ -121,7 +121,8 @@ export async function evaluateRobotsForUrl(
         },
       });
       if (walk.stopped) {
-        return { policy: 'unknown', reason: `robots.txt redirected (${walk.response.status}) too many times — inconclusive`, crawlDelayMs: null };
+        const why = walk.stopped === 'max-hops' ? 'too many times' : 'with no Location header';
+        return { policy: 'unknown', reason: `robots.txt redirected (${walk.response.status}) ${why} — inconclusive`, crawlDelayMs: null };
       }
       res = walk.response;
     } catch (error) {
@@ -162,6 +163,7 @@ export async function evaluateRobotsForUrl(
     clearTimeout(timeoutId);
   }
 
+  opts?.onRules?.(body);
   const parsed = parseRobots(body, userAgentToken(userAgent), (target.pathname || '/') + target.search);
   return redirectedOffDomainTo
     ? { ...parsed, reason: `${parsed.reason} (robots.txt now served from ${redirectedOffDomainTo} — this source may have moved)` }
