@@ -16,6 +16,9 @@ Safety
 - a site's Crawl-delay expires with the robots.txt answer that carried it
 - zero-width and fullwidth characters no longer carry a payload past the guard, and such a payload is redacted
 - the render rung blocks service workers and WebSockets, which its request check cannot see
+- link text and a title reported by the Jina or vendor rung pass the guard, and a payload split by punctuation or bidi controls is caught and redacted
+- `fetchViaWayback` never sends a URL that carries credentials, and an iframe or a redirected subresource in a render is checked hop by hop like any subresource
+- with `autoRobots`, a whole-site crawl judges robots.txt for each page's own path
 
 Correctness
 - a page whose crawl throws is reported as one failure and the rest of the run continues, and a refused target leaves the stored snapshot as it was
@@ -31,6 +34,7 @@ Correctness
 - `crawlSites` keeps `targetId`, `storeKey`, `resumeFrom` and `seeds` out of its shared options, so no two sites share stored state
 - a main container keeps its own paragraphs when a nested block also scores, and an address or contact point alone is not content data
 - the README says which runtimes can load the package
+- a hostile sitemap entity or a very large child sitemap no longer breaks discovery, and every refused response releases its pooled connection
 
 Cost
 - the local render rung shares one Chromium per process, with a fresh context per page, and closes it after 30 seconds idle

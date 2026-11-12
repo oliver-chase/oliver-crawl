@@ -48,7 +48,8 @@ export function htmlToMarkdown($: CheerioAPI, options: { maxChars?: number; base
   });
 
   // Links and images leave as absolute http(s) URLs or not at all: a javascript: or private-address
-  // href in the Markdown would reach whatever renders it. Unsafe ones keep their label or alt text.
+  // href in the Markdown would reach whatever renders it. Unsafe ones keep their label or alt text, and a
+  // data: image is left for inlineImage, which emits only its alt text.
   const safeUrl = (raw: string | undefined) => {
     if (!raw) return null;
     try {

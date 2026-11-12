@@ -83,6 +83,8 @@ export async function readBodyCapped(response: Response, maxBytes: number): Prom
 export async function readBytesPrefix(response: Response, maxBytes: number): Promise<{ bytes: Uint8Array; capped: boolean }> {
   const reader = response.body?.getReader();
   if (!reader) {
+    // No stream to read in steps, so a declared size past the cap is refused before the whole body is read.
+    if (Number(response.headers.get('content-length') ?? 0) > maxBytes) return { bytes: new Uint8Array(0), capped: true };
     const buffer = new Uint8Array(await response.arrayBuffer());
     return buffer.byteLength > maxBytes ? { bytes: buffer.subarray(0, maxBytes), capped: true } : { bytes: buffer, capped: false };
   }
@@ -135,7 +137,6 @@ export function dropBody(response: Response): void {
 
 export type RedirectWalk = {
   response: Response;
-  finalUrl: URL;
   /** Set when the walk ended on a redirect it did not follow. */
   stopped?: 'no-location' | 'max-hops';
 };
@@ -158,12 +159,12 @@ export async function followManualRedirects(
   let current = start;
   for (let hop = 0; ; hop += 1) {
     const response = await options.doFetch(current.toString(), { ...options.init(), redirect: 'manual' });
-    if (response.status < 300 || response.status > 399) return { response, finalUrl: current };
+    if (response.status < 300 || response.status > 399) return { response };
     const location = response.headers.get('location');
-    if (!location) return { response, finalUrl: current, stopped: 'no-location' };
+    if (!location) return { response, stopped: 'no-location' };
     if (hop >= options.maxHops) {
       dropBody(response);
-      return { response, finalUrl: current, stopped: 'max-hops' };
+      return { response, stopped: 'max-hops' };
     }
     dropBody(response);
     current = await options.onRedirect(location, current);

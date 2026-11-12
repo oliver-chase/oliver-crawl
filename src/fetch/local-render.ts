@@ -100,6 +100,7 @@ type RenderRoute = {
     headers: () => Record<string, string>;
     postDataBuffer: () => Buffer | null;
     isNavigationRequest: () => boolean;
+    frame: () => unknown;
   };
   abort: () => Promise<unknown>;
   // Every request is made by the crawler's own pinned fetch and handed back to the page, so Chromium
@@ -141,6 +142,7 @@ type RenderPage = {
   goto: (u: string, o: { waitUntil: string; timeout: number }) => Promise<unknown>;
   route: (pattern: string, handler: (route: RenderRoute) => unknown) => Promise<unknown>;
   content: () => Promise<string>;
+  mainFrame: () => unknown;
   url: () => string;
   click: (selector: string, o: { timeout: number }) => Promise<unknown>;
   waitForTimeout: (ms: number) => Promise<unknown>;
@@ -330,15 +332,26 @@ export async function renderViaLocalChromium(
     const pinnedFetch = pooledFetchFor(dnsLookup);
     await page.route('**/*', async (route) => {
       const request = route.request();
-      if (!request.isNavigationRequest()) {
+      // An iframe's navigation is checked like a subresource, since a page may embed another public site.
+      if (!request.isNavigationRequest() || request.frame() !== page.mainFrame()) {
         // RENDER-SUBRESOURCE-1: a page's own JavaScript can fetch a service on a private address and land
         // the response in the DOM, which then leaves in `page.content()`. Subresources may come from any
         // public host, such as a CDN, so only the private-address check applies. A refused one is
         // aborted and the page still renders.
         try {
-          await assertHostResolvesToPublicAddress(new URL(request.url()).hostname, dnsLookup);
-          const sub = await pinnedRequest(pinnedFetch, request, request.url());
-          if (sub.location || sub.capped) {
+          // A redirected subresource is followed hop by hop, each hop held to the same check.
+          let hopUrl = request.url();
+          let sub: Awaited<ReturnType<typeof pinnedRequest>> | null = null;
+          for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+            await assertHostResolvesToPublicAddress(new URL(hopUrl).hostname, dnsLookup);
+            const answer = await pinnedRequest(pinnedFetch, request, hopUrl);
+            if (!answer.location) {
+              sub = answer;
+              break;
+            }
+            hopUrl = new URL(answer.location, hopUrl).toString();
+          }
+          if (!sub || sub.capped) {
             await route.abort();
             return;
           }

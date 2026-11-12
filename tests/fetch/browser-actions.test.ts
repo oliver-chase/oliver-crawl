@@ -26,6 +26,7 @@ function fakePage(opts: { urlSequence?: string[]; failClick?: boolean } = {}) {
       goto: async () => undefined,
       route: async () => undefined,
       content: async () => '<html></html>',
+      mainFrame: () => null,
       url: () => urls[Math.min(urlIndex, urls.length - 1)]!,
       click: async (selector: string) => {
         if (opts.failClick) throw new Error('selector not found');

@@ -178,6 +178,12 @@ export async function buildPage(input: {
     }
   });
 
+  // Link text reaches the caller beside the page text, so it passes the guard too.
+  for (const link of links) {
+    const linkGuard = sanitizeCrawledText(link.text, input.maxTextChars);
+    if (linkGuard.signals.length > 0) return { quarantined: true, signals: linkGuard.signals, text: linkGuard.text, title };
+  }
+
   return {
     url: input.url,
     text: sanitized.text,
@@ -233,6 +239,13 @@ export async function buildPage(input: {
 // tests/lanes/page-shape.test.ts, which drives every rung end to end and
 // checks what is IN the page, beyond the fact that a page came back. A dropped
 // field surfaces as worse extraction blamed on the sites, not as an error.
+/** A rung-reported title, sanitized, or null when it carries an injection signal. */
+function guardedTitle(title: string | null | undefined): string | null {
+  if (!title) return null;
+  const guard = sanitizeCrawledText(title, 1000);
+  return guard.signals.length > 0 ? null : guard.text || null;
+}
+
 export async function buildTextPage(input: {
   url: string;
   text: string;
@@ -287,7 +300,8 @@ export async function buildTextPage(input: {
     redactionCount: input.redactionCount ?? 0,
     truncated: input.truncated ?? false,
     structuredData: summarizeStructuredData([]),
-    title: input.title ?? null,
+    // A title the rung reports passes the guard like the HTML title, and a title that trips it is dropped.
+    title: guardedTitle(input.title),
     contentType: input.contentType,
     bodySha256: input.bodySource === undefined ? textSha256 : await sha256Hex(input.bodySource),
     contentRegionSha256: '',

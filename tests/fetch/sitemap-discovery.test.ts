@@ -130,3 +130,12 @@ describe('sitemaps named in robots.txt', () => {
     expect(asked.some((u) => u.includes('other.example.net'))).toBe(false);
   });
 });
+
+describe('hostile sitemap input', () => {
+  test('a character reference outside Unicode does not throw', async () => {
+    globalThis.fetch = (async () =>
+      xml(`<?xml version="1.0"?><urlset><url><loc>https://venue.example.com/a&#x110000;</loc></url><url><loc>https://venue.example.com/b</loc></url></urlset>`)) as typeof fetch;
+    const result = await discoverSitemapUrls(target, { userAgent: 'T/1', dnsLookup: publicDns });
+    expect(result.urls).toContain('https://venue.example.com/b');
+  });
+});

@@ -23,9 +23,9 @@ wrong the moment one changes.
 | `BETTER-RUNGMEMORY-1` | Remember the rung that works per host. Store is PER CRAWLER — a module-level one leaks between crawlers with different identities. | `core/config.ts` | `core/rung-memory.test.ts` |
 | `BETTER-SOFT404-1` | Flag pages that loaded and say nothing. Advisory only: an empty state is often a true fact worth recording. | `core/soft-404.ts` | `core/consumer-signals.test.ts` |
 | `CACHE-POLICY-1` | The page cache is keyed on url, lanes, user agent, html option, text cap and target headers, and omits the target, so policy must run BEFORE the cache read or a second target reads what it was refused. | `index.ts` | `lanes/cache-policy.test.ts` |
-| `CI-NODE20-1` | Cross-runtime SHA-256 without assuming a Node-only API. | `core/hash.ts` | — |
+| `CI-NODE20-1` | Cross-runtime SHA-256 without assuming a Node-only API. | `core/hash.ts` | None: A runtime-compatibility choice in the hash helper. exercised by every test that hashes; nothing to assert beyond "it runs here". |
 | `CRAWL-BACKOFF-1` | Obey Retry-After as stated. Our own schedule is a guess; the origin's is an instruction. | `crawl-site.ts` | `fetch/request-shape.test.ts` |
-| `CRAWL-CONCURRENCY-1` | Parallelism is safe in searchAndCrawl only because host-throttle already serialises per host. Default 1. | `search-and-crawl.ts` | — |
+| `CRAWL-CONCURRENCY-1` | Parallelism is safe in searchAndCrawl only because host-throttle already serialises per host. Default 1. | `search-and-crawl.ts` | None: The default is 1, so the concurrent path only exists when a caller opts in. Covered indirectly by the searchAndCrawl suite. |
 | `CRAWL-CONTENTKIND-1` | Stamp extractorVersion so an extraction improvement can reach pages already stored. Cannot be added retroactively. | `core/types.ts` | `core/consumer-signals.test.ts` |
 | `CRAWL-DEDUP-1` | Dedup on the RESOLVED url too — /home, /index and / commonly converge. | `crawl-site.ts` | `lanes/crawl-site.test.ts` |
 | `CRAWL-DEGRADE-1` | failureClass separates "retry later" from "needs a human". The useful distinction is not in `reason`. | `core/failure-class.ts` | `core/consumer-signals.test.ts` |
@@ -33,7 +33,7 @@ wrong the moment one changes.
 | `CRAWL-HARDEN-1` | Cap body bytes. An endless response otherwise ties up memory until the process dies. | `lanes/own/index.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-HASH-1` | Compare like with like. A structural hash against a text hash across a rung change reports a change that did not happen. | `core/types.ts` | `lanes/crawl-site.test.ts` |
 | `CRAWL-PDF-1` | The PDF parser is an optional install (`unpdf`), because a large hostile-input surface does not belong in every consumer's install. | `core/content-kind.ts` | `fetch/pdf-extract.test.ts` |
-| `CRAWL-PERF-1` | Parse the document once, not once per JSON-LD script tag. | `fetch/build-page.ts` | — |
+| `CRAWL-PERF-1` | Parse the document once, not once per JSON-LD script tag. | `fetch/build-page.ts` | None: Each page is parsed once for all script tags. A behavioural test would assert output that is identical either way; only a profiler shows the difference. |
 | `CRAWL-RESUME-1` | Emit a snapshot after each page so a killed run continues. Package stores nothing. | `crawl-site.ts` | `lanes/crawl-resume.test.ts` |
 | `CRAWL-PARALLEL-1` | Fetch in parallel only on request. One request per host at a time by default, counted process-wide, and in-flight pages stay in the resume queue. | `crawl-site.ts`, `core/host-throttle.ts` | `lanes/crawl-concurrency.test.ts` |
 | `DNS-CACHE-BOUND-1` | The DNS verdict cache has a size cap, evicting expired then oldest entries, so a wide crawl does not grow memory without limit. | `fetch/host-policy.ts` | `fetch/dns-cache-bound.test.ts` |
@@ -47,9 +47,9 @@ wrong the moment one changes.
 | `CRAWL-VALIDATE-1` | Conditional-GET headers go on the wire on every hop, so a real origin can answer 304. | `fetch/http-mechanics.ts` | `lanes/own-lane.test.ts` |
 | `CRAWL-VISION-1` | Rank images that plausibly carry the content. Finding them is free and ours; reading them is the caller's. | `core/types.ts` | `extract/content-images-and-diff.test.ts` |
 | `CRAWLSITE-AUTOROBOTS-1` | crawlSite checked eligibility before robots could resolve, so autoRobots did nothing for whole-site crawls. | `crawl-site.ts` | `lanes/crawlsite-autorobots.test.ts` |
-| `DEPLOY-BLOCKER-1` | The playwright import is invisible to bundler tracers. A plain import breaks serverless builds for consumers who never wanted it. | `fetch/local-render.ts` | — |
+| `DEPLOY-BLOCKER-1` | The playwright import is invisible to bundler tracers. A plain import breaks serverless builds for consumers who never wanted it. | `fetch/local-render.ts` | None: The playwright import is written to be invisible to bundler tracers, which also makes it unmockable. Verified by consumers' builds staying intact, with no unit test. |
 | `GUARD-PRECISION-1` | Guard patterns tightened against real page copy that was being quarantined. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
-| `GUARD-PRECISION-2` | Same, second pass: a missed attack alongside the false positives. | `guard/prompt-injection-guard.ts` | — |
+| `GUARD-PRECISION-2` | Same, second pass: a missed attack alongside the false positives. | `guard/prompt-injection-guard.ts` | None: Superseded in practice by `GUARD-PRECISION-3`'s suite, which exercises the same patterns against real page copy. |
 | `GUARD-TITLE-1` | `<title>` lives in `<head>`, so it was never part of the body text or markdown the guard inspects and shipped raw. A title is page content callers display and feed to models. | `fetch/build-page.ts` | `guard/title-guard.test.ts` |
 | `GUARD-PRECISION-3` | encoded-payload spans URL paths because `/` is in its class. URLs are stripped before that rule only. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `GUARD-PRECISION-4` | The tool-exfiltration destination may be an email address as well as a host, so `to attacker@evil.com` is caught. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
@@ -60,9 +60,9 @@ wrong the moment one changes.
 | `RENDER-REDIRECT-2` | The remote render rung validates where the service says it landed, inside `renderViaService`, because that is the only place the answer enters and a caller that forgets would trust it. | `fetch/browser-render.ts` | `lanes/origin-moved.test.ts` |
 | `BODY-RECEIVED-1` | A failure says whether an origin actually answered, because "the site is down" is worth retrying and "the site served a shell with no readable text" is not, and a consumer should not have to match `detail` wording to tell them apart. | `lanes/own/index.ts` | `lanes/body-received.test.ts` |
 | `CRAWL-BUDGET-1` | maxPages bounds fetches, so failures and near-duplicates spend the budget and a failing site cannot make a run fetch without limit. | `crawl-site.ts` | `lanes/page-budget.test.ts` |
-| `CRAWL-PARITY-1` | Before a consumer replaces its own extractor, `scripts/parity-check.mjs` compares this library's output with the consumer's on the same pages. | `scripts/parity-check.mjs` | — |
+| `CRAWL-PARITY-1` | Before a consumer replaces its own extractor, `scripts/parity-check.mjs` compares this library's output with the consumer's on the same pages. | `scripts/parity-check.mjs` | None: A script run by hand against a consumer's own pages and sites; it needs the consumer's extractor and the network. |
 | `CRAWL-PDF-CAP-1` | A PDF is read only up to the body cap and fails when it passes it, because a truncated PDF is corrupt. | `fetch/http-mechanics.ts`, `lanes/own/index.ts` | `guard/hostile-input.test.ts` |
-| `GATE-DUPLICATION-1` | A passage repeated across two documents is a finding: one fact lives in one file and the other points at it. | `scripts/duplication_check.py` | — |
+| `GATE-DUPLICATION-1` | A passage repeated across two documents is a finding: one fact lives in one file and the other points at it. | `scripts/duplication_check.py` | None: a shared gate whose own repository tests it. |
 | `GUARD-LINEAR-1` | The guard scans a long run of letters or spaces in one pass; a hostile body must not cost quadratic time. | `guard/prompt-injection-guard.ts` | `guard/hostile-input.test.ts` |
 | `GUARD-TELEMETRY-1` | Every page reports `redactionCount` and `truncated`, because a capped page's tail was never seen and a non-zero redaction count means the text differs from what the origin served. | `fetch/build-page.ts` | `lanes/page-shape.test.ts` |
 | `GUARD-REDACT-1` | Redaction follows detection: only patterns that raised a signal are redacted, so an ordinary page keeps its working asset URLs and a non-zero `redactionCount` means an injection was present. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
@@ -113,17 +113,4 @@ wrong the moment one changes.
 
 ## Decisions with no test
 
-A decision no test guards is one refactor from being undone silently. The ledger's Test column names the guarding file for each decision, and `node scripts/check-decisions.mjs --list` shows which ids appear in source, tests and ledger.
-
-Seven decisions have no test by design, and each reason is recorded here:
-
-| ID | Why no test |
-|---|---|
-| `CI-NODE20-1` | A runtime-compatibility choice in the hash helper. Exercised by every test that hashes; nothing to assert beyond "it runs here". |
-| `CRAWL-CONCURRENCY-1` | The default is 1, so the concurrent path only exists when a caller opts in. Covered indirectly by the searchAndCrawl suite. |
-| `CRAWL-PERF-1` | Each page is parsed once for all script tags. A behavioural test would assert output that is identical either way; only a profiler shows the difference. |
-| `DEPLOY-BLOCKER-1` | The playwright import is written to be invisible to bundler tracers, which also makes it unmockable. Verified by consumers' builds staying intact, with no unit test. |
-| `GUARD-PRECISION-2` | Superseded in practice by `GUARD-PRECISION-3`'s suite, which exercises the same patterns against real page copy. |
-| `CRAWL-PARITY-1` | A script run by hand against a consumer's own pages and sites; it needs the consumer's extractor and the network. |
-| `GATE-DUPLICATION-1` | A managed gate copied from OliverCode, which tests it there. |
-
+A decision no test guards is one refactor from being undone silently. The Test column names the guarding file for each decision, or says why it has none, and `node scripts/check-decisions.mjs --list` shows which ids appear in source, tests and ledger.

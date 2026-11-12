@@ -36,7 +36,7 @@ Everything the package exports, grouped by what you would reach for it to do.
 
 | Export | Purpose |
 |---|---|
-| `computeContentRegionHash(html, pageUrl?)` | Hash of the page's Markdown, nav/footer-insensitive. Pass the page URL to match `contentRegionSha256` |
+| `await computeContentRegionHash(html, pageUrl?)` | Hash of the page's Markdown, nav/footer-insensitive. Pass the page URL to match `contentRegionSha256` |
 | `probeCheapChangeSignal` · `cheapSignalsMatch` | Cheap pre-fetch change probe |
 | `urlDedupKey(url)` | Canonical URL identity |
 
@@ -52,6 +52,7 @@ Everything the package exports, grouped by what you would reach for it to do.
 | Export | Purpose |
 |---|---|
 | `isLocalRenderAvailable()` | Whether `playwright` can be loaded here |
+| `MAX_ACTIONS` · `MAX_ACTION_TOTAL_MS` | The `browserActions` limits: 10 actions and 20 seconds in all |
 | `renderViaLocalChromium(url, enabled, actions?, dnsLookup?, onBlocked?)` | Local browser render, with optional `browserActions`; `onBlocked` hears a security refusal |
 | `renderViaService` · `renderServiceFrom` | Your own render service |
 | `fetchViaWayback(url, options)` | Internet Archive capture — free, gated (see [LANES](LANES.md)) |
@@ -83,6 +84,7 @@ Everything the package exports, grouped by what you would reach for it to do.
 
 | Config | Effect |
 |---|---|
+| `store` · `recrawlMinIntervalMs` · `recrawlMaxIntervalMs` · `storeIntervalMs` | Keep crawl state in a `CrawlStore`, with a recrawl wait from one hour to seven days and saves one second apart ([LANES](LANES.md#making-re-crawls-cheap)) |
 | `autoRobots` | Resolve an unknown robots posture by fetching robots.txt. **Required** for `crawlSite` on targets with no stored `robotsPolicy`, which otherwise fail closed |
 | `localRender` | Free local Chromium rung |
 | `browserActions` | Click/scroll/wait before capture, on the local render rung |
@@ -144,24 +146,7 @@ createCrawler({
 
 ### From `.env` / `.env.local`
 
-`configFromEnv()` reads these. All optional:
-
-```bash
-OLIVERCRAWL_USER_AGENT="MyBot/1.0 (+https://mysite.example/bot)"
-
-# Vendor lane — each enables exactly one rung
-OLIVERCRAWL_FIRECRAWL_KEY=...   # or FIRECRAWL_API_KEY
-OLIVERCRAWL_APIFY_TOKEN=...     # or APIFY_API_TOKEN
-
-OLIVERCRAWL_VENDOR_ORDER=firecrawl,apify
-
-# Search providers (their own surface, separate from the scrape rungs)
-OLIVERCRAWL_TAVILY_KEY=...      # or TAVILY_API_KEY
-OLIVERCRAWL_SERPER_KEY=...      # or SERPER_API_KEY
-OLIVERCRAWL_SEARCH_ORDER=serper,tavily
-```
-
-The bare vendor names (`FIRECRAWL_API_KEY`) are accepted as fallbacks, so adopting this package doesn't mean renaming env vars that already work.
+`configFromEnv()` reads the variables [`.env.example`](../.env.example) lists, all optional. Each key has an `OLIVERCRAWL_` name, and the bare vendor names such as `FIRECRAWL_API_KEY` are read as fallbacks, so env vars that already work keep working.
 
 ```ts
 crawler.vendorRungs(); // ['firecrawl'] — what's actually usable right now

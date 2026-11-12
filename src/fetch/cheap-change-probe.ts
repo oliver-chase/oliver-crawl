@@ -99,7 +99,8 @@ export async function probeCheapChangeSignal(
     let bodyHash: string | null = null;
     if (!etag && !lastModified) {
       // A body that cannot be read leaves the hash null, because two failed reads would otherwise match.
-      // A body past the cap could differ only after it, so a capped read gives no hash to compare.
+      // A body past the cap could differ only after it, so a capped read gives no hash to compare, and such a
+      // page with no validators is always fetched. That costs a fetch and never misses a change.
       const read = await readBytesPrefix(response, PROBE_MAX_BODY_BYTES).catch(() => null);
       bodyHash = read === null || read.capped ? null : await sha256Hex(read.bytes);
     } else {

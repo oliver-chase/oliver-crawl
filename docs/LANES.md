@@ -117,6 +117,8 @@ Two hashes are stored per page, and the comparison picks the right one:
 
 Both need the same loop. A `store` keeps it for you; without one, keep `run.validators` from `crawlSite` and pass them back as `priorValidators`.
 
+With a store, each URL also has a recrawl schedule. Its wait doubles for each unchanged check, from `recrawlMinIntervalMs` (one hour) up to `recrawlMaxIntervalMs` (seven days), and a change resets it. Sitemap pages and discovered links are skipped until due and reported in `run.notDue`, and a sitemap entry whose date has not moved since its last check is skipped and reported in `run.skippedByLastmod`. Explicit seeds and the base URL always run, because discovery starts there.
+
 ## Search is not one of these paths
 
 `crawler.search()` is a separate surface: a query goes in, URLs come out. Its providers are Serper and Tavily, both paid, tried in that order by default, which `OLIVERCRAWL_SEARCH_ORDER` changes.

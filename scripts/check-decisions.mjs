@@ -10,18 +10,17 @@
 //   node scripts/check-decisions.mjs
 //   node scripts/check-decisions.mjs --list        # every id and where it lives
 //
-// Config lives in .decisions.json at the repo root. See CODE_INTENT_STANDARD §4.
+// Config lives in .decisions.json at the repo root.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, extname, relative, resolve } from 'node:path';
 
 // This file names example ids in its own comments, and it usually lives in a
 // scanned directory, so without excluding itself it reports them as undocumented
-// decisions. The reachability checker in OliverCode hit the same trap the other
-// way round, satisfying its own rule.
+// decisions.
 const SELF = relative(process.cwd(), resolve(process.argv[1] ?? ''));
 
-// AREA-TOPIC-N per CODE_INTENT_STANDARD §2: three segments, so at least two
+// AREA-TOPIC-N: three segments, so at least two
 // dashes. An earlier cut made the middle segment optional and matched every
 // two-segment label — BUG-9, BC-1, EPIC-2, US-SDR-202 — which are
 // test cases and user stories, not decision records. That noise was worked
@@ -165,17 +164,16 @@ const inventedIds = [...testIds]
 const ID_SHAPE = new RegExp(`^${ID_PATTERN.source}$`);
 
 if (existsSync(cfg.ledger)) {
-  // One row per id in each table, so a second row cannot record a different decision under the same id.
-  let seenInTable = new Set();
+  // One row per id in the whole ledger, so a second row cannot record a different decision under the same id.
+  const seenInTable = new Set();
   for (const line of readFileSync(cfg.ledger, 'utf8').split('\n')) {
-    if (line.startsWith('#')) seenInTable = new Set();
     const first = line.match(/^\|\s*`([^`]+)`\s*\|/);
     if (!first) continue;
     const id = first[1];
-    if (seenInTable.has(id)) problems.push(`${id}: ledger has two rows for this id in one table`);
+    if (seenInTable.has(id)) problems.push(`${id}: ledger has two rows for this id`);
     seenInTable.add(id);
     if (!ID_SHAPE.test(id)) {
-      problems.push(`${id}: ledger row id is not AREA-TOPIC-N, so no check can read it (CODE_INTENT_STANDARD §2)`);
+      problems.push(`${id}: ledger row id is not AREA-TOPIC-N, so no check can read it`);
       continue;
     }
     const withSource = line.match(/^\|\s*`[^`]+`\s*\|[^|]*\|\s*`([^`]+)`\s*\|/);

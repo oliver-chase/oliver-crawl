@@ -31,7 +31,7 @@ const JINA_TIMEOUT_MS = 30_000;
 const JINA_MAX_BYTES = 600_000;
 
 import { assertPublicHost } from './host-policy.js';
-import { readBodyCapped } from './http-mechanics.js';
+import { dropBody, readBodyCapped } from './http-mechanics.js';
 
 export type JinaFetchResult = { title: string | null; text: string };
 
@@ -76,7 +76,10 @@ export async function fetchViaJina(
       },
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      dropBody(res);
+      return null;
+    }
     const body = await readBodyCapped(res, JINA_MAX_BYTES);
     return parseJinaResponse(body);
   } catch {

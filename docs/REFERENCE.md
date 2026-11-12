@@ -79,8 +79,8 @@ if (!result.ok && result.reason === 'quarantined') {
 }
 ```
 
-The text is sanitized, never raw. A reviewer needs to see what the page said,
-not be handed a working instruction to paste into a model.
+The text is sanitized, so a reviewer sees what the page said, and the copy
+carries no working instruction to paste into a model.
 
 ### When the origin has moved
 
@@ -273,7 +273,7 @@ found.pattern;  // which query shape worked — pass back as knownPattern to ski
 ```
 
 Free, and uncontroversial: submitting a query to a site's published search form
-is ordinary use of a feature, not working around one. It also reaches pages
+is ordinary use of the feature. It also reaches pages
 neither link-following nor a sitemap will — an archived page reachable only
 through search is exactly the kind a large site buries.
 

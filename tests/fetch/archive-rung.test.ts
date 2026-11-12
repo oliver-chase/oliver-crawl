@@ -122,3 +122,18 @@ describe('the archive rung is last, and honest about what it returns', () => {
     expect(hit).not.toContain('snapshot');
   });
 });
+
+describe('the archive lookup', () => {
+  test('a URL with credentials is never sent to the archive', async () => {
+    const { fetchViaWayback } = await import('@/index');
+    const asked: string[] = [];
+    const result = await fetchViaWayback('https://user:pw@site.example.com/a', {
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        asked.push(String(input));
+        return new Response('[]', { status: 200 });
+      }) as typeof fetch,
+    });
+    expect(result.ok).toBe(false);
+    expect(asked).toEqual([]);
+  });
+});

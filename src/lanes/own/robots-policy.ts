@@ -22,9 +22,8 @@ import type { CrawlTarget } from '../../core/types.js';
 export const ROBOTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — resolved posture
 export const ROBOTS_FAILURE_TTL_MS = 5 * 60 * 1000; //     5m — unresolved, retry soon
 
-type RobotsPolicyValue = RobotsPolicy;
 /** One host's robots.txt: the posture for the URL first resolved, the rules text when it was read, and its Crawl-delay. */
-type RobotsCacheEntry = { pending: Promise<RobotsPolicyValue>; expiresAt: number; rules: string | null; crawlDelayMs: number | null };
+type RobotsCacheEntry = { pending: Promise<RobotsPolicy>; expiresAt: number; rules: string | null; crawlDelayMs: number | null };
 
 /** Hosts remembered per process. The oldest entry goes when a long-lived crawler passes this many. */
 const MAX_ROBOTS_HOSTS = 2_000;
@@ -46,7 +45,7 @@ export function __clearRobotsCacheForTests(): void {
 }
 
 /** The robots posture for this URL's own path, from one robots.txt fetch per host. */
-async function resolveRobotsPolicy(url: string, config: ResolvedConfig): Promise<RobotsPolicyValue> {
+async function resolveRobotsPolicy(url: string, config: ResolvedConfig): Promise<RobotsPolicy> {
   const parsedUrl = new URL(url);
   const host = parsedUrl.hostname.toLowerCase();
   const path = (parsedUrl.pathname || '/') + parsedUrl.search;

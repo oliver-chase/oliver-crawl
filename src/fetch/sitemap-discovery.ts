@@ -1,7 +1,7 @@
 // ─── Sitemap discovery (free) ───────────────────────────────────────────────
 //
 // The cheapest possible answer to "what pages does this site have": the site
-// tells you. /sitemap.xml is fetched once, parsed with a few regexes (a
+// tells you. /sitemap.xml is fetched once, or the sitemaps robots.txt names when it is missing, parsed with a few regexes (a
 // sitemap's schema is flat enough that a full XML parser buys nothing), and
 // filtered to same-site https URLs. Handles sitemap INDEX files (a sitemap
 // of sitemaps) one level deep, which covers every real-world generator
@@ -17,7 +17,7 @@
 import { pooledFetchFor } from './connection-pool.js';
 import { assertHostResolvesToPublicAddress, assertRequestUrlAllowed } from './host-policy.js';
 import { gunzipSync } from 'node:zlib';
-import { readBytesPrefix } from './http-mechanics.js';
+import { dropBody, readBytesPrefix } from './http-mechanics.js';
 import { safeFetch } from './safe-fetch.js';
 import type { CrawlTarget, DnsLookupFn } from '../core/types.js';
 
@@ -51,14 +51,19 @@ export type SitemapDiscoveryResult = {
   reason: string;
 };
 
+/** A character reference outside Unicode stays as written, so a hostile sitemap cannot make decoding throw. */
+function codePoint(value: number, whole: string): string {
+  return value <= 0x10ffff ? String.fromCodePoint(value) : whole;
+}
+
 function decodeXmlEntities(raw: string): string {
   return raw
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&#x([0-9a-f]+);/gi, (whole, hex: string) => codePoint(parseInt(hex, 16), whole))
+    .replace(/&#(\d+);/g, (whole, dec: string) => codePoint(Number(dec), whole))
     // &amp; last, so &amp;lt; decodes to &lt; and not to <
     .replace(/&amp;/g, '&');
 }
@@ -125,7 +130,11 @@ async function fetchXml(
   options: { userAgent: string; dnsLookup?: DnsLookupFn; sameSiteAs: string },
 ): Promise<{ xml: string; capped: boolean } | null> {
   const response = await safeFetch(url, pooledFetchFor(options.dnsLookup), 'application/xml,text/xml;q=0.9,*/*;q=0.8', options);
-  if (!response || !response.ok) return null;
+  if (!response) return null;
+  if (!response.ok) {
+    dropBody(response);
+    return null;
+  }
   const { bytes, capped } = await readBytesPrefix(response, SITEMAP_MAX_BYTES);
   // A .xml.gz sitemap arrives as gzip bytes. The unpacked size is bounded by the same cap.
   if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
@@ -139,7 +148,7 @@ async function fetchXml(
 }
 
 /** Robots.txt is small, so this much holds every Sitemap line a real site writes. */
-const ROBOTS_MAX_BYTES = 512_000;
+const ROBOTS_LIST_MAX_BYTES = 512_000;
 
 /** The first same-site sitemap that robots.txt lists and that answers, or null. */
 async function sitemapFromRobots(
@@ -149,8 +158,12 @@ async function sitemapFromRobots(
   try {
     const robotsUrl = new URL('/robots.txt', new URL(target.baseUrl).origin).toString();
     const response = await safeFetch(robotsUrl, pooledFetchFor(options.dnsLookup), 'text/plain', { ...options, sameSiteAs: target.baseUrl });
-    if (!response?.ok) return null;
-    const { bytes } = await readBytesPrefix(response, ROBOTS_MAX_BYTES);
+    if (!response) return null;
+    if (!response.ok) {
+      dropBody(response);
+      return null;
+    }
+    const { bytes } = await readBytesPrefix(response, ROBOTS_LIST_MAX_BYTES);
     const listed = [...new TextDecoder().decode(bytes).matchAll(/^\s*sitemap\s*:\s*(\S+)/gim)].map((m) => m[1]!);
     for (const candidate of listed.slice(0, MAX_CHILD_SITEMAPS)) {
       try {
@@ -214,7 +227,8 @@ export async function discoverSitemapUrls(
         const safe = assertRequestUrlAllowed(target, child);
         const fetched = await fetchXml(safe.toString(), { ...options, sameSiteAs: target.baseUrl });
         if (fetched?.capped) readCapped = true;
-        if (fetched && !isSitemapIndex(fetched.xml)) pageEntries.push(...extractEntries(fetched.xml));
+        // A loop, since spreading a child sitemap of hundreds of thousands of entries overflows the call stack.
+        if (fetched && !isSitemapIndex(fetched.xml)) for (const entry of extractEntries(fetched.xml)) pageEntries.push(entry);
       } catch {
         // one bad child sitemap doesn't spoil the rest
       }

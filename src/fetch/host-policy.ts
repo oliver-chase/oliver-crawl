@@ -1,6 +1,6 @@
 // ─── SSRF / same-site policy ────────────────────────────────────────────────
 //
-// Every fetch this package makes passes through here. It answers three
+// Every fetch this package makes to a crawled site passes through here. It answers three
 // questions, and refuses by throwing when any answer is no:
 //
 //   1. Is this target eligible to crawl at all?      (active, robots, https)
@@ -67,10 +67,10 @@ function evictIfFull(scoped: Map<string, { at: number }>): void {
 
 const DNS_SAFE_HOST_CACHE = new Map<DnsLookupFn, Map<string, SafeHostEntry>>();
 
-/** The map a resolver owns inside a process-wide cache, created on first use. */
 /** Resolvers kept per cache. A caller that makes a new resolver closure per crawl would otherwise grow the maps for the life of the process. */
 const MAX_RESOLVERS = 64;
 
+/** The map a resolver owns inside a process-wide cache, created on first use. */
 function scopedMap<V>(root: Map<DnsLookupFn, Map<string, V>>, lookupFn: DnsLookupFn): Map<string, V> {
   let scoped = root.get(lookupFn);
   if (!scoped) {
@@ -137,8 +137,8 @@ export function assertPublicResolvedAddress(address: string, hostname: string): 
 }
 
 // ─── DNS over HTTPS fallback ────────────────────────────────────────────────
-// Used when no dnsLookup is injected. DoH works on every runtime including
-// edge/workerd, where node:dns does not exist.
+// Used when no dnsLookup is injected, so resolution never depends on the host's
+// own resolver.
 
 type DohAnswer = { type?: number; data?: string };
 type DohResponse = { Status?: number; Answer?: DohAnswer[] };
@@ -272,7 +272,6 @@ export function hostsMatchAllowingWww(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase() || norm(a) === norm(b);
 }
 
-/** Same-site enforcement for a URL the crawler intends to REQUEST. */
 /** One rule for a crawl URL and a redirect target: https, no credentials, public host, the target's site and port. */
 function assertUrlAllowedForHost(baseHost: string, basePort: string, requestUrl: string, kind: 'crawl' | 'redirect'): URL {
   let parsed: URL;

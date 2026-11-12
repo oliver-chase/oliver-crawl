@@ -39,6 +39,6 @@ export async function searchChecks() {
       return `${found.pages.length} read, ${found.skipped.length} skipped`;
     });
   } else {
-    console.log('  (no SERPER_API_KEY / TAVILY_API_KEY — search checks skipped)');
+    console.log('  (no OLIVERCRAWL_SERPER_KEY or OLIVERCRAWL_TAVILY_KEY (the bare names are read too) — search checks skipped)');
   }
 }

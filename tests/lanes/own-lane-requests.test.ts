@@ -1,5 +1,5 @@
-import { hasCredentials } from '@/lanes/own/target-headers';
 import { describe, expect, test } from 'vitest';
+import { hasCredentials } from '@/lanes/own/target-headers';
 import { createCrawler } from '@/index';
 import type { CrawlTarget, UsageEvent } from '@/core/types';
 import { publicDns } from '../helpers';

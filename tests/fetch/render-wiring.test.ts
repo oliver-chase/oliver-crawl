@@ -48,7 +48,7 @@ describe('subresource requests are screened too', () => {
   // page.content(). The navigation guard never saw those requests.
   test('non-navigation requests are resolution-checked', () => {
     expect(renderFn).toMatch(/isNavigationRequest\(\)/);
-    expect(renderFn).toMatch(/assertHostResolvesToPublicAddress\(new URL\(request\.url\(\)\)/);
+    expect(renderFn).toMatch(/assertHostResolvesToPublicAddress\(new URL\(hopUrl\)\.hostname/);
   });
 
   test('a blocked subresource aborts the request, not the render', () => {

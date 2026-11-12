@@ -130,12 +130,14 @@ export async function crawlSite(
   // CRAWLSITE-AUTOROBOTS-1: the posture is resolved before the eligibility
   // gate, which fails closed on an unknown policy, so a whole-site crawl and a
   // single-page crawl of the same target agree. One request per host, cached.
-  target = await crawler.resolveTarget(target);
+  // The resolved copy serves the gate alone: each page keeps the target as given,
+  // so with autoRobots the crawl judges robots.txt for that page's own path.
+  const resolved = await crawler.resolveTarget(target);
 
   // Eligibility is a property of the TARGET, not of any one URL — check it
   // once, and report it as a single failure.
   try {
-    assertTargetEligible(target);
+    assertTargetEligible(resolved);
   } catch (error) {
     failures.push({
       url: target.baseUrl,

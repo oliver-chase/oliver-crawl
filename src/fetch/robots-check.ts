@@ -149,6 +149,7 @@ export async function evaluateRobotsForUrl(
     }
     // 5xx and anything else: the standard says assume complete disallow.
     if (!res.ok) {
+      dropBody(res);
       // WHITE-LABEL-2: this named one vendor's bot regardless of the
       // caller's actual user agent — wrong output for every other consumer.
       return {

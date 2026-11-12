@@ -8,7 +8,7 @@
 // It is also last: an archived copy is older than the live page by
 // definition, so it runs when the alternative is nothing at all.
 
-import { readBodyCapped } from './http-mechanics.js';
+import { dropBody, readBodyCapped } from './http-mechanics.js';
 
 /** CDX index: which snapshots exist, newest first, successful captures only. */
 const CDX_ENDPOINT = 'https://web.archive.org/cdx/search/cdx';
@@ -44,6 +44,10 @@ export async function fetchViaWayback(
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     return { ok: false, detail: 'Only http(s) URLs can be looked up in the archive.' };
   }
+  // The URL goes to a third party in the query, so one that carries credentials is never sent.
+  if (parsed.username || parsed.password) {
+    return { ok: false, detail: 'A URL with credentials is never sent to the archive.' };
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WAYBACK_TIMEOUT_MS);
@@ -60,7 +64,10 @@ export async function fetchViaWayback(
     query.searchParams.set('fl', 'timestamp,original');
 
     const indexRes = await doFetch(query.toString(), { signal: controller.signal });
-    if (!indexRes.ok) return { ok: false, detail: `Archive index returned ${indexRes.status}.` };
+    if (!indexRes.ok) {
+      dropBody(indexRes);
+      return { ok: false, detail: `Archive index returned ${indexRes.status}.` };
+    }
 
     // An empty body is how the index says there is no capture.
     const indexBody = (await indexRes.text()).trim();

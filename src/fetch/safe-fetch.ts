@@ -43,9 +43,9 @@ export async function safeFetch(
   }
   // The signal stays armed after this function returns, so the caller's body read has the same bound.
   const signal = AbortSignal.timeout(opts?.timeoutMs ?? FETCH_TIMEOUT_MS);
-  // A redirect stays on the site it started from unless the caller names another.
-  const siteHost = new URL(opts?.sameSiteAs ?? current.toString()).hostname;
   try {
+    // A redirect stays on the site it started from unless the caller names another.
+    const siteHost = new URL(opts?.sameSiteAs ?? current.toString()).hostname;
     await assertHostResolvesToPublicAddress(current.hostname, opts?.dnsLookup);
     const walk = await followManualRedirects(current, {
       doFetch,

@@ -129,6 +129,23 @@ describe('structured data and the title pass the guard in full', () => {
   });
 });
 
+describe('link text and rung titles pass the guard', () => {
+  test('a payload in a link label quarantines the page', async () => {
+    serveHtml(`<html><head><title>Events</title></head><body><main><p>Real event copy here, plenty of it.</p><a href="/x">${PAYLOAD}</a></main></body></html>`);
+    const result = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(target, 'https://site.example.com/x');
+    expect(result.ok).toBe(false);
+  });
+
+  test('a Jina title that carries a payload is dropped', async () => {
+    const body = `Title: ${PAYLOAD}\nURL Source: https://site.example.com/x\n\nMarkdown Content:\n` + 'The full catalogue with supplier details and weekly additions. '.repeat(4);
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      String(input).includes('r.jina.ai') ? new Response(body, { status: 200 }) : new Response('no', { status: 403 })) as typeof fetch;
+    const result = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(target, 'https://site.example.com/x');
+    if (!result.ok || result.notModified) throw new Error('expected a page');
+    expect(result.pages[0]!.title).toBeNull();
+  });
+});
+
 describe('every rung that can quarantine reports its evidence', () => {
   // Each of the seven quarantine sites is asserted individually, so stripping
   // the evidence from any one of them fails a test.

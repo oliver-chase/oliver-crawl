@@ -65,6 +65,25 @@ describe('crawlSite honours autoRobots', () => {
     expect(run.pages).toEqual([]);
   });
 
+  test('a whole-site crawl skips a disallowed path below the base URL', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/robots.txt') return new Response('User-agent: *\nDisallow: /private/', { status: 200 });
+      const body =
+        url.pathname === '/'
+          ? '<p>The catalogue is open for browsing.</p><a href="/private/a">P</a><a href="/open">O</a>'
+          : `<p>Details for ${url.pathname}, with specifications and availability.</p>`;
+      return new Response(`<html><head><title>T</title></head><body><main>${body}</main></body></html>`, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }) as typeof fetch;
+    const crawler = createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns, autoRobots: true });
+    const run = await crawlSite(crawler, target, { followLinks: true, maxDepth: 1, maxPages: 10 });
+
+    expect(run.pages.map((p) => new URL(p.url).pathname).sort()).toEqual(['/', '/open']);
+  });
+
   test('a Disallow below the base URL refuses that path and allows the rest', async () => {
     stub('User-agent: *\nDisallow: /private/');
     const crawler = createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns, autoRobots: true });

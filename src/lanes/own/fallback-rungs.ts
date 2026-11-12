@@ -179,7 +179,7 @@ async function renderFallback(
       rung: 'local-render',
     });
     if (isQuarantined(localPage)) {
-      // QUARANTINE-TELEMETRY-1: every rung reports its own quarantine.
+      // QUARANTINE-TELEMETRY-1: every rung's quarantine is reported once, by quarantined(), under the guard.
       const detail = 'Locally rendered content tripped the prompt-injection guard.';
       return quarantined(config, url, started, detail, localPage);
     }

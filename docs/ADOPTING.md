@@ -144,4 +144,4 @@ Editing olivercrawl changes nothing in a consumer until that consumer bumps its 
 
 **Crawls are slower than expected.** Requests go out one at a time per host and honor any published `Crawl-delay`. `adaptiveThrottleMultiplier` gives a slow origin more room. `searchAndCrawl` accepts a `concurrency` option across hosts.
 
-**Edge and serverless.** Local Chromium is unavailable there, so set `browserRender` to your own rendering service. DNS resolution uses DNS-over-HTTPS on every runtime by default, and a name that only your network resolves needs your own `dnsLookup`.
+**Serverless.** The package needs a Node runtime, since its connection pool loads `undici` and `node:dns`, and a bare edge worker cannot load it. Local Chromium is unavailable on serverless hosts, so set `browserRender` to your own rendering service. DNS resolution uses DNS-over-HTTPS by default, and a name that only your network resolves needs your own `dnsLookup`.

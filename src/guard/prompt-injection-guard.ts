@@ -140,7 +140,7 @@ function truncate(input: string, limit: number) {
 }
 
 /** Invisible characters that split a phrase without changing how it reads. */
-const INVISIBLE = /[\u00ad\u200b-\u200d\u2060\ufeff]/g;
+const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufe00-\ufe0f\ufeff]|\udb40[\udc00-\udc7f]/g;
 
 function normalizeForDetection(input: string) {
   return input
@@ -254,8 +254,10 @@ export function sanitizeCrawledText(input: string, maxChars = DEFAULT_MAX_TEXT_C
   // present (GUARD-TELEMETRY-1). A page with no signals is returned unredacted.
   const raisedIds = new Set(signals.map((signal) => signal.id));
   let redactionCount = 0;
+  const missed: string[] = [];
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
     if (!raisedIds.has(pattern.id)) continue;
+    const countBefore = redactionCount;
     const redactionRegex = REDACTORS.get(pattern.id)!;
     const redact = (segment: string) =>
       segment.replace(redactionRegex, () => {
@@ -271,6 +273,18 @@ export function sanitizeCrawledText(input: string, maxChars = DEFAULT_MAX_TEXT_C
         .join('');
     } else {
       sanitized = redact(sanitized);
+    }
+    if (redactionCount === countBefore && pattern.id !== 'encoded-payload') missed.push(pattern.id);
+  }
+  // A pattern that matched only after punctuation runs collapsed is redacted in that collapsed form, so the
+  // payload never leaves unredacted.
+  if (missed.length > 0) {
+    sanitized = normalizeForDetection(sanitized);
+    for (const id of missed) {
+      sanitized = sanitized.replace(REDACTORS.get(id)!, () => {
+        redactionCount += 1;
+        return '[REDACTED_PROMPT_INJECTION]';
+      });
     }
   }
 

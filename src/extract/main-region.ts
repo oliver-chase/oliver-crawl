@@ -110,6 +110,8 @@ function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
     if (node === best || score / totalMass < 0.15) continue;
     if (!chosen.some((other) => related(node, other))) chosen.push(node);
   }
-  // In document order, so two kept articles read top to bottom.
-  return $('*').filter((_, el) => chosen.includes(el)) as Cheerio<AnyNode>;
+  // In document order, so two kept articles read top to bottom. A single container needs no ordering.
+  if (chosen.length === 1) return $(chosen) as Cheerio<AnyNode>;
+  const all = $('*').toArray();
+  return $(chosen.sort((a, b) => all.indexOf(a as never) - all.indexOf(b as never))) as Cheerio<AnyNode>;
 }
