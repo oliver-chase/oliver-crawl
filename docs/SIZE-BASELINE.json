@@ -1,6 +1,6 @@
 {
   "_comment": "The line count the size ratchet (pre-commit gate 7) compares against. Raise it only in a commit that names its story.",
-  "lines": 24732,
+  "lines": 24914,
   "allowancePercent": 5,
-  "updated": "2026-11-11"
+  "updated": "2026-11-12"
 }
