@@ -12,9 +12,11 @@ function walk(dir) {
     if (statSync(full).isDirectory()) walk(full);
     else if (full.endsWith('.ts')) {
       readFileSync(full, 'utf8').split('\n').forEach((line, i) => {
-        if (/from '@\//.test(line)) bad.push(`${full}:${i + 1} alias import (tsc will not rewrite it)`);
-        const rel = line.match(/from '(\.\.?\/[^']*)'/);
-        if (rel && !rel[1].endsWith('.js')) bad.push(`${full}:${i + 1} relative import missing .js extension`);
+        // from '...', from "...", import '...' (side effect) and import('...') (dynamic).
+        const spec = line.match(/(?:\bfrom|\bimport)\s*\(?\s*(['"])([^'"]+)\1/)?.[2];
+        if (!spec) return;
+        if (spec.startsWith('@/')) bad.push(`${full}:${i + 1} alias import (tsc will not rewrite it)`);
+        if (/^\.\.?\//.test(spec) && !spec.endsWith('.js')) bad.push(`${full}:${i + 1} relative import missing .js extension`);
       });
     }
   }

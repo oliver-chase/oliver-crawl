@@ -15,6 +15,7 @@
 // standards/documentation sites that are used to being crawled. Politeness
 // settings here are deliberately conservative.
 
+import * as cheerio from 'cheerio';
 import { createCrawler, crawlSite, discoverSitemapUrls, mapSite } from '../dist/index.js';
 import { USER_AGENT, IANA, RFC, Unavailable, dns, crawler, check, assert, finish } from './live-check/harness.mjs';
 import { renderChecks } from './live-check/render.mjs';
@@ -202,13 +203,24 @@ await check('markdown preserves real page structure', async () => {
 });
 
 await check('markdown drops page chrome', async () => {
-  const r = await crawler.crawl(IANA, 'https://www.iana.org/about');
+  const r = await crawler.crawl(IANA, 'https://www.iana.org/about', { includeHtml: true });
   assert(r.ok, r.detail);
-  const { markdown, text } = r.pages[0];
-  // The nav appears in flat text but must not appear in the main region.
+  const { markdown, html } = r.pages[0];
   assert(markdown.length > 0, 'no markdown produced');
-  assert(markdown.length < text.length * 3, 'markdown implausibly larger than text');
-  return `${markdown.length} chars, chrome-scoped`;
+  // Every link in the page's own <nav> must be missing from the main region's markdown.
+  const $ = cheerio.load(html);
+  const navLabels = $('nav a').map((_, a) => $(a).text().trim()).get().filter(Boolean);
+  if (navLabels.length === 0) throw new Unavailable('the page has no <nav> links to check against');
+  const leaked = navLabels.filter((label) => markdown.includes(`[${label}](`));
+  assert(leaked.length === 0, `nav links in the markdown: ${leaked.slice(0, 3).join(', ')}`);
+  return `${markdown.length} chars, ${navLabels.length} nav links absent`;
+});
+
+await check('the default resolver reaches a real site', async () => {
+  const byDefault = createCrawler({ userAgent: USER_AGENT });
+  const r = await byDefault.crawl(IANA, 'https://www.iana.org/help/example-domains');
+  assert(r.ok, `${r.reason}: ${r.detail}`);
+  return `${r.pages[0].text.length} chars`;
 });
 
 await check('structured-data summary reflects a real page', async () => {

@@ -50,6 +50,8 @@ wrong the moment one changes.
 | `DEPLOY-BLOCKER-1` | The playwright import is invisible to bundler tracers. A plain import breaks serverless builds for consumers who never wanted it. | `fetch/local-render.ts` | — |
 | `GUARD-PRECISION-1` | Guard patterns tightened against real page copy that was being quarantined. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `GUARD-PRECISION-2` | Same, second pass: a missed attack alongside the false positives. | `guard/prompt-injection-guard.ts` | — |
+| `CRAWL-PARITY-1` | A script run by hand against a consumer's own pages and sites; it needs the consumer's extractor and the network. |
+| `GATE-DUPLICATION-1` | A managed gate copied from OliverCode, which tests it there. |
 | `GUARD-TITLE-1` | `<title>` lives in `<head>`, so it was never part of the body text or markdown the guard inspects and shipped raw. A title is page content callers display and feed to models. | `fetch/build-page.ts` | `guard/title-guard.test.ts` |
 | `GUARD-PRECISION-3` | encoded-payload spans URL paths because `/` is in its class. URLs are stripped before that rule only. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
 | `GUARD-PRECISION-4` | The tool-exfiltration destination may be an email address as well as a host, so `to attacker@evil.com` is caught. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
@@ -60,7 +62,9 @@ wrong the moment one changes.
 | `RENDER-REDIRECT-2` | The remote render rung validates where the service says it landed, inside `renderViaService`, because that is the only place the answer enters and a caller that forgets would trust it. | `fetch/browser-render.ts` | `lanes/origin-moved.test.ts` |
 | `BODY-RECEIVED-1` | A failure says whether an origin actually answered, because "the site is down" is worth retrying and "the site served a shell with no readable text" is not, and a consumer should not have to match `detail` wording to tell them apart. | `lanes/own/index.ts` | `lanes/body-received.test.ts` |
 | `CRAWL-BUDGET-1` | maxPages bounds fetches, so failures and near-duplicates spend the budget and a failing site cannot make a run fetch without limit. | `crawl-site.ts` | `lanes/page-budget.test.ts` |
+| `CRAWL-PARITY-1` | Before a consumer replaces its own extractor, `scripts/parity-check.mjs` compares this library's output with the consumer's on the same pages. | `scripts/parity-check.mjs` | — |
 | `CRAWL-PDF-CAP-1` | A PDF is read only up to the body cap and fails when it passes it, because a truncated PDF is corrupt. | `fetch/http-mechanics.ts`, `lanes/own/index.ts` | `guard/hostile-input.test.ts` |
+| `GATE-DUPLICATION-1` | A passage repeated across two documents is a finding: one fact lives in one file and the other points at it. | `scripts/duplication_check.py` | — |
 | `GUARD-LINEAR-1` | The guard scans a long run of letters or spaces in one pass; a hostile body must not cost quadratic time. | `guard/prompt-injection-guard.ts` | `guard/hostile-input.test.ts` |
 | `GUARD-TELEMETRY-1` | Every page reports `redactionCount` and `truncated`, because a capped page's tail was never seen and a non-zero redaction count means the text differs from what the origin served. | `fetch/build-page.ts` | `lanes/page-shape.test.ts` |
 | `GUARD-REDACT-1` | Redaction follows detection: only patterns that raised a signal are redacted, so an ordinary page keeps its working asset URLs and a non-zero `redactionCount` means an injection was present. | `guard/prompt-injection-guard.ts` | `guard/guard-precision.test.ts` |
@@ -113,7 +117,7 @@ wrong the moment one changes.
 
 A decision no test guards is one refactor from being undone silently. The ledger's Test column names the guarding file for each decision, and `node scripts/check-decisions.mjs --list` shows which ids appear in source, tests and ledger.
 
-Five decisions have no test by design, and each reason is recorded here:
+Seven decisions have no test by design, and each reason is recorded here:
 
 | ID | Why no test |
 |---|---|
