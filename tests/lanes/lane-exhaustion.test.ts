@@ -295,30 +295,24 @@ describe('a credentialed target never reaches the public proxy rung', () => {
     expect(seen.some((u) => u.includes('secret-token-value'))).toBe(false);
   });
 
-  test('the caller-owned render rung is still allowed to run', async () => {
-    // Rendering happens on infrastructure the caller controls, so there is no
-    // disclosure — only the public proxy is off-limits.
+  test('the render rung is skipped, because it would render the page logged out', async () => {
     let renderCalled = false;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       if (String(input).includes('render.example.com')) {
         renderCalled = true;
-        return new Response(
-          JSON.stringify({ html: '<html><body><main><p>Members-only calendar contents rendered here.</p></main></body></html>' }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
+        return new Response(JSON.stringify({ html: '<html><body><main><p>A login page rendered logged out.</p></main></body></html>' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       }
       return new Response('Forbidden', { status: 403 });
     }) as typeof fetch;
 
-    const crawler = createCrawler({
-      userAgent: 'T/1',
-      dnsLookup: publicDns,
-      browserRender: { url: 'https://render.example.com' },
-    });
+    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns, browserRender: { url: 'https://render.example.com' } });
     const result = await crawler.crawl(credentialed, 'https://partner.example.com/members/calendar');
 
-    expect(renderCalled).toBe(true);
-    expect(result.ok).toBe(true);
+    expect(renderCalled).toBe(false);
+    expect(result.ok).toBe(false);
   });
 
   test('an uncredentialed target still uses Jina normally', async () => {

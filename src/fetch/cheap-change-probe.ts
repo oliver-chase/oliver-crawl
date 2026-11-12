@@ -93,8 +93,9 @@ export async function probeCheapChangeSignal(
     // capped body is cheap either way.
     let bodyHash: string | null = null;
     if (!etag && !lastModified && response.ok) {
-      const text = await readBodyCapped(response, PROBE_MAX_BODY_BYTES).catch(() => '');
-      bodyHash = await sha256Hex(text);
+      // A body that cannot be read leaves the hash null, because two failed reads would otherwise match.
+      const text = await readBodyCapped(response, PROBE_MAX_BODY_BYTES).catch(() => null);
+      bodyHash = text === null ? null : await sha256Hex(text);
     } else {
       dropBody(response);
     }

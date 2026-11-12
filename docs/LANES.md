@@ -34,7 +34,7 @@ All three take the same path in the same order, and rung 7 runs before rung 10, 
 
 The ladder is defined in exactly one function (`freeFallbackLadder` in `src/lanes/own/fallback-rungs.ts`) so the order can't drift between the failure paths as rungs are added. `tests/lanes/lane-exhaustion.test.ts` asserts it, including that a vendor is never called while a free rung could still have worked.
 
-One rung is skipped conditionally: **a target carrying `headers` (credentials) never reaches rung 9 or 10.** Jina is a public third-party service that fetches the URL itself, so sending it a members-only URL would disclose that URL and its query string to a party you never agreed to share it with — and it would fail regardless, because Jina has none of your credentials. Rungs 7 and 8 still run: those are your own infrastructure. The proxy is skipped too, because the library cannot vouch for what a proxy does with credentials.
+One rung is skipped conditionally: **a target carrying `headers` (credentials) never reaches rungs 7 to 10.** Jina is a public third-party service that fetches the URL itself, so sending it a members-only URL would disclose that URL and its query string to a party you never agreed to share it with — and it would fail regardless, because Jina has none of your credentials. The render rungs are skipped too, because neither one receives the target's headers: the page would render logged out, and a login page could replace the real one. The proxy is skipped because the library cannot vouch for what a proxy does with credentials.
 
 ### The archive rung, and why it is gated
 

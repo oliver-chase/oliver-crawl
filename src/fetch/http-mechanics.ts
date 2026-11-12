@@ -77,36 +77,51 @@ export async function readBodyCapped(response: Response, maxBytes: number): Prom
 }
 
 /**
- * CRAWL-PDF-CAP-1: read a binary body whole, or fail when it passes `maxBytes`. Unlike text, a truncated PDF
- * is corrupt, so the read stops with an error and the rung reports the file as too large.
+ * Reads up to `maxBytes` of a body and says whether more was there. The read stops as soon as it passes the cap,
+ * so a hostile body costs at most the cap.
  */
-export async function readBytesCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
+export async function readBytesPrefix(response: Response, maxBytes: number): Promise<{ bytes: Uint8Array; capped: boolean }> {
   const reader = response.body?.getReader();
   if (!reader) {
     const buffer = new Uint8Array(await response.arrayBuffer());
-    if (buffer.byteLength > maxBytes) throw new Error(`Response too large: ${buffer.byteLength} > ${maxBytes}`);
-    return buffer;
+    return buffer.byteLength > maxBytes ? { bytes: buffer.subarray(0, maxBytes), capped: true } : { bytes: buffer, capped: false };
   }
   const chunks: Uint8Array[] = [];
   let received = 0;
+  let capped = false;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      received += value.byteLength;
-      if (received > maxBytes) throw new Error(`Response too large: more than ${maxBytes} bytes`);
       chunks.push(value);
+      received += value.byteLength;
+      if (received > maxBytes) {
+        capped = true;
+        break;
+      }
     }
   } finally {
     reader.cancel().catch(() => {});
   }
-  const merged = new Uint8Array(received);
+  const merged = new Uint8Array(Math.min(received, maxBytes));
   let offset = 0;
   for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
+    const room = merged.byteLength - offset;
+    if (room <= 0) break;
+    merged.set(room >= chunk.byteLength ? chunk : chunk.subarray(0, room), offset);
+    offset += Math.min(chunk.byteLength, room);
   }
-  return merged;
+  return { bytes: merged, capped };
+}
+
+/**
+ * CRAWL-PDF-CAP-1: read a binary body whole, or fail when it passes `maxBytes`. Unlike text, a truncated PDF
+ * is corrupt, so the read stops with an error and the rung reports the file as too large.
+ */
+export async function readBytesCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
+  const { bytes, capped } = await readBytesPrefix(response, maxBytes);
+  if (capped) throw new Error(`Response too large: more than ${maxBytes} bytes`);
+  return bytes;
 }
 
 /**

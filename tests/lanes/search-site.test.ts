@@ -58,7 +58,7 @@ describe('results come from the content region, not the whole page', () => {
     expect(found.pattern).toBe('wordpress');
   });
 
-  test('knownPattern skips probing', async () => {
+  test('knownPattern is tried first and a hit costs one request', async () => {
     const tried: string[] = [];
     serve((url) => {
       tried.push(url);
@@ -70,6 +70,15 @@ describe('results come from the content region, not the whole page', () => {
     await searchSite(crawler(), target, 'summer camp', { knownPattern: 'generic' });
     // Exactly one request: the pattern already known to work.
     expect(tried.filter((u) => !u.endsWith('/robots.txt'))).toHaveLength(1);
+  });
+
+  test('a stale knownPattern falls back to the other patterns', async () => {
+    serve((url) =>
+      url.includes('?s=') ? new Response(RESULTS, { status: 200, headers: { 'content-type': 'text/html' } }) : new Response('', { status: 404 }),
+    );
+    const found = await searchSite(crawler(), target, 'summer camp', { knownPattern: 'generic' });
+    expect(found.ok).toBe(true);
+    expect(found.pattern).toBe('wordpress');
   });
 });
 

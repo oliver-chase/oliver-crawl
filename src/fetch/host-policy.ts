@@ -112,6 +112,9 @@ export function approvedAddressesFor(host: string, lookupFn: DnsLookupFn = defau
   return entry && Date.now() - entry.at < DNS_SAFE_HOST_TTL_MS ? entry.addresses : undefined;
 }
 
+/** The resolver itself failed (timeout, SERVFAIL, outage). Unlike a private answer, trying again later can succeed. */
+export class DnsLookupError extends Error {}
+
 export function assertPublicHost(hostname: string): void {
   if (isBlockedHostname(hostname)) {
     throw new Error(`Blocked non-public crawl host: ${hostname}`);
@@ -189,7 +192,7 @@ export async function assertHostResolvesToPublicAddress(
         records = await lookupFn(normalizedHost);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(`DNS lookup failed for crawl host "${hostname}": ${detail}`);
+        throw new DnsLookupError(`DNS lookup failed for crawl host "${hostname}": ${detail}`);
       }
 
       if (!records.length) {

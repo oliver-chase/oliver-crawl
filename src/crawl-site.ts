@@ -61,10 +61,12 @@ export async function crawlSite(
   const store = options.store ?? createMemoryCrawlStore();
   const storeKey = options.storeKey ?? options.targetId ?? target.baseUrl;
   let loaded: CrawlState | null = null;
+  let loadError: string | undefined;
   try {
     loaded = await store.load(storeKey);
-  } catch {
+  } catch (error) {
     // A store that cannot be read is treated as empty: the crawl runs, it just starts from scratch.
+    loadError = error instanceof Error ? error.message : String(error);
   }
   const validators: SiteCrawlResult['validators'] = {};
   const lastmod: Record<string, string> = {};
@@ -115,6 +117,7 @@ export async function crawlSite(
       lastmod,
       skippedByLastmod,
       notDue,
+      ...((loadError ?? session.storeError()) === undefined ? {} : { storeError: (loadError ?? session.storeError())! }),
       duplicates,
       hosts: stats.snapshot(),
       startedAt,

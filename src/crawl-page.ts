@@ -138,7 +138,7 @@ export function createPageProcessor(ctx: PageStepContext) {
         break;
       }
 
-      lastFailure = { url, reason: result.reason, detail: result.detail };
+      lastFailure = { url, reason: result.reason, detail: result.detail, ...(result.failureClass ? { failureClass: result.failureClass } : {}) };
       // Retrying these produces the identical answer; spend the budget elsewhere.
       if (result.failureClass === 'structural') break;
       if (attempt < maxRetries) {

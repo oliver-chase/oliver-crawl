@@ -20,7 +20,7 @@ import { looksLikeBlockPage } from '../../core/block-page.js';
 import { isQuarantined, buildTextPage } from '../../fetch/build-page.js';
 import { buildRungPage, quarantined } from './rung-page.js';
 import { dropBody, parseRetryAfter, readBodyCapped, readBytesCapped, fetchFollowingSafeRedirects } from '../../fetch/http-mechanics.js';
-import { assertHostResolvesToPublicAddress } from '../../fetch/host-policy.js';
+import { assertHostResolvesToPublicAddress, DnsLookupError } from '../../fetch/host-policy.js';
 import { emitUsage } from '../../core/usage.js';
 import { throttleHost, recordHostLatency } from '../../core/host-throttle.js';
 import { sanitizeCrawledText } from '../../guard/prompt-injection-guard.js';
@@ -54,6 +54,8 @@ export async function crawlWithOwnLane(
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     emitUsage(config, { lane: 'own', rung: 'policy', kind: 'fetch', url, ok: false, latencyMs: Date.now() - started, error: detail });
+    // A resolver failure is a transport fault that can clear, so it is reported as unreachable and not as a policy refusal.
+    if (error instanceof DnsLookupError) return { ok: false, reason: 'unreachable', detail, lane: 'own' };
     return { ok: false, reason: 'blocked', detail, lane: 'own' };
   }
 
@@ -127,7 +129,8 @@ export async function crawlWithOwnLane(
 
   // A 304 is the whole point of sending validators: nothing changed, nothing
   // to parse, nothing charged. Reported distinctly from "empty".
-  if (response.status === 304) {
+  // A 304 answers a conditional request. With no validators sent it is not "unchanged", it is a fault.
+  if (response.status === 304 && (options.etag || options.lastModified)) {
     dropBody(response);
     emitUsage(config, { lane: 'own', rung: 'conditional', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });
     return { ok: true, pages: [], notModified: true };

@@ -4,6 +4,7 @@
 // reads as logic. crawl-site.ts re-exports every name here.
 
 import type { CrawlStore } from './crawl-store.js';
+import type { FailureClass } from './core/failure-class.js';
 import type { CrawlOptions, CrawlPage, CrawlTarget } from './core/types.js';
 
 export type SiteCrawlOptions = CrawlOptions & {
@@ -148,7 +149,8 @@ export type SiteCrawlOptions = CrawlOptions & {
   retryBackoffMs?: number;
 };
 
-export type SiteCrawlFailure = { url: string; reason: string; detail: string };
+/** One URL a run could not read. `failureClass` says whether retrying later can help. */
+export type SiteCrawlFailure = { url: string; reason: string; detail: string; failureClass?: FailureClass };
 
 /**
  * Enough state to resume a crawl. Plain JSON so a consumer can put it in a
@@ -221,6 +223,8 @@ export type SiteCrawlResult = {
   skippedByLastmod: string[];
   /** URLs left unfetched because the recrawl schedule says they are not due yet. */
   notDue: string[];
+  /** The first error the store threw while loading or saving. The run itself completed. Absent when the store worked. */
+  storeError?: string;
   /** Pages left out of `pages` because an earlier page in this run carries the same content. */
   duplicates: { url: string; of: string; distance: number }[];
   /** CRAWL-HOST-STATS-1: per-host behavior of this run, keyed by hostname. */

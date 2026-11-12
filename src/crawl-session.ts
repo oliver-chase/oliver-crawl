@@ -23,6 +23,7 @@ export function createStoreSession(args: {
   const checkedLastmod: Record<string, string> = { ...(loaded?.lastmod ?? {}) };
   let saving: Promise<void> = Promise.resolve();
   let lastSavedAt = 0;
+  let storeError: string | undefined;
 
   return {
     schedule,
@@ -32,8 +33,14 @@ export function createStoreSession(args: {
       lastSavedAt = Date.now();
       // Chained, so snapshots reach the store in order, and a failing store cannot reach the crawl.
       const state: CrawlState = { progress, schedule: { ...schedule }, validators: { ...validators }, lastmod: { ...checkedLastmod } };
-      saving = saving.then(() => store.save(storeKey, state)).catch(() => {});
+      saving = saving
+        .then(() => store.save(storeKey, state))
+        .catch((error: unknown) => {
+          storeError ??= error instanceof Error ? error.message : String(error);
+        });
     },
+    /** The first error a save threw, or undefined. The crawl keeps running, and the result reports it. */
+    storeError: (): string | undefined => storeError,
     /** Resolves once every save started so far has finished. */
     settled: (): Promise<void> => saving,
     /**

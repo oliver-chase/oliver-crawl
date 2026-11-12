@@ -134,7 +134,7 @@ export function createCrawler(config: CrawlConfig): Crawler {
             // the page itself reports — rather than at each rung's success
             // site, which would drift the moment a rung is added. Success
             // only: remembering failures is the trap the robots cache had.
-            if (resolved.rungMemory !== false && !result.notModified) {
+            if (resolved.rungMemory !== false && !result.notModified && !result.originMoved) {
               const page = result.pages[0];
               if (page) {
                 try {
@@ -155,6 +155,9 @@ export function createCrawler(config: CrawlConfig): Crawler {
 
           last = result;
         }
+        // A structural failure repeats until something changes, so another attempt would only spend requests.
+        const classed = withClass(last);
+        if (!classed.ok && classed.failureClass === 'structural') break;
       }
 
       return withClass(last);

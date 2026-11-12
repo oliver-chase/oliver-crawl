@@ -44,7 +44,7 @@ describe('bounded reads', () => {
     const counter = { bytes: 0 };
     globalThis.fetch = (async () => endlessBody(counter)) as typeof fetch;
     await discoverSitemapUrls(target, { userAgent: 'T/1', dnsLookup: publicDns });
-    expect(counter.bytes).toBeLessThan(4_000_000);
+    expect(counter.bytes).toBeLessThan(12_000_000);
   });
 
   test('a Jina response that never ends is cut near the cap', async () => {

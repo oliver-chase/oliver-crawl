@@ -16,11 +16,12 @@
 
 import { pooledFetchFor } from './connection-pool.js';
 import { assertHostResolvesToPublicAddress, assertRequestUrlAllowed } from './host-policy.js';
-import { readBodyCapped } from './http-mechanics.js';
+import { gunzipSync } from 'node:zlib';
+import { readBytesPrefix } from './http-mechanics.js';
 import { safeFetch } from './safe-fetch.js';
 import type { CrawlTarget, DnsLookupFn } from '../core/types.js';
 
-const SITEMAP_MAX_BYTES = 2_000_000;
+const SITEMAP_MAX_BYTES = 10_000_000;
 const MAX_CHILD_SITEMAPS = 5;
 const DEFAULT_MAX_URLS = 200;
 
@@ -120,10 +121,19 @@ function isSitemapIndex(xml: string): boolean {
 async function fetchXml(
   url: string,
   options: { userAgent: string; dnsLookup?: DnsLookupFn; sameSiteAs: string },
-): Promise<string | null> {
+): Promise<{ xml: string; capped: boolean } | null> {
   const response = await safeFetch(url, pooledFetchFor(options.dnsLookup), 'application/xml,text/xml;q=0.9,*/*;q=0.8', options);
   if (!response || !response.ok) return null;
-  return readBodyCapped(response, SITEMAP_MAX_BYTES);
+  const { bytes, capped } = await readBytesPrefix(response, SITEMAP_MAX_BYTES);
+  // A .xml.gz sitemap arrives as gzip bytes. The unpacked size is bounded by the same cap.
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    try {
+      return { xml: new TextDecoder().decode(gunzipSync(bytes, { maxOutputLength: SITEMAP_MAX_BYTES })), capped };
+    } catch {
+      return null;
+    }
+  }
+  return { xml: new TextDecoder().decode(bytes), capped };
 }
 
 /**
@@ -146,13 +156,15 @@ export async function discoverSitemapUrls(
     return { urls: [], entries: [], truncated: false, reason: error instanceof Error ? error.message : String(error) };
   }
 
-  let xml: string | null;
+  let root: { xml: string; capped: boolean } | null;
   try {
-    xml = await fetchXml(sitemapUrl.toString(), { ...options, sameSiteAs: target.baseUrl });
+    root = await fetchXml(sitemapUrl.toString(), { ...options, sameSiteAs: target.baseUrl });
   } catch (error) {
     return { urls: [], entries: [], truncated: false, reason: error instanceof Error ? error.message : String(error) };
   }
-  if (!xml) return { urls: [], entries: [], truncated: false, reason: 'No sitemap.xml (or it did not answer 200).' };
+  if (!root) return { urls: [], entries: [], truncated: false, reason: 'No sitemap.xml (or it did not answer 200).' };
+  const xml = root.xml;
+  let readCapped = root.capped;
 
   // A sitemap INDEX lists child sitemaps, not pages — follow same-site
   // children (bounded) and collect their pages instead.
@@ -167,8 +179,9 @@ export async function discoverSitemapUrls(
         // Same-site enforcement on the child sitemap URL itself — an index
         // pointing at another host's sitemap is not ours to fetch.
         const safe = assertRequestUrlAllowed(target, child);
-        const childXml = await fetchXml(safe.toString(), { ...options, sameSiteAs: target.baseUrl });
-        if (childXml && !isSitemapIndex(childXml)) pageEntries.push(...extractEntries(childXml));
+        const fetched = await fetchXml(safe.toString(), { ...options, sameSiteAs: target.baseUrl });
+        if (fetched?.capped) readCapped = true;
+        if (fetched && !isSitemapIndex(fetched.xml)) pageEntries.push(...extractEntries(fetched.xml));
       } catch {
         // one bad child sitemap doesn't spoil the rest
       }
@@ -199,7 +212,7 @@ export async function discoverSitemapUrls(
   return {
     urls,
     entries,
-    truncated: childrenCapped || (pageEntries.length > urls.length && urls.length === maxUrls),
+    truncated: childrenCapped || readCapped || (pageEntries.length > urls.length && urls.length === maxUrls),
     reason: urls.length === 0 ? 'Sitemap present but contained no same-site https URLs.' : '',
   };
 }

@@ -46,8 +46,8 @@ export type SiteSearchOptions = {
   /** Cap on returned URLs. Default 25. */
   maxResults?: number;
   /**
-   * A pattern known to work for this site, from a previous call's `pattern`.
-   * Skips probing, which is the expensive part — each probe is a real request.
+   * A pattern known to work for this site, from a previous call's `pattern`. It is tried first and the
+   * rest follow only if it finds nothing, so a hit costs one request and a stale hint costs a few more.
    */
   knownPattern?: string;
 };
@@ -141,7 +141,7 @@ export async function searchSite(
   const encoded = encodeURIComponent(trimmed);
 
   const patterns = options.knownPattern
-    ? SEARCH_PATTERNS.filter((p) => p.platform === options.knownPattern)
+    ? [...SEARCH_PATTERNS.filter((p) => p.platform === options.knownPattern), ...SEARCH_PATTERNS.filter((p) => p.platform !== options.knownPattern)]
     : SEARCH_PATTERNS;
 
   let lastDetail = 'No search pattern returned results.';

@@ -76,7 +76,9 @@ export async function freeFallbackLadder(
   target?: CrawlTarget,
   bodyReceived = false,
 ): Promise<CrawlResult> {
-  const rendered = await renderFallback(url, config, options, started);
+  // Neither render rung gets the target's headers, so a credentialed target would render logged out and the login
+  // page could replace the real one. Credentialed targets skip rendering.
+  const rendered = credentialed ? null : await renderFallback(url, config, options, started);
   if (rendered) {
     return withOriginMoved(rendered, priorDetail, rendered.ok && !rendered.notModified ? (rendered.pages[0]?.rung ?? 'render') : 'render', url);
   }
