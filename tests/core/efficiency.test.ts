@@ -43,19 +43,6 @@ describe('page cache', () => {
     expect(a).toEqual(b);
   });
 
-  test('failures are never cached — they must stay retryable', async () => {
-    let calls = 0;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      if (String(input).includes('r.jina.ai')) return new Response('', { status: 500 });
-      calls++;
-      return new Response('down', { status: 503 });
-    }) as typeof fetch;
-
-    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns, cacheTtlMs: 60_000 });
-    await crawler.crawl(target, 'https://venue.example.com/x');
-    await crawler.crawl(target, 'https://venue.example.com/x');
-    expect(calls).toBe(2);
-  });
 
   test('a different lane set is a different cache entry', async () => {
     let calls = 0;

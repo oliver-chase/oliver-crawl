@@ -254,10 +254,21 @@ export function sanitizeCrawledText(input: string, maxChars = DEFAULT_MAX_TEXT_C
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
     if (!raisedIds.has(pattern.id)) continue;
     const redactionRegex = new RegExp(pattern.source, 'gi');
-    sanitized = sanitized.replace(redactionRegex, () => {
-      redactionCount += 1;
-      return '[REDACTED_PROMPT_INJECTION]';
-    });
+    const redact = (segment: string) =>
+      segment.replace(redactionRegex, () => {
+        redactionCount += 1;
+        return '[REDACTED_PROMPT_INJECTION]';
+      });
+    // The encoded-payload rule is evaluated URL-free when it detects, so it redacts URL-free too: a long opaque
+    // path in a working asset URL stays intact while a blob in the prose is masked.
+    if (pattern.id === 'encoded-payload') {
+      sanitized = sanitized
+        .split(new RegExp(`(${URL_LIKE.source})`, 'gi'))
+        .map((segment, index) => (index % 2 === 1 ? segment : redact(segment)))
+        .join('');
+    } else {
+      sanitized = redact(sanitized);
+    }
   }
 
   sanitized = trimLineEnds(sanitized).replace(/\n{3,}/g, '\n\n').trim();

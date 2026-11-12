@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import { createCrawler } from '@/index';
-import { afterEach } from 'vitest';
 import type { CrawlTarget } from '@/core/types';
 import { publicDns } from '../helpers';
 

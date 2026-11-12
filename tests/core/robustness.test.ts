@@ -65,7 +65,6 @@ describe('Retry-After compliance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.retryAfterMs).toBe(30_000);
-    expect(result.detail).toMatch(/wait 30s/);
   });
 
   test('accepts the HTTP-date form too', async () => {

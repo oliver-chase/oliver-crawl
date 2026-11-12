@@ -50,7 +50,7 @@ export function urlDedupKey(rawUrl: string): string {
     .filter(([key]) => !TRACKING_PARAM_RE.test(key))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
-  const query = params.length ? `?${params.map(([k, v]) => `${k}=${v}`).join('&')}` : '';
+  const query = params.length ? `?${params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')}` : '';
 
   // Scheme is deliberately absent: http://x/a and https://x/a are the same
   // document, and a site that redirects one to the other would otherwise be

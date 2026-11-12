@@ -111,10 +111,14 @@ function pick(env: EnvBag, ...names: string[]): string | undefined {
     // A blank or obviously-placeholder value is treated as absent, so a
     // half-filled .env disables a rung instead of failing every call with a
     // 401 the consumer then has to diagnose.
-    if (value && value.trim().length > 6) return value.trim();
+    const trimmed = value?.trim();
+    if (trimmed && trimmed.length > 6 && !PLACEHOLDER_VALUE.test(trimmed)) return trimmed;
   }
   return undefined;
 }
+
+/** The shapes a template leaves in a key slot: runs of x, your-key-here, change-me, <angle brackets>, ellipses. */
+const PLACEHOLDER_VALUE = /^(?:x{4,}|\*{4,}|\.{3,}|<.*>|your[-_ ]|change[-_ ]?me|replace[-_ ]?me|insert[-_ ]|todo|placeholder)/i;
 
 /**
  * Build a config from environment variables. Reads, in order of preference:

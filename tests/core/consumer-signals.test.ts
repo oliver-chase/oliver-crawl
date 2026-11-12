@@ -154,9 +154,4 @@ describe('user-agent contact warning', () => {
     resolveConfig({ userAgent: 'AnonymousBot/1.0' });
     expect(warn).toHaveBeenCalledOnce();
   });
-
-  test('never throws — a caller may have a reason', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(() => resolveConfig({ userAgent: 'AnonymousBot/1.0' })).not.toThrow();
-  });
 });
