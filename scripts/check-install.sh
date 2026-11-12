@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Packs this package, installs the tarball into an empty project and imports it, so a build or packaging
-# fault shows up here and not in a consumer's install.
+# fault shows up here, before any consumer installs it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

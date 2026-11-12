@@ -39,7 +39,7 @@ One rung is skipped conditionally: **a target carrying `headers` (credentials) n
 ### The archive rung, and why it is gated
 
 Rung 11 reads the Internet Archive when every live rung has failed. The CDX
-API is free and keyless, so it is a genuine free rung and not a vendor. The restriction on it is the point:
+API is free and keyless, so it is a genuine free rung with no vendor behind it. The restriction on it is the point:
 
 - **`disallow` — never.** The site said no. Reading an archived copy is still
   reading it.
