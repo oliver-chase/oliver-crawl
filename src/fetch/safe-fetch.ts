@@ -33,7 +33,7 @@ export async function safeFetch(
   rawUrl: string,
   doFetch: typeof fetch,
   accept: string,
-  opts?: { sameSiteAs?: string; dnsLookup?: DnsLookupFn; userAgent?: string },
+  opts?: { sameSiteAs?: string; dnsLookup?: DnsLookupFn; userAgent?: string; timeoutMs?: number },
 ): Promise<Response | null> {
   let current: URL;
   try {
@@ -42,17 +42,19 @@ export async function safeFetch(
   } catch {
     return null;
   }
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  // The signal stays armed after this function returns, so the caller's body read has the same bound.
+  const signal = AbortSignal.timeout(opts?.timeoutMs ?? FETCH_TIMEOUT_MS);
   try {
     await assertHostResolvesToPublicAddress(current.hostname, opts?.dnsLookup);
     const walk = await followManualRedirects(current, {
       doFetch,
       maxHops: MAX_REDIRECTS,
-      init: () => ({ method: 'GET', headers: { 'User-Agent': opts?.userAgent ?? DEFAULT_USER_AGENT, accept }, signal: controller.signal }),
+      init: () => ({ method: 'GET', headers: { 'User-Agent': opts?.userAgent ?? DEFAULT_USER_AGENT, accept }, signal }),
       onRedirect: async (location, from) => {
         const next = new URL(location, from);
         if (next.protocol !== 'https:' && next.protocol !== 'http:') throw new Error('not http(s)');
+        // A redirect may not move to another explicit port, the same rule the crawl path applies.
+        if (next.port && next.port !== from.port) throw new Error('cross-port redirect');
         // SAFEFETCH-PARITY-1: a redirect may not leave the target's site.
         if (opts?.sameSiteAs && !hostsMatchAllowingWww(next.hostname, new URL(opts.sameSiteAs).hostname)) {
           throw new Error('off-site redirect');
@@ -64,7 +66,5 @@ export async function safeFetch(
     return walk.stopped ? null : walk.response;
   } catch {
     return null;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }

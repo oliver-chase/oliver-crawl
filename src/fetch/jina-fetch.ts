@@ -48,6 +48,8 @@ export async function fetchViaJina(
   try {
     target = new URL(targetUrl);
     if (target.protocol !== 'https:') return null;
+    // A URL with credentials in it would be handed to a third party, so it is refused before any request.
+    if (target.username || target.password) return null;
     assertPublicHost(target.hostname);
   } catch {
     return null;

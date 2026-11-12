@@ -43,6 +43,20 @@ import { sha256Hex } from '../core/hash.js';
 import { hostsMatchAllowingWww } from './host-policy.js';
 import type { CrawlPage, PageLink } from '../core/types.js';
 
+const MAX_JSON_LD_STRINGS = 500;
+const MIN_JSON_LD_STRING = 12;
+
+/** The string values inside parsed JSON-LD, bounded in depth and count so hostile nesting costs a fixed amount. */
+function jsonLdStrings(value: unknown, out: string[] = [], depth = 0): string[] {
+  if (out.length >= MAX_JSON_LD_STRINGS) return out;
+  if (typeof value === 'string') {
+    if (value.length >= MIN_JSON_LD_STRING) out.push(value);
+  } else if (depth < 8 && value && typeof value === 'object') {
+    for (const inner of Object.values(value)) jsonLdStrings(inner, out, depth + 1);
+  }
+  return out;
+}
+
 export async function buildPage(input: {
   url: string;
   html: string;
@@ -117,6 +131,13 @@ export async function buildPage(input: {
   for (const image of contentImages) {
     const altGuard = sanitizeCrawledText(image.alt, input.maxTextChars);
     if (altGuard.signals.length > 0) return { quarantined: true, signals: altGuard.signals, text: altGuard.text, title };
+  }
+
+  // JSON-LD reaches the caller as structured data and in the summary, so every string in it passes the guard
+  // like the page text does. A page can carry its payload there while its visible text stays ordinary.
+  for (const text of jsonLdStrings(jsonLd)) {
+    const jsonLdGuard = sanitizeCrawledText(text, input.maxTextChars);
+    if (jsonLdGuard.signals.length > 0) return { quarantined: true, signals: jsonLdGuard.signals, text: jsonLdGuard.text, title };
   }
 
   const links: PageLink[] = [];

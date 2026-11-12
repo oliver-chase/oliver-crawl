@@ -29,6 +29,8 @@ const RENDER_TIMEOUT_MS = 20_000;
  * loop cannot spin, and a caller who could raise it could restore the spin.
  */
 const MAX_REDIRECT_HOPS = 5;
+/** The largest body the render rung hands to the browser. The text path caps at 2 MB, so this leaves room for markup. */
+const MAX_RENDER_BODY_BYTES = 5_000_000;
 
 function hasNodeRuntime(): boolean {
   return typeof process !== 'undefined' && process.versions?.node != null;
@@ -55,6 +57,7 @@ type ChromiumLike = {
 type RenderResponse = {
   status: () => number;
   headers: () => Record<string, string>;
+  body: () => Promise<{ length: number }>;
 };
 
 type RenderRoute = {
@@ -64,7 +67,7 @@ type RenderRoute = {
   // RENDER-HOP-2 follows redirects by hand, so it needs to make each request
   // itself and hand the final response back to the page.
   fetch: (options: { url: string; maxRedirects: number }) => Promise<RenderResponse>;
-  fulfill: (options: { response: RenderResponse }) => Promise<unknown>;
+  fulfill: (options: { response: RenderResponse; body?: unknown }) => Promise<unknown>;
 };
 
 type RenderPage = {
@@ -317,7 +320,13 @@ export async function renderViaLocalChromium(
         await route.abort();
         return;
       }
-      await route.fulfill({ response });
+      const body = await response.body();
+      if (body.length > MAX_RENDER_BODY_BYTES) {
+        blockedHops.push(`${current}: body of ${body.length} bytes passes the ${MAX_RENDER_BODY_BYTES} byte cap`);
+        await route.abort();
+        return;
+      }
+      await route.fulfill({ response, body });
     });
 
     try {
