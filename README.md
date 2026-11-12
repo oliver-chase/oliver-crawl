@@ -11,7 +11,7 @@ Downloading HTML is easy. The problems start when a crawl runs every hour.
 ## Install
 
 ```bash
-npm install github:oliver-chase/olivercrawl#v0.19.0
+npm install github:oliver-chase/olivercrawl#v0.20.0
 ```
 
 Pin a tag and leave off the `^`. The package needs Node 20 or later, is ESM-only, and builds on install. Edge and serverless runtimes work, without local browser rendering.

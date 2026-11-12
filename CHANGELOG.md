@@ -6,6 +6,26 @@ Rename
 - the project is now OliverCrawl and its repo is `oliver-chase/olivercrawl`, so install from `github:oliver-chase/olivercrawl`. The npm scope `@oliver/crawl-core` is unchanged
 - every environment variable starts with `OLIVERCRAWL_` where it started with `OLIVER_CRAWL_`, so rename any you set
 
+## 0.20.0
+
+Safety
+- JSON-LD text and image alt text pass the injection guard, and a hostile body is scanned in linear time
+- sitemap redirects may not change port, the sitemap body read keeps its timeout, and credentialed URLs are not sent to Jina
+- the address checker follows the address, a PDF is read only up to the body cap, and conditional robots postures do not reach the archive
+- a dropped response releases its pooled connection, and credentialed targets skip the render rungs
+
+Correctness
+- pages keep every container with a real share of the prose, and the change hash reads the same region the markdown reads
+- a 304 needs validators, failed probe reads are unknown, structural failures are not retried, resolver outages are transient, and store errors and capped sitemaps are reported
+- paths and queries keep their case, encoded query values stay distinct, placeholder API keys are ignored, and gzipped sitemaps are read
+- `maxPages` bounds every fetch
+
+Cost
+- 404 and 410 skip the live rungs, `crawlSite` returns html only when asked, and the page cache and resolver pools are bounded
+
+Checks
+- CI runs the checks on Node 20, 22 and 24, `scripts/check-install.sh` installs the packed package, and the repo carries `docs/CATALOG.md`
+
 ## 0.19.0
 
 Speed
