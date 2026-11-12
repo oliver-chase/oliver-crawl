@@ -39,7 +39,7 @@ describe('another worker continues a crawl', () => {
     const first = web();
     const run1 = await crawlSite(crawler(), target, { ...opts, store, maxPages: 3 });
     expect(run1.truncated).toBe(true);
-    const seen = new Set(first.map((p) => p));
+    const seen = new Set(first);
 
     const second = web();
     const run2 = await crawlSite(crawler(), target, { ...opts, store, maxPages: 10, recrawlMinIntervalMs: 10 * 60 * 60 * 1000 });

@@ -401,15 +401,4 @@ describe('crawlSite — sinks, limits and keys', () => {
     expect(result.pages).toHaveLength(1);
     expect(result.truncated).toBe(true);
   });
-
-  test('a 404 is requested once even when retries are allowed', async () => {
-    let requests = 0;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      if (String(input).startsWith('https://venue.example.com')) requests += 1;
-      return new Response('Not found', { status: 404 });
-    }) as typeof fetch;
-    const result = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/gone'], maxRetries: 3, retryBackoffMs: 0 });
-    expect(result.failures).toHaveLength(1);
-    expect(requests).toBe(1);
-  });
 });

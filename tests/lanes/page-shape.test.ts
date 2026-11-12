@@ -111,12 +111,15 @@ describe('GUARD-TELEMETRY-1 reports real values, not just the right types', () =
   test('markdown truncation counts, not only text', async () => {
     // Markdown is capped independently and is the field the README tells
     // consumers to feed a model. A link-heavy page grows markdown past text.
-    const links = Array.from({ length: 400 }, (_, i) => `<a href="/e/${i}">Event number ${i} at the venue</a>`).join(' ');
+    // Short labels with long targets: the text fits the cap and only the Markdown passes it.
+    const links = Array.from({ length: 60 }, (_, i) => `<a href="/events/${'long-path-segment-'.repeat(4)}${i}">E${i}</a>`).join(' ');
     serve(() => html(`<html><head><title>Cal</title></head><body><main>${links}</main></body></html>`));
     const r = await createCrawler({ userAgent: 'T/1 (+https://t.example.com)', dnsLookup: publicDns }).crawl(
       target, 'https://site.example.com/x', { maxTextChars: 4000 },
     );
     if (!r.ok || r.notModified) throw new Error('expected pages');
+    expect(r.pages[0]!.text.length).toBeLessThan(4000);
+    expect(r.pages[0]!.markdown.endsWith('[TRUNCATED]')).toBe(true);
     expect(r.pages[0]!.truncated).toBe(true);
   });
 });

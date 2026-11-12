@@ -70,7 +70,7 @@ describe('the escalation never loses the page it already had', () => {
   });
 
   test('a render returning LESS than the fetch is discarded', async () => {
-    stub(FULL.replace('</main>', '</main>'), CHROME_ONLY);
+    stub(FULL, CHROME_ONLY);
     const r = await crawler({ renderWhenTextBelow: 100_000 }).crawl(target, 'https://site.example.com/x');
 
     if (!r.ok || r.notModified) throw new Error('expected pages');

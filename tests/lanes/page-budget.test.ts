@@ -21,6 +21,6 @@ describe('the page budget', () => {
     const run = await crawlSite(crawler(), target, { seeds, maxPages: 3, maxRetries: 0 });
     expect(run.truncated).toBe(true);
     expect(run.failures.length).toBe(3);
-    expect(calls).toBeLessThanOrEqual(3 * 4);
+    expect(calls).toBe(3);
   });
 });

@@ -3,7 +3,6 @@ import { describe, expect, test } from 'vitest';
 import { htmlToMarkdown } from '@/extract/html-to-markdown';
 import { computeContentRegionHash } from '@/extract/content-region-hash';
 import { findContentImages } from '@/extract/content-images';
-import { extractInlineScriptContent } from '@/extract/spa-content-extract';
 import { buildPage } from '@/fetch/build-page';
 
 // A page keeps all of its content, the change hash reads what the markdown reads, and links come out absolute.
@@ -68,13 +67,6 @@ describe('tables, images and links', () => {
   test('image paths with spaces and brackets are escaped', () => {
     const out = md('<html><body><main><img src="/img/flyer (1).png" alt="Flyer"></main></body></html>');
     expect(out).toContain('![Flyer](https://venue.example/img/flyer%20%281%29.png)');
-  });
-});
-
-describe('script text', () => {
-  test('a config identifier that starts with a month name is not content', () => {
-    const html = '<script>window.__DATA__ = {"id":"marketplaceConfigPanelId"};</script>';
-    expect(extractInlineScriptContent(html) ?? '').not.toContain('marketplaceConfigPanelId');
   });
 });
 

@@ -44,13 +44,15 @@ describe('bounded reads', () => {
     const counter = { bytes: 0 };
     globalThis.fetch = (async () => endlessBody(counter)) as typeof fetch;
     await discoverSitemapUrls(target, { userAgent: 'T/1', dnsLookup: publicDns });
-    expect(counter.bytes).toBeLessThan(12_000_000);
+    // The 10 MB cap plus at most two 64 KB chunks, the one read and the one already buffered.
+    expect(counter.bytes).toBeLessThanOrEqual(10_000_000 + 131_072);
   });
 
   test('a Jina response that never ends is cut near the cap', async () => {
     const counter = { bytes: 0 };
     await fetchViaJina('https://site.example.com/', { fetchImpl: (async () => endlessBody(counter)) as typeof fetch });
-    expect(counter.bytes).toBeLessThan(1_000_000);
+    // The 600 KB cap plus at most two 64 KB chunks.
+    expect(counter.bytes).toBeLessThanOrEqual(600_000 + 131_072);
   });
 });
 

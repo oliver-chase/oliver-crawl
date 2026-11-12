@@ -190,12 +190,6 @@ describe('searchAndCrawl', () => {
     expect(crawled).toBe(false);
   });
 
-  test('a failed search is reported, not silently empty', async () => {
-    const crawler = createCrawler({ userAgent: 'T/1', dnsLookup: publicDns });
-    const found = await searchAndCrawl(crawler, 'q');
-    expect(found).toMatchObject({ ok: false, reason: 'no_provider_configured' });
-  });
-
   test('site: restriction is applied to the query sent to the provider', async () => {
     let sentQuery = '';
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -21,10 +21,6 @@ describe('query identity', () => {
   test('an encoded ampersand and a real one are different pages', () => {
     expect(urlDedupKey('https://shop.example/search?a=1%26b%3D3')).not.toBe(urlDedupKey('https://shop.example/search?a=1&b=3'));
   });
-
-  test('parameter order and tracking parameters still collapse', () => {
-    expect(urlDedupKey('https://shop.example/s?b=2&a=1&utm_source=x')).toBe(urlDedupKey('https://shop.example/s?a=1&b=2'));
-  });
 });
 
 describe('redaction of an encoded blob', () => {

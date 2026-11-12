@@ -114,9 +114,11 @@ describe('the archive rung is last, and honest about what it returns', () => {
   });
 
   test('a capture older than archiveMaxAgeDays is refused', async () => {
-    deadHostWithArchive(); // capture stamped 2026-06-01
+    const hit = deadHostWithArchive(); // capture stamped 2026-06-01
     const target: CrawlTarget = { baseUrl: 'https://site.example.com', robotsPolicy: 'allow', active: true };
     const r = await crawler({ archiveMaxAgeDays: 1 }).crawl(target, 'https://site.example.com/x');
     expect(r.ok).toBe(false);
+    expect(hit).toContain('cdx');
+    expect(hit).not.toContain('snapshot');
   });
 });

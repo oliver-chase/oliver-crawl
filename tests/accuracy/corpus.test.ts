@@ -76,7 +76,9 @@ describe('extraction accuracy on the fixed corpus', () => {
     }
 
     const baseline = JSON.parse(readFileSync(baselinePath, 'utf8')) as { overall: number; pages: Record<string, number> };
-    const regressed = names.filter((n) => scores[n]!.page < (baseline.pages[n] ?? 0) - MARGIN);
+    const missing = names.filter((n) => baseline.pages[n] === undefined);
+    expect(missing, `pages with no baseline score; run with UPDATE_ACCURACY_BASELINE=1: ${missing.join(', ')}`).toEqual([]);
+    const regressed = names.filter((n) => scores[n]!.page < baseline.pages[n]! - MARGIN);
     expect(regressed, `pages that scored lower than their baseline: ${regressed.join(', ')}`).toEqual([]);
     expect(overall).toBeGreaterThanOrEqual(baseline.overall - MARGIN);
   });

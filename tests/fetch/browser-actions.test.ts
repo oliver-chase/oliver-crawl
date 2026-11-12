@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { renderViaLocalChromium, runActions, MAX_ACTIONS, MAX_ACTION_TOTAL_MS } from '@/fetch/local-render';
+import { renderViaLocalChromium, runActions, MAX_ACTIONS } from '@/fetch/local-render';
 import type { BrowserAction } from '@/fetch/local-render';
 
 // PARITY-ACTIONS-1: these are instructions driving a real browser on our own

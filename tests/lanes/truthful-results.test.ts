@@ -39,7 +39,7 @@ describe('the change probe', () => {
 
 describe('failures', () => {
   test('a site crawl failure carries its class', async () => {
-    globalThis.fetch = (async (input: RequestInfo | URL) => new Response('gone', { status: notRobots(input) ? 404 : 404 })) as typeof fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => new Response('gone', { status: 404 })) as typeof fetch;
     const run = await crawlSite(crawler(), target('f.example.com'), { maxRetries: 0 });
     expect(run.failures[0]?.failureClass).toBe('structural');
   });

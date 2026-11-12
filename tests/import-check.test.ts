@@ -1,12 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 // scripts/check-imports.mjs fails the build on an import Node cannot resolve from dist: an alias, or a relative path with no .js.
 
-const script = join(process.cwd(), 'scripts', 'check-imports.mjs');
+const script = fileURLToPath(new URL('../scripts/check-imports.mjs', import.meta.url));
 
 function run(source: string): { ok: boolean; output: string } {
   const dir = mkdtempSync(join(tmpdir(), 'imports-'));
@@ -17,6 +18,8 @@ function run(source: string): { ok: boolean; output: string } {
     return { ok: true, output: execFileSync('node', ['check.mjs'], { cwd: dir, encoding: 'utf8' }) };
   } catch (error) {
     return { ok: false, output: String((error as { stderr?: string }).stderr ?? error) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }
 

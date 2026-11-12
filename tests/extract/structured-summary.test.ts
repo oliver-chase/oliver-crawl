@@ -71,6 +71,8 @@ describe('untrusted input costs bounded work', () => {
     let deep: Record<string, unknown> = { '@type': 'Event' };
     for (let i = 0; i < 5000; i++) deep = { '@type': 'Thing', child: deep };
     expect(() => summarizeStructuredData([deep])).not.toThrow();
+    // The walk stops nine levels down, well before the 500-node cap.
+    expect(summarizeStructuredData([deep]).nodeCount).toBeLessThanOrEqual(9);
   });
 
   test('malformed nodes are skipped, not fatal', () => {

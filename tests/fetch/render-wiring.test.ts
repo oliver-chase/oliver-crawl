@@ -37,7 +37,8 @@ describe('the landing guard stays wired into the render path', () => {
   });
 
   test('a blocked hop aborts the render and returns no content', () => {
-    expect(renderFn).toMatch(/blockedHops\.length > 0.*throw|throw new Error\(`Render blocked a redirect hop/s);
+    // After the navigation error, after goto and after the actions: each point refuses on its own.
+    expect(renderFn.match(/throw new Error\(`Render blocked a redirect hop/g)?.length).toBe(3);
   });
 });
 

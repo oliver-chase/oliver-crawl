@@ -105,9 +105,8 @@ describe('a page served past an off-domain refusal is flagged', () => {
     }).crawl(target, 'https://site.example.com/');
 
     // It must not come back as a successful render of the requested page.
-    if (result.ok && !result.notModified) {
-      expect(result.pages[0]!.rung).not.toBe('browser-render');
-    }
+    const rung = result.ok && !result.notModified ? result.pages[0]!.rung : null;
+    expect(rung).not.toBe('browser-render');
   });
 
   // The decision reads the URL in the refusal, not its wording, so a parked
