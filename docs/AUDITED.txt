@@ -75,8 +75,9 @@ c926b1f2e4ac5150bb4aa5ec39ff0350a6a47e08 src/extract/spa-content-extract.ts
 db972a0acaa7b0d767648a8d6bb365ca39696465 src/fetch/host-policy.ts
 591c33ce0ab41ab532fc70b07d648b9a90c59aee src/fetch/http-mechanics.ts
 cfed4b9f121ee057019ca8e6f7ab7dbc7aaabc4b src/fetch/jina-fetch.ts
-6ddcaca89848b7eff7c40d7d56f6eac18c6b3d64 src/fetch/local-render.ts
+900a482050373dd209e4c6b9d9e6908212113f4c src/fetch/local-render.ts
 3e6baa92526b30471103b6f7a5f81d5492c515ce src/fetch/pdf-extract.ts
+d118f046cb4efbc5f621b656723f03256d346e1f src/fetch/render-transport.ts
 e7f264932f8998f7f1d03979ac0ce1199003a315 src/fetch/robots-check.ts
 c7921060a005e83fa7de706537d108b085cc1064 src/fetch/safe-fetch.ts
 b9d50661319ce2eb3ec86ac87c67cc8a926cc5cd src/fetch/sitemap-discovery.ts
@@ -160,7 +161,7 @@ d8332f569395534cdf9720afa05502fb0edc37d7 tests/fetch/jina-timeout.test.ts
 76fcdebc71f3e7bdaa88cb97d6a605a151afd604 tests/fetch/pagination-policy.test.ts
 fc9b84a9e1efa2ba808ccc5fd3553d40b9897f06 tests/fetch/pdf-extract.test.ts
 7012533acf7abe5c60b24459e0a477472fba290b tests/fetch/probe-redirect-dns.test.ts
-7bd8296fe6d77ffca21fda542cb4119ddb97411b tests/fetch/render-hop-chain.test.ts
+3904185335caa157e2eece45c777d11c43d5f9d4 tests/fetch/render-hop-chain.test.ts
 50bd2ed2532a5d0aeee9be2207fe55cb31df2bd3 tests/fetch/render-redirect.test.ts
 776e3ebcef1c5270d0a72707b3997a4954050e07 tests/fetch/render-wiring.test.ts
 30890fb7a5f3450db44644d00f76b2167b083d40 tests/fetch/request-shape.test.ts
