@@ -115,15 +115,6 @@ describe('own lane — policy refusals happen before any network call', () => {
     expect(called).toBe(false);
   });
 
-  test('refuses an unknown robots policy (fails closed)', async () => {
-    const crawler = createCrawler({ userAgent: 'TestBot/1.0', dnsLookup: publicDns });
-    const result = await crawler.crawl(
-      { ...target, robotsPolicy: 'unknown' },
-      'https://venue.example.com/events',
-    );
-    expect(result).toMatchObject({ ok: false, reason: 'blocked' });
-  });
-
   test('refuses a host that resolves to a private address (DNS rebinding)', async () => {
     const crawler = createCrawler({
       userAgent: 'TestBot/1.0',

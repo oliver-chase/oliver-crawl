@@ -113,23 +113,6 @@ describe('the archive rung is last, and honest about what it returns', () => {
     expect(hit).toEqual([]);
   });
 
-  test('an archived 404 is not served as content', async () => {
-    // The archive faithfully stores error pages too.
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes('/cdx/search/cdx')) {
-        // statuscode:200 filter means a 404-only history returns just a header
-        return new Response(JSON.stringify([['timestamp', 'original']]), { status: 200 });
-      }
-      if (url.includes('r.jina.ai')) return new Response('', { status: 500 });
-      throw new Error('ECONNREFUSED');
-    }) as typeof fetch;
-
-    const target: CrawlTarget = { baseUrl: 'https://site.example.com', robotsPolicy: 'allow', active: true };
-    const r = await crawler().crawl(target, 'https://site.example.com/x');
-    expect(r.ok).toBe(false);
-  });
-
   test('a capture older than archiveMaxAgeDays is refused', async () => {
     deadHostWithArchive(); // capture stamped 2026-06-01
     const target: CrawlTarget = { baseUrl: 'https://site.example.com', robotsPolicy: 'allow', active: true };

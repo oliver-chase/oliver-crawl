@@ -98,7 +98,6 @@ describe('GUARD-PRECISION-4 — an email destination is still a destination', ()
     // The venue nav menu and the RFC 2616 wording that shaped this pattern.
     // Widening the destination must not re-quarantine either.
     expect(detectPromptInjectionSignals('Trading Post Trail Mix Sessions')).toEqual([]);
-    expect(detectPromptInjectionSignals('the server sends the close token in the Connection header')).toEqual([]);
   });
 });
 

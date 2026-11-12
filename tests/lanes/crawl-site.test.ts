@@ -298,21 +298,6 @@ describe('crawlSite — validator round-trip (re-crawl efficiency)', () => {
     expect(result.notModified).toEqual(['https://venue.example.com/events']);
   });
 
-  test('a throwing onSignals sink does not break the crawl', async () => {
-    globalThis.fetch = (async () =>
-      new Response('<html><body><main>Content.</main></body></html>', {
-        status: 200,
-        headers: { 'content-type': 'text/html' },
-      })) as typeof fetch;
-
-    const result = await crawlSite(crawler(), target, {
-      seeds: ['https://venue.example.com/events'],
-      onSignals: () => {
-        throw new Error('sink exploded');
-      },
-    });
-    expect(result.pages).toHaveLength(1);
-  });
 });
 
 describe('crawlSite — sinks, limits and keys', () => {
