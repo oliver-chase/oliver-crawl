@@ -88,7 +88,7 @@ not be handed a working instruction to paste into a model.
 was refused for leaving the site and a fallback rung served the page anyway.
 
 ```ts
-if (result.ok && result.originMoved) {
+if (result.ok && !result.notModified && result.originMoved) {
   result.originMoved.refusal;   // the guard message, naming the new host
   result.originMoved.servedBy;  // 'jina' | 'archive' | the render rung
 }
@@ -129,7 +129,7 @@ Sequential by design (one request at a time): hammering a small site in parallel
 
 ### Cheap re-crawls
 
-Origins that send ETag or Last-Modified answer a conditional GET with a 304, reported under `notModified`. For the rest, the content-region hash is compared and `unchanged` lists pages that downloaded but did not change. Pass `result.validators` back as `priorValidators`, or give `crawlSite` a `store` and it does this for you. [LANES](LANES.md#making-re-crawls-cheap) explains both mechanisms.
+Origins that send ETag or Last-Modified answer a conditional GET with a 304, reported under `notModified`. For the rest, the content-region hash is compared and `unchanged` lists pages that downloaded but did not change. From `crawlSite`, pass `run.validators` back as `priorValidators`, or give it a `store` and it does this for you. From `crawl()`, send the page's `httpEtag` and `httpLastModified` as `etag` and `lastModified`. [LANES](LANES.md#making-re-crawls-cheap) explains both mechanisms.
 
 ### Site-wide change detection in one request
 
@@ -160,6 +160,7 @@ empty.
 
 ```ts
 createCrawler({
+  userAgent: 'MyBot/1.0 (+https://mysite.example/bot)',
   localRender: true,
   browserActions: [
     { type: 'click', selector: '.load-more' },
@@ -189,11 +190,11 @@ it hands you a snapshot and takes one back:
 ```ts
 const run = await crawlSite(crawler, target, {
   followLinks: true,
-  onProgress: (state) => myStore.save(target.id, state),  // plain JSON
+  onProgress: (state) => myStore.save(target.baseUrl, state),  // plain JSON
 });
 
 // later, in a new process
-await crawlSite(crawler, target, { followLinks: true, resumeFrom: myStore.load(target.id) });
+await crawlSite(crawler, target, { followLinks: true, resumeFrom: myStore.load(target.baseUrl) });
 ```
 
 The snapshot is emitted after each page is marked done *and* after the links
@@ -478,6 +479,15 @@ Everything the package exports, grouped by what you would reach for it to do.
 | `rungMemory` | Remember which rung works per host (default on) |
 | `proxyFetch` | A `fetch` that routes through your own proxy, tried after a block and before Jina |
 | `cacheTtlMs` · `minHostIntervalMs` · `adaptiveThrottleMultiplier` | Repeat-request and politeness controls |
+| `dohEndpoint` | The DNS-over-HTTPS resolver used when no `dnsLookup` is given |
+| `vendorRungOrder` | The order the paid vendor rungs are tried in |
+| `includeHtml` (crawl option) | Keep the raw HTML on the returned page; `crawlSite` returns pages without it unless you ask |
+| `retries` (crawl option) | Extra attempts for one `crawl()` call. Permanent (structural) failures are not retried |
+| `maxRetries` · `retryBackoffMs` (site option) | Retries per URL in `crawlSite` and the base wait between them |
+| `includePatterns` · `excludePatterns` (site option) | Regexes that allow or skip discovered URLs |
+| `storeKey` (site option) | The key a crawl's state is kept under in its `CrawlStore` |
+| `sitemapOnly` (`mapSite` option) | Map from the sitemap alone and skip the homepage |
+| `site` · `searchOnly` (`searchAndCrawl` option) | Restrict a search to one domain, or return results without reading them |
 
 ## Search
 

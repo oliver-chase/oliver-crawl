@@ -1,10 +1,15 @@
 {
+  "_comment": "Emits dist for npm run build and the prepare step; extends tsconfig.json.",
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["tests/**/*"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "tests/**/*"
+  ]
 }

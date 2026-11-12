@@ -1,4 +1,5 @@
 {
+  "_comment": "The files the owner-identifier gate (pre-commit gate 8) exempts, and why. Managed copy from OliverCode; change it there first.",
   "configGlobs": [],
   "localData": [
     "CLAUDE.md",

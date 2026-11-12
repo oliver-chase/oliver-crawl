@@ -26,7 +26,7 @@ const crawler = createCrawler({
 });
 
 const result = await crawler.crawl(
-  { baseUrl: 'https://example.com', robotsPolicy: 'allow' },
+  { baseUrl: 'https://example.com', robotsPolicy: 'allow' },  // 'allow' is your decision; see autoRobots below
   'https://example.com/',
 );
 
@@ -200,8 +200,9 @@ const crawler = createCrawler(
 | --- | --- |
 | [ADOPTING](docs/ADOPTING.md) | Starting a new project, replacing a crawler you run, and troubleshooting |
 | [REFERENCE](docs/REFERENCE.md) | Every option and return field |
+| [CATALOG](docs/CATALOG.md) | Every script, hook and config file with its job |
 | [LANES](docs/LANES.md) | The retrieval ladder, rung by rung |
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | Request flow, module map and design boundaries |
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | Request flow and design boundaries |
 | [DECISIONS](docs/DECISIONS.md) | Why the code works the way it does |
 
 Open work lives in the `olivercrawl` GitHub Project named in `docs/backlog-config.json`.
@@ -215,7 +216,7 @@ npm run bench    # crawls and recrawls six local hosts, prints pages per second,
 npm run live    # exercises the library against real websites
 ```
 
-The package is strict TypeScript and builds to `dist/`. CI packs the package and installs it into an empty project on every push.
+The package is strict TypeScript and builds to `dist/`. CI packs the package and installs it into an empty project on every push to main and every pull request.
 
 ## License
 

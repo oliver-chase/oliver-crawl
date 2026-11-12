@@ -29,7 +29,7 @@ function toCrawlTarget(row: MySourceRow): CrawlTarget {
 }
 ```
 
-`robotsPolicy: 'unknown'` fails closed and does not crawl. A nullable column therefore blocks every target with a null the moment you switch. Backfill it, or set `autoRobots: true` and let the crawler fetch and evaluate robots.txt itself, cached per host. A robots.txt that answers 4xx permits crawling, as RFC 9309 says; a 5xx or a network failure still fails closed.
+`robotsPolicy: 'unknown'` fails closed and does not crawl. A nullable column therefore blocks every target with a null the moment you switch. Backfill it, or set `autoRobots: true` and let the crawler fetch and evaluate robots.txt itself, cached per host. A robots.txt that answers 4xx other than 429 permits crawling, as RFC 9309 says; a 5xx or a network failure still fails closed.
 
 ## The callbacks
 

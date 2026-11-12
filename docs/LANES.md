@@ -38,7 +38,7 @@ One rung is skipped conditionally: **a target carrying `headers` (credentials) n
 
 ### The archive rung, and why it is gated
 
-Rung 10 reads the Internet Archive when every live rung has failed. The CDX
+Rung 11 reads the Internet Archive when every live rung has failed. The CDX
 API is free and keyless, so it is a genuine free rung and not a vendor. The restriction on it is the point:
 
 - **`disallow` — never.** The site said no. Reading an archived copy is still
@@ -115,7 +115,7 @@ Two hashes are stored per page, and the comparison picks the right one:
 
 `unchanged` uses the structural hash only when **both** runs have it, and falls back to the text hash otherwise. Comparing a structural hash against a text hash across a rung change reports a content change that did not happen, so the two are never compared.
 
-Both need the same loop. A `store` keeps it for you; without one, keep `result.validators` and pass them back as `priorValidators`.
+Both need the same loop. A `store` keeps it for you; without one, keep `run.validators` from `crawlSite` and pass them back as `priorValidators`.
 
 ## Search is not one of these paths
 
