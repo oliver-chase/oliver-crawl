@@ -1,7 +1,7 @@
-// Path aliases (@/...) are a COMPILE-TIME convenience: tsc emits them
+// Path aliases (@/...) are a compile-time convenience: tsc emits them
 // literally, so an aliased import in src/ produces a dist/ file Node cannot
-// resolve. Caught in real adoption testing (a git-installed consumer crashed
-// on `Cannot find package '@/core'`). This fails the build instead.
+// resolve, and a consumer crashes on `Cannot find package '@/core'`. This
+// check fails the build instead.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 

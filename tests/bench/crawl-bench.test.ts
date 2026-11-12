@@ -91,6 +91,8 @@ describe('multi-host crawl benchmark', () => {
     const baseline = JSON.parse(readFileSync(BASELINE, 'utf8')) as typeof now;
     // The root page and /p0 carry the same text, so the near-duplicate check reports one of them.
     expect(r.pagesFirst).toBe(HOSTS * PAGES);
+    // A recrawl that asked nothing would pass the ceilings below, so it must revalidate every site.
+    expect(r.secondCounts.requests).toBeGreaterThanOrEqual(HOSTS);
     for (const phase of ['first', 'recrawl'] as const) {
       expect(now[phase].requests, `${phase} requests grew past the baseline`).toBeLessThanOrEqual(baseline[phase].requests);
       expect(now[phase].bytes, `${phase} bytes grew past the baseline`).toBeLessThanOrEqual(baseline[phase].bytes);

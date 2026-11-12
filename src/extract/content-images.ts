@@ -77,7 +77,9 @@ export function findContentImages($: CheerioAPI, pageUrl: string, limit = 3): Co
     if (!/^https?:/i.test(url) || seen.has(url)) return;
     seen.add(url);
 
-    if (FURNITURE_PATTERN.test(url) || NON_PHOTO_EXTENSION.test(url)) return;
+    // The path alone decides, so a host named logo.example.com does not mark every image as furniture.
+    const path = new URL(url).pathname;
+    if (FURNITURE_PATTERN.test(path) || NON_PHOTO_EXTENSION.test(path)) return;
 
     const width = Number($img.attr('width')) || 0;
     const height = Number($img.attr('height')) || 0;

@@ -10,11 +10,7 @@ import type { CrawlTarget } from '@/core/types';
 
 // CRAWL-C5: this module is the SSRF / DNS-rebinding guard for
 // the entire crawl stack — every fetch the crawler makes passes through it —
-// and it was the ONLY generic crawl module with no direct test file. These
-// tests exist both to lock the security behavior down and as the
-// prerequisite for extracting the module into a shared crawl package
-// (docs/CRAWL_EXTRACTION_SPEC.md): a security primitive must not move
-// repos on trust alone.
+// so these tests lock its security behavior down directly.
 //
 // The DNS lookup is injectable (lookupFn), so the rebinding cases below are
 // exercised against a stub, with no network — deterministic, offline,

@@ -187,7 +187,7 @@ const crawler = createCrawler(
 | --- | --- |
 | [ADOPTING](docs/ADOPTING.md) | Starting a new project, replacing a crawler you run, and troubleshooting |
 | [REFERENCE](docs/REFERENCE.md) | Every option and return field |
-| [CATALOG](docs/CATALOG.md) | Every script, hook and config file with its job |
+| [CATALOG](docs/CATALOG.md) | The scripts and config files, each with its job, generated from their own descriptions |
 | [LANES](docs/LANES.md) | The retrieval ladder, rung by rung |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Request flow and design boundaries |
 | [DECISIONS](docs/DECISIONS.md) | Why the code works the way it does |

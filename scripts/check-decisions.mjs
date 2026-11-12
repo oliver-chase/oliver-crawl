@@ -156,8 +156,7 @@ const inventedIds = [...testIds]
 // Every check above reads the ledger through ID_PATTERN, so a row whose id does
 // not match it is invisible to all of them: the id in the source is never seen as
 // recorded, and the row outlives the code it describes. The row reads as governed
-// and is not. The framework's own ledger carried one from the day it was written
-// — two segments where §2 requires three — and nothing could report it.
+// and is not, so each row's id must have the AREA-TOPIC-N shape.
 //
 // A ledger row may also name its source file in a third column. Where it does,
 // that file has to exist: a row pointing at moved or deleted code sends the next

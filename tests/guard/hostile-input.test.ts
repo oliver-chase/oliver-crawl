@@ -19,17 +19,17 @@ const timed = (run: () => void) =>
     }),
   );
 
-// Linear work grows 4x when the input grows 4x, and quadratic work grows 16x, so the ratio tells them apart on any machine.
+// Linear work grows 8x when the input grows 8x, and quadratic work grows 64x, so the ratio tells them apart on a busy machine.
 const growth = (input: (n: number) => string) =>
-  timed(() => sanitizeCrawledText(input(80_000), 200_000)) / Math.max(timed(() => sanitizeCrawledText(input(20_000), 200_000)), 0.5);
+  timed(() => sanitizeCrawledText(input(80_000), 200_000)) / Math.max(timed(() => sanitizeCrawledText(input(10_000), 200_000)), 0.5);
 
 describe('the guard runs in linear time', () => {
   test('a long run of letters', () => {
-    expect(growth((n) => 'a'.repeat(n))).toBeLessThan(10);
+    expect(growth((n) => 'a'.repeat(n))).toBeLessThan(24);
   });
 
   test('a verb followed by a long run of spaces', () => {
-    expect(growth((n) => 'ignore' + ' '.repeat(n))).toBeLessThan(10);
+    expect(growth((n) => 'ignore' + ' '.repeat(n))).toBeLessThan(24);
   });
 
   test('the phrasings the override pattern catches still match', () => {
