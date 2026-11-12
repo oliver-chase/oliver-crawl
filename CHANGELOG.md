@@ -19,6 +19,7 @@ Safety
 - link text and a title reported by the Jina or vendor rung pass the guard, and a payload split by punctuation or bidi controls is caught and redacted
 - `fetchViaWayback` never sends a URL that carries credentials, and an iframe or a redirected subresource in a render is checked hop by hop like any subresource
 - with `autoRobots`, a whole-site crawl judges robots.txt for each page's own path
+- the guard folds Cyrillic and Greek lookalike letters before detection
 
 Correctness
 - a page whose crawl throws is reported as one failure and the rest of the run continues, and a refused target leaves the stored snapshot as it was

@@ -142,10 +142,19 @@ function truncate(input: string, limit: number) {
 /** Invisible characters that split a phrase without changing how it reads. */
 const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufe00-\ufe0f\ufeff]|\udb40[\udc00-\udc7f]/g;
 
+/** Cyrillic and Greek letters drawn like Latin ones, folded so a lookalike spelling reads as the phrase it imitates. */
+const LOOKALIKES: Record<string, string> = {
+  а: 'a', в: 'b', е: 'e', к: 'k', м: 'm', н: 'h', о: 'o', р: 'p', с: 'c', т: 't', у: 'y', х: 'x', і: 'i', ј: 'j', ѕ: 's', ԁ: 'd', ո: 'n',
+  А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', Х: 'X', І: 'I', Ј: 'J', Ѕ: 'S',
+  α: 'a', ε: 'e', ι: 'i', ο: 'o', ρ: 'p', τ: 't', υ: 'u', ν: 'v', Α: 'A', Ε: 'E', Ι: 'I', Ο: 'O', Ρ: 'P', Τ: 'T',
+};
+const LOOKALIKE = new RegExp(`[${Object.keys(LOOKALIKES).join('')}]`, 'g');
+
 function normalizeForDetection(input: string) {
   return input
     .replace(INVISIBLE, '')
     .normalize('NFKC')
+    .replace(LOOKALIKE, (ch) => LOOKALIKES[ch] ?? ch)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
     .replace(/[|\\/._-]{2,}/g, ' ')
     .replace(/\s+/g, ' ')
