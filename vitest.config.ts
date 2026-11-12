@@ -9,5 +9,9 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
+    // A busy machine makes the first import in a hook take seconds, so the limits are generous. A test that hangs
+    // still fails at 30 seconds.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

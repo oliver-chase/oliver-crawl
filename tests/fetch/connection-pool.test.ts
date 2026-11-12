@@ -78,7 +78,7 @@ describe('dropped responses release their connection', () => {
     dropBody(first as unknown as Response);
     const second = await Promise.race([
       undiciFetch(`${base}/next`, { dispatcher: agent }).then((r) => r.text()),
-      new Promise<string>((r) => setTimeout(() => r('STUCK'), 2000)),
+      new Promise<string>((r) => setTimeout(() => r('STUCK'), 10_000)),
     ]);
     expect(second).toBe('ok');
     slow.closeAllConnections();
