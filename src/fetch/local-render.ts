@@ -45,7 +45,11 @@ async function importPlaywright(): Promise<{ chromium: unknown } | null> {
 }
 
 type RenderBrowser = {
-  newContext: () => Promise<{ newPage: () => Promise<RenderPage>; close: () => Promise<void> }>;
+  newContext: (options: { serviceWorkers: 'block' }) => Promise<{
+    newPage: () => Promise<RenderPage>;
+    addInitScript: (script: string) => Promise<void>;
+    close: () => Promise<void>;
+  }>;
   close: () => Promise<void>;
   isConnected: () => boolean;
 };
@@ -312,7 +316,9 @@ export async function renderViaLocalChromium(
   let context: Awaited<ReturnType<RenderBrowser['newContext']>> | null = null;
   try {
     const browser = await acquireBrowser(chromium);
-    context = await browser.newContext();
+    // page.route never sees service-worker or WebSocket traffic, so neither is allowed to start.
+    context = await browser.newContext({ serviceWorkers: 'block' });
+    await context.addInitScript('delete window.WebSocket; delete window.WebSocketStream;');
     const page = await context.newPage();
     // RENDER-HOP-1: validate every NAVIGATION hop, not just where the chain
     // ended. Checking only the landing let `site -> 127.0.0.1:P -> site` render

@@ -139,8 +139,12 @@ function truncate(input: string, limit: number) {
   return `${input.slice(0, limit)}...`;
 }
 
+/** Invisible characters that split a phrase without changing how it reads. */
+const INVISIBLE = /[\u00ad\u200b-\u200d\u2060\ufeff]/g;
+
 function normalizeForDetection(input: string) {
   return input
+    .replace(INVISIBLE, '')
     .normalize('NFKC')
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
     .replace(/[|\\/._-]{2,}/g, ' ')
@@ -237,6 +241,9 @@ export function sanitizeCrawledText(input: string, maxChars = DEFAULT_MAX_TEXT_C
   let sanitized = input
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
     .replace(/\r/g, '\n');
+  // A payload found only in the normalized text is redacted in normalized text, so hidden or fullwidth
+  // characters cannot carry it back out unredacted. An ordinary page keeps its text as served.
+  if (signals.length > 0) sanitized = sanitized.replace(INVISIBLE, '').normalize('NFKC');
 
   // GUARD-REDACT-1: redaction FOLLOWS detection. Only patterns that actually
   // raised a signal are redacted.

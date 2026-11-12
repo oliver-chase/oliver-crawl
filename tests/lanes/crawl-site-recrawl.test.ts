@@ -277,3 +277,25 @@ describe('crawlSite — redirect convergence (CRAWL-DEDUP-1)', () => {
     expect(result.pages[0]!.url).toBe('https://venue.example.com/');
   });
 });
+
+describe('state stays with its own URL and target', () => {
+  test('a redirected seed sends its conditional request on the next run', async () => {
+    const sent: (string | null)[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/robots.txt') return new Response('', { status: 404 });
+      if (url.pathname === '/old') return new Response(null, { status: 301, headers: { location: '/new' } });
+      const etag = new Headers(init?.headers).get('if-none-match');
+      sent.push(etag);
+      if (etag === '"v1"') return new Response(null, { status: 304, headers: { etag: '"v1"' } });
+      return new Response('<html><head><title>T</title></head><body><main><p>The page that moved, with its full text here.</p></main></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html', etag: '"v1"' },
+      });
+    }) as typeof fetch;
+    const seeds = ['https://venue.example.com/old'];
+    const first = await crawlSite(crawler(), target, { seeds });
+    await crawlSite(crawler(), target, { seeds, priorValidators: first.validators });
+    expect(sent.at(-1)).toBe('"v1"');
+  });
+});

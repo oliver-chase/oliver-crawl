@@ -14,7 +14,7 @@ Downloading HTML is easy. The problems start when a crawl runs every hour.
 npm install github:oliver-chase/olivercrawl#v0.20.0
 ```
 
-Pin a tag and leave off the `^`. The package needs Node 20 or later, is ESM-only, and builds on install. Edge and serverless runtimes work, without local browser rendering.
+Pin a tag and leave off the `^`. The package needs Node 20 or later, is ESM-only, and builds on install. Serverless Node runtimes work, without local browser rendering. A runtime without Node built-ins, such as a bare edge worker, cannot load it, because the connection pool needs `undici` and `node:dns`.
 
 ## First crawl
 

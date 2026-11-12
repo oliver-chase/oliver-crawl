@@ -80,3 +80,13 @@ describe('the content-region hash reads what the Markdown shows', () => {
     expect(await computeContentRegionHash('<main><p>Doors</p><p>7 PM</p></main>')).not.toBe(await computeContentRegionHash('<main><p>Doors7 PM</p></main>'));
   });
 });
+
+describe('a main container with a nested scoring block keeps both', () => {
+  test('the outer container keeps its own paragraphs', () => {
+    const p = (t: string) => `<p>${t} with enough words to count as a real paragraph of prose.</p>`;
+    const html = `<body><div id="sidebar">${p('Unrelated sidebar note')}</div><div class="post">${p('Outer one')}${p('Outer two')}${p('Outer three')}<section>${p('Inner one')}${p('Inner two')}</section></div></body>`;
+    const out = md(html);
+    expect(out).toContain('Outer one');
+    expect(out).toContain('Inner one');
+  });
+});

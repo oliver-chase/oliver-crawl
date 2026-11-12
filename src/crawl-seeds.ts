@@ -39,7 +39,10 @@ export async function resolveSeeds(
   // every other request — a discovery call that resolved DNS differently from
   // the crawl would be both inconsistent and, in tests, an unstubbed network
   // call.
-  const entries = await crawler.discoverSeedEntries(target, maxPages);
+  // Entries the sitemap says are unmoved are skipped below, so the read reaches past them to find
+  // maxPages that may have changed.
+  const skippable = options.priorLastmod ? Object.keys(options.priorLastmod).length : 0;
+  const entries = await crawler.discoverSeedEntries(target, maxPages + skippable);
   if (entries.length === 0) return { seeds: [target.baseUrl], lastmod, skippedByLastmod };
 
   for (const entry of entries) {

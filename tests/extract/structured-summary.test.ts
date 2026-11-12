@@ -81,3 +81,10 @@ describe('untrusted input costs bounded work', () => {
     expect(summary.contentTypes).toEqual(['Event']);
   });
 });
+
+describe('nested details are not content', () => {
+  test('an Organization with an address and contact point has no content data', () => {
+    const org = { '@type': 'Organization', address: { '@type': 'PostalAddress', streetAddress: '1 Main St' }, contactPoint: { '@type': 'ContactPoint', telephone: '555' } };
+    expect(summarizeStructuredData([org]).hasContentData).toBe(false);
+  });
+});

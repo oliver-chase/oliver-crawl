@@ -100,9 +100,16 @@ function scoreContentParent($: CheerioAPI): Cheerio<AnyNode> | null {
 
   if (!best || bestScore / totalMass < 0.4) return null;
 
-  // The winner and every container that holds a real share of the prose. A container that holds another kept
-  // one is left out, because taking it would bring back everything around the content.
-  const kept = [...scores].filter(([, score]) => score / totalMass >= 0.15).map(([node]) => node);
-  const leaves = kept.filter((node) => !kept.some((other) => other !== node && $(other as never).parents().toArray().includes(node as never)));
-  return $(leaves) as Cheerio<AnyNode>;
+  // The winner, plus every other container that holds a real share of the prose and neither holds nor sits
+  // inside one already chosen. A container inside the winner is already covered by it, and one around the
+  // winner would bring back everything around the content.
+  const related = (a: AnyNode, b: AnyNode) =>
+    $(a as never).parents().toArray().includes(b as never) || $(b as never).parents().toArray().includes(a as never);
+  const chosen: AnyNode[] = [best];
+  for (const [node, score] of [...scores].sort((x, y) => y[1] - x[1])) {
+    if (node === best || score / totalMass < 0.15) continue;
+    if (!chosen.some((other) => related(node, other))) chosen.push(node);
+  }
+  // In document order, so two kept articles read top to bottom.
+  return $('*').filter((_, el) => chosen.includes(el)) as Cheerio<AnyNode>;
 }

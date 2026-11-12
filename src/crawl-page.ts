@@ -116,6 +116,9 @@ export function createPageProcessor(ctx: PageStepContext) {
             contentRegionSha256: p.contentRegionSha256,
             textSha256: p.textSha256,
           };
+          // Stored under the requested URL too, which is the key the next run reads, so a redirected
+          // seed still sends its conditional request.
+          if (url !== p.url) validators[url] = validators[p.url]!;
         }
 
         // Discovery from the page just read — appends only, so breadth-first

@@ -14,6 +14,8 @@ Safety
 - the change probe refuses an inactive or robots-disallowed target, a failed render action still runs the origin check, and the title is returned sanitized
 - JSON-LD keys are scanned too, and JSON-LD too deep or too large to scan is dropped
 - a site's Crawl-delay expires with the robots.txt answer that carried it
+- zero-width and fullwidth characters no longer carry a payload past the guard, and such a payload is redacted
+- the render rung blocks service workers and WebSockets, which its request check cannot see
 
 Correctness
 - a page whose crawl throws is reported as one failure and the rest of the run continues, and a refused target leaves the stored snapshot as it was
@@ -25,6 +27,10 @@ Correctness
 - header, nav, footer and aside images are never content images, `rel="next"` and next links with unquoted hrefs are found, and long strings in a script-rendered page are recovered
 - a cache hit is a copy, sitemap numeric entities such as `&#038;` are decoded, and the change probe gives no body hash when the body passes its cap
 - when /sitemap.xml is missing, sitemap discovery reads the same-site sitemaps robots.txt lists
+- a redirected seed sends its conditional request on the next run, and sitemap discovery reads past the entries `priorLastmod` will skip
+- `crawlSites` keeps `targetId`, `storeKey`, `resumeFrom` and `seeds` out of its shared options, so no two sites share stored state
+- a main container keeps its own paragraphs when a nested block also scores, and an address or contact point alone is not content data
+- the README says which runtimes can load the package
 
 Cost
 - the local render rung shares one Chromium per process, with a fresh context per page, and closes it after 30 seconds idle

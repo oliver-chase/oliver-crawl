@@ -362,12 +362,14 @@ export async function crawlSites(
 ): Promise<MultiSiteResult[]> {
   const width = Math.max(1, Math.floor(options.siteConcurrency ?? 4));
   const results: MultiSiteResult[] = new Array(targets.length);
+  // Identity, seeds and resume state belong to one target, so they never reach the others.
+  const { targetId: _id, storeKey: _key, resumeFrom: _resume, seeds: _seeds, ...shared } = options as SiteCrawlOptions & MultiSiteOptions;
   let cursor = 0;
   const worker = async () => {
     while (cursor < targets.length) {
       const index = cursor++;
       const target = targets[index]!;
-      results[index] = { target, result: await crawlSite(crawler, target, options) };
+      results[index] = { target, result: await crawlSite(crawler, target, shared) };
     }
   };
   await Promise.all(Array.from({ length: Math.min(width, targets.length) }, worker));

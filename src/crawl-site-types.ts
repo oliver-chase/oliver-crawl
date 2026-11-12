@@ -233,7 +233,7 @@ export type SiteCrawlResult = {
   finishedAt: string;
 };
 
-export type MultiSiteOptions = SiteCrawlOptions & {
+export type MultiSiteOptions = Omit<SiteCrawlOptions, 'targetId' | 'storeKey' | 'resumeFrom' | 'seeds'> & {
   /** Sites crawled at once. Default 4. Each site still honours its own
    *  `concurrency` and `perHostConcurrency`, and the per-host slot is
    *  process-wide, so two targets on one origin never exceed its limit. */

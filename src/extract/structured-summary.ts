@@ -34,6 +34,10 @@ const BOILERPLATE_TYPES = new Set(
     'SearchAction',
     'EntryPoint',
     'ListItem',
+    'PostalAddress',
+    'ContactPoint',
+    'GeoCoordinates',
+    'OpeningHoursSpecification',
   ].map((t) => t.toLowerCase()),
 );
 
