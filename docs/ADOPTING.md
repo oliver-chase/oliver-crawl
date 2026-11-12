@@ -1,14 +1,14 @@
-# Adopting oliver-crawl
+# Adopting olivercrawl
 
 Integration is one adapter function and a set of callbacks. The library holds no database and knows nothing about your schema, so there is no framework to adopt and nothing to migrate. This guide covers a new project, replacing a crawler you already run, what you wire yourself, and the failures you will hit, listed by what you see.
 
 ## Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl#<tag>
+npm install github:oliver-chase/olivercrawl#<tag>
 ```
 
-Pin a tag and leave off the `^`. Find the newest with `git ls-remote --tags --sort=-v:refname https://github.com/oliver-chase/oliver-crawl.git | head -1`. A floating dependency lets a change here alter your crawl behavior without you doing anything.
+Pin a tag and leave off the `^`. Find the newest with `git ls-remote --tags --sort=-v:refname https://github.com/oliver-chase/olivercrawl.git | head -1`. A floating dependency lets a change here alter your crawl behavior without you doing anything.
 
 The package is ESM-only and needs Node 20 or newer. A CommonJS repo imports it from an ESM entry point or with dynamic `import()`. The build runs on install through `prepare`, so a CI that uses `--ignore-scripts` ends up with no `dist/` to import.
 
@@ -45,7 +45,7 @@ const crawler = createCrawler({
 });
 ```
 
-Put a contact URL in the `userAgent`, because a site operator who sees unexplained traffic blocks it. The library warns once if the string carries no contact. `configFromEnv()` reads the same options from `OLIVER_CRAWL_*` variables (see `.env.example`). The free path needs no secrets.
+Put a contact URL in the `userAgent`, because a site operator who sees unexplained traffic blocks it. The library warns once if the string carries no contact. `configFromEnv()` reads the same options from `OLIVERCRAWL_*` variables (see `.env.example`). The free path needs no secrets.
 
 ## Crawl
 
@@ -122,7 +122,7 @@ Headers go only to that target's own host, so a redirect cannot carry your token
 
 ## Updates are pinned
 
-Editing oliver-crawl changes nothing in a consumer until that consumer bumps its pin. To release, land the change with `npm run check` green and run `git tag vX.Y.Z && git push origin vX.Y.Z`. In each consumer, bump the pin, run that repo's suite, and roll back by re-pinning the previous tag. To develop a package change against a real consumer, use `npm link` and never ship the link.
+Editing olivercrawl changes nothing in a consumer until that consumer bumps its pin. To release, land the change with `npm run check` green and run `git tag vX.Y.Z && git push origin vX.Y.Z`. In each consumer, bump the pin, run that repo's suite, and roll back by re-pinning the previous tag. To develop a package change against a real consumer, use `npm link` and never ship the link.
 
 ## Troubleshooting
 

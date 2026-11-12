@@ -1,7 +1,7 @@
 {
-  "_comment": "oliver-chase/oliver-crawl's own real backlog config, read by OliverCode's config-driven backlog skill. Not a secret -- repo name, project number, and field IDs are all discoverable via `git remote -v` and `gh project view` anyway. Named in this repo's own CLAUDE.md -- never restate an ID anywhere else.",
+  "_comment": "oliver-chase/olivercrawl's own real backlog config, read by OliverCode's config-driven backlog skill. Not a secret -- repo name, project number, and field IDs are all discoverable via `git remote -v` and `gh project view` anyway. Named in this repo's own CLAUDE.md -- never restate an ID anywhere else.",
   "repoOwner": "oliver-chase",
-  "repoName": "oliver-crawl",
+  "repoName": "olivercrawl",
   "projectOwner": "oliver-chase",
   "projectNumber": 17,
   "projectId": "PVT_kwHOCyeGV84BoaIm",

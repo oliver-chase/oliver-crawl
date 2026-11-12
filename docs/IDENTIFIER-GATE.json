@@ -15,9 +15,9 @@
   ],
   "localDataReasons": {
     "CLAUDE.md": "Names the repo and its GitHub Project, whose name is already public in the repository URL.",
-    "README.md": "The library is named oliver-crawl, so its name and repository URL appear in the install line and the examples.",
+    "README.md": "The library is named olivercrawl, so its name and repository URL appear in the install line and the examples.",
     "LICENSE": "The copyright line names the project.",
-    ".env.example": "The environment variables are prefixed OLIVER_CRAWL.",
+    ".env.example": "The environment variables are prefixed OLIVERCRAWL.",
     "package.json": "The package is @oliver/crawl-core and the repository field names the repository.",
     "package-lock.json": "Generated from package.json, so it carries the package name.",
     "docs/*.md": "The docs name the library and its install line.",

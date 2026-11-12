@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+Rename
+- the project is now OliverCrawl and its repo is `oliver-chase/olivercrawl`, so install from `github:oliver-chase/olivercrawl`. The npm scope `@oliver/crawl-core` is unchanged
+- every environment variable starts with `OLIVERCRAWL_` where it started with `OLIVER_CRAWL_`, so rename any you set
+
 ## 0.19.0
 
 Speed

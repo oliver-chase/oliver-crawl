@@ -19,7 +19,7 @@ The free `own` path needs no keys and runs on your machine. The paid `vendor` pa
 ## Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl#<tag>
+npm install github:oliver-chase/olivercrawl#<tag>
 ```
 
 ## Use
@@ -563,18 +563,18 @@ createCrawler({
 `configFromEnv()` reads these. All optional:
 
 ```bash
-OLIVER_CRAWL_USER_AGENT="MyBot/1.0 (+https://mysite.example/bot)"
+OLIVERCRAWL_USER_AGENT="MyBot/1.0 (+https://mysite.example/bot)"
 
 # Vendor lane — each enables exactly one rung
-OLIVER_CRAWL_FIRECRAWL_KEY=...   # or FIRECRAWL_API_KEY
-OLIVER_CRAWL_APIFY_TOKEN=...     # or APIFY_API_TOKEN
+OLIVERCRAWL_FIRECRAWL_KEY=...   # or FIRECRAWL_API_KEY
+OLIVERCRAWL_APIFY_TOKEN=...     # or APIFY_API_TOKEN
 
-OLIVER_CRAWL_VENDOR_ORDER=firecrawl,apify
+OLIVERCRAWL_VENDOR_ORDER=firecrawl,apify
 
 # Search providers (their own surface, separate from the scrape rungs)
-OLIVER_CRAWL_TAVILY_KEY=...      # or TAVILY_API_KEY
-OLIVER_CRAWL_SERPER_KEY=...      # or SERPER_API_KEY
-OLIVER_CRAWL_SEARCH_ORDER=serper,tavily
+OLIVERCRAWL_TAVILY_KEY=...      # or TAVILY_API_KEY
+OLIVERCRAWL_SERPER_KEY=...      # or SERPER_API_KEY
+OLIVERCRAWL_SEARCH_ORDER=serper,tavily
 ```
 
 The bare vendor names (`FIRECRAWL_API_KEY`) are accepted as fallbacks, so adopting this package doesn't mean renaming env vars that already work.

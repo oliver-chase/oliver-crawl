@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oliver-chase/oliver-crawl.git"
+    "url": "git+https://github.com/oliver-chase/olivercrawl.git"
   },
   "exports": {
     ".": {

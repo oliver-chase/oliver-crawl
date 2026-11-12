@@ -119,7 +119,7 @@ Both need the same loop. A `store` keeps it for you; without one, keep `result.v
 
 ## Search is not one of these paths
 
-`crawler.search()` is a separate surface: a query goes in, URLs come out. Its providers are Serper and Tavily, both paid, tried in that order by default, which `OLIVER_CRAWL_SEARCH_ORDER` changes.
+`crawler.search()` is a separate surface: a query goes in, URLs come out. Its providers are Serper and Tavily, both paid, tried in that order by default, which `OLIVERCRAWL_SEARCH_ORDER` changes.
 
 It shares configuration, budgeting and usage reporting with the fetch paths and nothing else. Notably, results are then crawled through the free path by default — searching does not commit you to paying twice.
 

@@ -13,7 +13,7 @@
 //                      needs two differently-keyed crawlers in one process
 //                      just builds two configs and never calls this.
 //
-// Env names are namespaced OLIVER_CRAWL_* first, with the bare vendor names
+// Env names are namespaced OLIVERCRAWL_* first, with the bare vendor names
 // (FIRECRAWL_API_KEY, ...) accepted as a fallback — those are the names the
 // vendors' own docs use and what existing repos already have set, so adopting
 // this package does not mean renaming working env vars.
@@ -51,7 +51,7 @@ export const DEFAULT_VENDOR_RUNG_ORDER = ['firecrawl', 'apify'];
 /** A deliberately generic default. Consumers SHOULD override it: an origin
  *  that wants to allow or block you cannot do either if every deployment
  *  claims the same identity, and robots.txt rules key off this string. */
-export const DEFAULT_USER_AGENT = 'OliverCrawl (+https://github.com/oliver-chase/oliver-crawl)';
+export const DEFAULT_USER_AGENT = 'OliverCrawl (+https://github.com/oliver-chase/olivercrawl)';
 
 /**
  * CRAWL-UA-1: a User-Agent with no way to reach you is a significant cause of
@@ -73,7 +73,7 @@ function warnIfNoContact(userAgent: string): void {
   if (WARNED_USER_AGENTS.has(userAgent)) return;
   WARNED_USER_AGENTS.add(userAgent);
   console.warn(
-    `[oliver-crawl] userAgent "${userAgent}" has no contact URL. Site operators ` +
+    `[olivercrawl] userAgent "${userAgent}" has no contact URL. Site operators ` +
       'block unexplained traffic they cannot ask about. Prefer e.g. ' +
       '"MyBot/1.0 (+https://mysite.com/bot)".',
   );
@@ -123,15 +123,15 @@ const PLACEHOLDER_VALUE = /^(?:x{4,}|\*{4,}|\.{3,}|<.*>|your[-_ ]|change[-_ ]?me
 /**
  * Build a config from environment variables. Reads, in order of preference:
  *
- *   OLIVER_CRAWL_USER_AGENT
- *   OLIVER_CRAWL_FIRECRAWL_KEY  | FIRECRAWL_API_KEY
- *   OLIVER_CRAWL_APIFY_TOKEN    | APIFY_API_TOKEN
- *   OLIVER_CRAWL_TAVILY_KEY     | TAVILY_API_KEY
- *   OLIVER_CRAWL_SERPER_KEY     | SERPER_API_KEY
- *   OLIVER_CRAWL_VENDOR_ORDER   (comma-separated)
- *   OLIVER_CRAWL_SEARCH_ORDER   (comma-separated)
- *   OLIVER_CRAWL_LOCAL_RENDER=1 (free local-Chromium render rung)
- *   OLIVER_CRAWL_AUTO_ROBOTS=1  (resolve unknown robots posture for real)
+ *   OLIVERCRAWL_USER_AGENT
+ *   OLIVERCRAWL_FIRECRAWL_KEY  | FIRECRAWL_API_KEY
+ *   OLIVERCRAWL_APIFY_TOKEN    | APIFY_API_TOKEN
+ *   OLIVERCRAWL_TAVILY_KEY     | TAVILY_API_KEY
+ *   OLIVERCRAWL_SERPER_KEY     | SERPER_API_KEY
+ *   OLIVERCRAWL_VENDOR_ORDER   (comma-separated)
+ *   OLIVERCRAWL_SEARCH_ORDER   (comma-separated)
+ *   OLIVERCRAWL_LOCAL_RENDER=1 (free local-Chromium render rung)
+ *   OLIVERCRAWL_AUTO_ROBOTS=1  (resolve unknown robots posture for real)
  *
  * Every one is optional. A missing vendor key disables that rung only — the
  * own lane never needs a key and keeps working regardless, which is the whole
@@ -139,20 +139,20 @@ const PLACEHOLDER_VALUE = /^(?:x{4,}|\*{4,}|\.{3,}|<.*>|your[-_ ]|change[-_ ]?me
  */
 export function configFromEnv(env: EnvBag = safeProcessEnv(), overrides: Partial<CrawlConfig> = {}): CrawlConfig {
   const vendor: VendorKeys = {
-    firecrawl: pick(env, 'OLIVER_CRAWL_FIRECRAWL_KEY', 'FIRECRAWL_API_KEY'),
-    apify: pick(env, 'OLIVER_CRAWL_APIFY_TOKEN', 'APIFY_API_TOKEN'),
-    tavily: pick(env, 'OLIVER_CRAWL_TAVILY_KEY', 'TAVILY_API_KEY'),
-    serper: pick(env, 'OLIVER_CRAWL_SERPER_KEY', 'SERPER_API_KEY'),
+    firecrawl: pick(env, 'OLIVERCRAWL_FIRECRAWL_KEY', 'FIRECRAWL_API_KEY'),
+    apify: pick(env, 'OLIVERCRAWL_APIFY_TOKEN', 'APIFY_API_TOKEN'),
+    tavily: pick(env, 'OLIVERCRAWL_TAVILY_KEY', 'TAVILY_API_KEY'),
+    serper: pick(env, 'OLIVERCRAWL_SERPER_KEY', 'SERPER_API_KEY'),
   };
 
-  const order = env.OLIVER_CRAWL_VENDOR_ORDER?.split(',').map((s) => s.trim()).filter(Boolean);
-  const searchOrder = env.OLIVER_CRAWL_SEARCH_ORDER?.split(',').map((s) => s.trim()).filter(Boolean);
+  const order = env.OLIVERCRAWL_VENDOR_ORDER?.split(',').map((s) => s.trim()).filter(Boolean);
+  const searchOrder = env.OLIVERCRAWL_SEARCH_ORDER?.split(',').map((s) => s.trim()).filter(Boolean);
 
   return {
-    userAgent: env.OLIVER_CRAWL_USER_AGENT || DEFAULT_USER_AGENT,
+    userAgent: env.OLIVERCRAWL_USER_AGENT || DEFAULT_USER_AGENT,
     vendor,
-    ...(env.OLIVER_CRAWL_LOCAL_RENDER === '1' ? { localRender: true } : {}),
-    ...(env.OLIVER_CRAWL_AUTO_ROBOTS === '1' ? { autoRobots: true } : {}),
+    ...(env.OLIVERCRAWL_LOCAL_RENDER === '1' ? { localRender: true } : {}),
+    ...(env.OLIVERCRAWL_AUTO_ROBOTS === '1' ? { autoRobots: true } : {}),
     ...(order && order.length > 0 ? { vendorRungOrder: order } : {}),
     ...(searchOrder && searchOrder.length > 0 ? { searchProviderOrder: searchOrder } : {}),
     ...overrides,

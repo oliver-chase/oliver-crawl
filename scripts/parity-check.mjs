@@ -46,7 +46,7 @@ if (urls.length === 0) {
 const dns = async (h) => (await lookup(h, { all: true })).map((r) => ({ address: r.address, family: r.family }));
 
 const crawler = createCrawler({
-  userAgent: 'OliverCrawl-ParityCheck/1.0 (+https://github.com/oliver-chase/oliver-crawl)',
+  userAgent: 'OliverCrawl-ParityCheck/1.0 (+https://github.com/oliver-chase/olivercrawl)',
   dnsLookup: dns,
   autoRobots: true,
   minHostIntervalMs: 1000,

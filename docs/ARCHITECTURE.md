@@ -11,7 +11,7 @@ flowchart TB
         DB[("your database<br/>your scheduler")]
     end
 
-    subgraph PKG["oliver-crawl"]
+    subgraph PKG["olivercrawl"]
         API["createCrawler()<br/>crawl · crawlSite · search"]
 
         subgraph L1["FREE PATH — own"]

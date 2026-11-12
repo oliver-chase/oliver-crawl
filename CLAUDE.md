@@ -3,7 +3,7 @@
 > `dirname "$(readlink ~/.claude/CLAUDE.md)"` when you need a file from it. This file carries
 > only what is specific to this repo.
 
-# oliver-crawl agent rules
+# olivercrawl agent rules
 
 Run `bash scripts/validate.sh` before commit — it is this repo's canonical validation. It runs
 the commit gates, the structure contract check, the repo-local gates and `npm run check`
@@ -22,7 +22,7 @@ normalises `git+https://` to ssh either way.
 The exported types and functions are the contract a consumer reads, so their fields carry the
 decisions. `npm run check:comments` prints the density and fails on a comment block over 20 lines.
 
-Open work lives in the `oliver-crawl` GitHub Project. `docs/backlog-config.json` names it.
+Open work lives in the `olivercrawl` GitHub Project. `docs/backlog-config.json` names it.
 `backlog` governs it, and git log holds the resolved entries.
 
 **Managed files.** `.githooks/`, `scripts/size.sh`, `scripts/check-comment-budget.mjs`, `scripts/duplication_check.py`, `scripts/check-structure-contract.mjs`, `QUALITY_BASELINE.md` and `docs/repo-structure-contract.md` are copies of OliverCode's canonical files. Change them in OliverCode first and sync them here. Their references to OliverCode paths and to docs this repo lacks are expected.

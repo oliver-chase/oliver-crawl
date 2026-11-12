@@ -1,17 +1,17 @@
-# oliver-crawl
+# olivercrawl
 
-`oliver-crawl` is a TypeScript library for crawling websites repeatedly, safely and cheaply. It returns the useful page content as Markdown, refuses unsafe destinations, and detects unchanged pages before they trigger expensive downstream processing.
+`olivercrawl` is a TypeScript library for crawling websites repeatedly, safely and cheaply. It returns the useful page content as Markdown, refuses unsafe destinations, and detects unchanged pages before they trigger expensive downstream processing.
 
 Downloading HTML is easy. The problems start when a crawl runs every hour.
 
-**Safety.** A crawler requests whatever URL it is given, and that URL may come from a user submission, a search result or a redirect. If someone points it at `169.254.169.254`, the address that serves instance metadata on most cloud providers, the crawler could retrieve credentials and return them as page content. `oliver-crawl` resolves every hostname and checks the addresses against private ranges before every request and again after every redirect.
+**Safety.** A crawler requests whatever URL it is given, and that URL may come from a user submission, a search result or a redirect. If someone points it at `169.254.169.254`, the address that serves instance metadata on most cloud providers, the crawler could retrieve credentials and return them as page content. `olivercrawl` resolves every hostname and checks the addresses against private ranges before every request and again after every redirect.
 
-**Cost.** In a pipeline that sends crawled content to a language model, fetching the page is cheap and processing it is not. A site checked hourly but changed weekly triggers roughly 160 unnecessary extractions for each one it needs. `oliver-crawl` checks whether a page changed before expensive processing happens, using the cheapest signal available, sometimes with no page request at all.
+**Cost.** In a pipeline that sends crawled content to a language model, fetching the page is cheap and processing it is not. A site checked hourly but changed weekly triggers roughly 160 unnecessary extractions for each one it needs. `olivercrawl` checks whether a page changed before expensive processing happens, using the cheapest signal available, sometimes with no page request at all.
 
 ## Install
 
 ```bash
-npm install github:oliver-chase/oliver-crawl#v0.19.0
+npm install github:oliver-chase/olivercrawl#v0.19.0
 ```
 
 Pin a tag and leave off the `^`. The package needs Node 20 or later, is ESM-only, and builds on install. Edge and serverless runtimes work, without local browser rendering.
@@ -174,11 +174,11 @@ if (found.ok) {
 Only `userAgent` is needed, and it defaults to an identifier that names this library and not your deployment, so set your own. A `userAgent` with no contact URL logs a warning once. `configFromEnv()` reads the options below from environment variables:
 
 ```bash
-OLIVER_CRAWL_USER_AGENT="MyBot/1.0 (+https://mysite.example/bot)"
-OLIVER_CRAWL_LOCAL_RENDER=1
-OLIVER_CRAWL_AUTO_ROBOTS=1
-OLIVER_CRAWL_FIRECRAWL_KEY=...
-OLIVER_CRAWL_SERPER_KEY=...
+OLIVERCRAWL_USER_AGENT="MyBot/1.0 (+https://mysite.example/bot)"
+OLIVERCRAWL_LOCAL_RENDER=1
+OLIVERCRAWL_AUTO_ROBOTS=1
+OLIVERCRAWL_FIRECRAWL_KEY=...
+OLIVERCRAWL_SERPER_KEY=...
 ```
 
 ```typescript
@@ -210,7 +210,7 @@ const crawler = createCrawler(
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Request flow, module map and design boundaries |
 | [DECISIONS](docs/DECISIONS.md) | Why the code works the way it does |
 
-Open work lives in the `oliver-crawl` GitHub Project named in `docs/backlog-config.json`.
+Open work lives in the `olivercrawl` GitHub Project named in `docs/backlog-config.json`.
 
 ## Development
 
