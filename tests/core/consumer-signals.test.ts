@@ -28,6 +28,10 @@ describe('failure classification', () => {
     expect(classifyFailure('unreachable', 'HTTP 410 Gone')).toBe('structural');
   });
 
+  test('a status number outside an HTTP token, such as a duration, is not a status', () => {
+    expect(classifyFailure('unreachable', 'The operation timed out after 410 ms')).toBe('transient');
+  });
+
   test('a 403 is TRANSIENT — it is a bot wall far more often than a refusal', () => {
     // Treating 403 as structural would retire sources that work next run.
     expect(classifyFailure('unreachable', 'HTTP 403 Forbidden')).toBe('transient');

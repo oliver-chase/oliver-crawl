@@ -61,9 +61,9 @@ export async function mapSite(
   // the same rule crawlSite dedups with.
   const byKey = new Map<string, string>();
   const add = (url: string) => {
-    if (byKey.size >= maxUrls) return false;
     const key = urlDedupKey(url);
     if (!key || byKey.has(key)) return true;
+    if (byKey.size >= maxUrls) return false;
     byKey.set(key, url);
     return true;
   };

@@ -304,6 +304,7 @@ export async function crawlWithOwnLane(
       `Fetched page had only ${page.text.trim().length} characters (threshold ${thinThreshold})`,
       hasCredentials(target),
       target,
+      true,
     );
     // Keep the thin page if nothing better came back — it is still the page.
     if (rendered.ok && !rendered.notModified && (rendered.pages[0]?.text.length ?? 0) > page.text.length) {
@@ -315,7 +316,7 @@ export async function crawlWithOwnLane(
   // is the wall, not the page — treat it exactly like the 403 form of the
   // same wall and try the rungs that clear it.
   if (looksLikeBlockPage(page.text)) {
-    return ladder(url, config, options, started, 'Served a bot-wall interstitial (HTTP 200)', hasCredentials(target), target);
+    return ladder(url, config, options, started, 'Served a bot-wall interstitial (HTTP 200)', hasCredentials(target), target, true);
   }
 
   emitUsage(config, { lane: 'own', rung: 'fetch', kind: 'fetch', url, ok: true, latencyMs: Date.now() - started, costUsd: 0 });

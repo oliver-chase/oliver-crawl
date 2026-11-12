@@ -30,7 +30,7 @@ export async function resolveSeeds(
   if (options.resumeFrom) return { seeds: options.resumeFrom.queue, lastmod, skippedByLastmod };
 
   const explicit = options.seeds ?? target.seeds;
-  if (explicit) return { seeds: explicit, lastmod, skippedByLastmod };
+  if (explicit?.length) return { seeds: explicit, lastmod, skippedByLastmod };
 
   if (!options.useSitemap) return { seeds: [target.baseUrl], lastmod, skippedByLastmod };
 

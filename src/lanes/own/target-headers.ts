@@ -4,7 +4,7 @@ import type { CrawlTarget } from '../../core/types.js';
 
 /** Does this target carry caller-supplied request headers (i.e. credentials)? */
 export function hasCredentials(target: CrawlTarget): boolean {
-  return Object.keys(target.headers ?? {}).length > 0;
+  return Object.keys(targetHeaders(target)).length > 0;
 }
 
 /** Headers the crawler owns; a target cannot override them. */

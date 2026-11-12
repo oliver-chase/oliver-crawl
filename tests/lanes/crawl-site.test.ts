@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { createCrawler } from '@/index';
 import { crawlSite } from '@/crawl-site';
+import { createMemoryCrawlStore } from '@/crawl-store';
 import type { CrawlTarget } from '@/core/types';
 import { publicDns } from '../helpers';
 
@@ -74,6 +75,46 @@ describe('crawlSite — seeds', () => {
     expect(result.failures).toHaveLength(1);
     expect(result.pages).toHaveLength(0);
     expect(fetched).toBe(false);
+  });
+});
+
+describe('crawlSite — results stay true at the edges', () => {
+  test('a page whose crawl throws is one failure and the run continues', async () => {
+    const throwing = {
+      ...crawler(),
+      crawl: async (t: CrawlTarget, url: string) => {
+        if (url.endsWith('/bad')) throw new Error('boom');
+        return crawler().crawl(t, url);
+      },
+    };
+    globalThis.fetch = (async () => page('Fine content for this page.')) as typeof fetch;
+    const result = await crawlSite(throwing, target, { seeds: ['https://venue.example.com/bad', 'https://venue.example.com/ok'] });
+    expect(result.pages).toHaveLength(1);
+    expect(result.failures).toEqual([{ url: 'https://venue.example.com/bad', reason: 'unreachable', detail: 'boom' }]);
+  });
+
+  test('a refused target leaves the stored snapshot unchanged', async () => {
+    const store = createMemoryCrawlStore();
+    const progress = { queue: ['https://venue.example.com/next'], visited: [], depths: {}, collected: 1 };
+    const key = 'https://venue.example.com';
+    await store.save(key, { progress } as never);
+    await crawlSite(crawler(), { ...target, active: false }, { store, targetId: key });
+    expect((await store.load(key))?.progress).toEqual(progress);
+  });
+
+  test('an empty seed list falls back to the base URL', async () => {
+    globalThis.fetch = (async () => page('Base page content.')) as typeof fetch;
+    const result = await crawlSite(crawler(), target, { seeds: [] });
+    expect(result.pages).toHaveLength(1);
+  });
+
+  test('an exclude pattern with the g flag matches every time', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      new URL(String(input)).pathname === '/'
+        ? page('Home. <a href="/skip-a">a</a> <a href="/skip-b">b</a> <a href="/keep">k</a>')
+        : page(`Content of ${String(input)} with enough words to stand alone.`)) as typeof fetch;
+    const result = await crawlSite(crawler(), target, { followLinks: true, maxDepth: 1, excludePatterns: [/skip/g], nearDuplicateDistance: -1 });
+    expect(result.pages.map((p) => new URL(p.url).pathname).sort()).toEqual(['/', '/keep']);
   });
 });
 

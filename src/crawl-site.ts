@@ -95,9 +95,10 @@ export async function crawlSite(
   const nearDuplicates = createNearDuplicateIndex(options.nearDuplicateDistance ?? 3);
   const stats = createHostStats();
 
-  const done = async (truncated: boolean): Promise<SiteCrawlResult> => {
+  const done = async (truncated: boolean, ran = true): Promise<SiteCrawlResult> => {
     // A finished run clears its snapshot, and a truncated one keeps it so the next run continues.
-    session.persist(truncated ? lastProgress : null, true);
+    // A run refused before it started leaves the stored snapshot as it was.
+    if (ran) session.persist(truncated ? lastProgress : null, true);
     await session.settled();
     const storeError = loadError ?? session.storeError();
     // Deliver fresh validators to the consumer's persistence hook, fire-and-
@@ -143,7 +144,7 @@ export async function crawlSite(
       reason: 'blocked',
       detail: error instanceof Error ? error.message : String(error),
     });
-    return done(false);
+    return done(false, false);
   }
 
   const seeded = await resolveSeeds(crawler, target, options, maxPages);
@@ -187,11 +188,16 @@ export async function crawlSite(
     depthOf.set(key, depth);
   }
 
+  // A pattern with the g or y flag keeps its position between calls, so each test starts from 0.
+  const matches = (pattern: RegExp, candidate: string) => {
+    pattern.lastIndex = 0;
+    return pattern.test(candidate);
+  };
   const shouldSkip = (candidate: string) => {
-    if ((options.excludePatterns ?? []).some((pattern) => pattern.test(candidate))) return true;
+    if ((options.excludePatterns ?? []).some((pattern) => matches(pattern, candidate))) return true;
     const include = options.includePatterns;
     // Allowlist, when given: anything not named is not followed.
-    return Boolean(include?.length) && !include!.some((pattern) => pattern.test(candidate));
+    return Boolean(include?.length) && !include!.some((pattern) => matches(pattern, candidate));
   };
 
   /** Queue a discovered URL if it is same-site, unseen, and within depth. */
@@ -254,6 +260,10 @@ export async function crawlSite(
     running.set(urlKey, url);
     attempted += 1;
     const task = processUrl(url, urlKey, depth)
+      // A page that throws is one failure, so the rest of the run continues.
+      .catch((error: unknown) => {
+        failures.push({ url, reason: 'unreachable', detail: error instanceof Error ? error.message : String(error) });
+      })
       .finally(() => {
         running.delete(urlKey);
         releaseHostSlot(host);

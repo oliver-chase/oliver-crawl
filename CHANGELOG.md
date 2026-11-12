@@ -15,6 +15,12 @@ Safety
 - JSON-LD keys are scanned too, and JSON-LD too deep or too large to scan is dropped
 - a site's Crawl-delay expires with the robots.txt answer that carried it
 
+Correctness
+- a page whose crawl throws is reported as one failure and the rest of the run continues, and a refused target leaves the stored snapshot as it was
+- `seeds: []` falls back to the base URL, include and exclude patterns with the `g` flag match every time, and `mapSite` reports truncation only when a URL was dropped
+- a reserved header such as `User-Agent` no longer counts as a credential, a thin page or a bot wall records that the origin answered, and a quarantined render is counted once in usage
+- a failure is structural only for an `HTTP 404`-style status, so a duration such as "410 ms" no longer retires a source
+
 ## 0.20.0
 
 Safety

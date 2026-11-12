@@ -179,7 +179,6 @@ async function renderFallback(
       rung: 'local-render',
     });
     if (isQuarantined(localPage)) {
-      emitUsage(config, { lane: 'own', rung: 'local-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
       // QUARANTINE-TELEMETRY-1: every rung reports its own quarantine.
       const detail = 'Locally rendered content tripped the prompt-injection guard.';
       return quarantined(config, url, started, detail, localPage);
@@ -211,7 +210,6 @@ async function renderFallback(
     });
 
     if (isQuarantined(page)) {
-      emitUsage(config, { lane: 'own', rung: 'browser-render', kind: 'render', url, ok: false, latencyMs: Date.now() - started, error: 'quarantined' });
       const detail = 'Rendered content tripped the prompt-injection guard.';
       return quarantined(config, url, started, detail, page);
     }
@@ -272,7 +270,6 @@ async function proxyFallback(
       rung: 'proxy',
     });
     if (isQuarantined(page)) {
-      fail('quarantined');
       const detail = 'Content fetched through the proxy tripped the prompt-injection guard.';
       return quarantined(config, url, started, detail, page);
     }

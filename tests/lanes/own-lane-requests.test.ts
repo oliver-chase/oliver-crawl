@@ -1,3 +1,4 @@
+import { hasCredentials } from '@/lanes/own/target-headers';
 import { describe, expect, test } from 'vitest';
 import { createCrawler } from '@/index';
 import type { CrawlTarget, UsageEvent } from '@/core/types';
@@ -173,5 +174,12 @@ describe('autoRobots — the crawler governs itself (CRAWL-ROBOTS-1)', () => {
 
     expect(result.ok).toBe(true);
     expect(robotsFetched).toBe(false);
+  });
+});
+
+describe('credentials are the headers the crawler sends', () => {
+  test('a reserved header alone is not a credential', () => {
+    expect(hasCredentials({ baseUrl: 'https://e.example.com', headers: { 'User-Agent': 'x' } })).toBe(false);
+    expect(hasCredentials({ baseUrl: 'https://e.example.com', headers: { Authorization: 'Bearer t' } })).toBe(true);
   });
 });

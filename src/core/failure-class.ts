@@ -23,13 +23,13 @@ export type FailureClass = 'transient' | 'structural';
  * different headers). Treating it as structural would retire sources that
  * would have worked on the very next run.
  */
-const STRUCTURAL_STATUS = /\b(400|401|404|410|451)\b/;
+const STRUCTURAL_STATUS = /\bHTTP\s+(400|401|404|410|451)\b/;
 
 /**
  * Classify a failed crawl.
  *
- * `detail` is inspected only for an HTTP status, never parsed as prose — the
- * wording of these messages changes, the numbers do not.
+ * `detail` is inspected only for an `HTTP <status>` token, the one form every
+ * fetch path writes, so a number elsewhere in the text, such as a duration, never counts.
  */
 export function classifyFailure(reason: CrawlFailureReason, detail: string): FailureClass {
   switch (reason) {
