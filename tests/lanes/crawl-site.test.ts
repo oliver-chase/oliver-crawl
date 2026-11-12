@@ -119,6 +119,18 @@ describe('crawlSite — budget and dedup', () => {
     expect(result.notModified).toHaveLength(2);
     expect(result.pages).toHaveLength(0);
     expect(result.failures).toHaveLength(0);
+
+    // They spend the budget: with room for one page, the second seed is not requested.
+    const limited = await crawlSite(crawler(), target, {
+      seeds: ['https://venue.example.com/a', 'https://venue.example.com/b'],
+      priorValidators: {
+        'https://venue.example.com/a': { etag: 'W/"1"' },
+        'https://venue.example.com/b': { etag: 'W/"2"' },
+      },
+      maxPages: 1,
+    });
+    expect(limited.notModified).toHaveLength(1);
+    expect(limited.truncated).toBe(true);
   });
 });
 
@@ -155,6 +167,22 @@ describe('crawlSite — retries', () => {
 
     expect(result.failures).toHaveLength(1);
     expect(policyChecks).toBe(0);
+  });
+
+  test('does NOT retry a structural failure that reached the origin', async () => {
+    let fetches = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).pathname !== '/robots.txt') fetches++;
+      return new Response('gone', { status: 404 });
+    }) as typeof fetch;
+
+    const once = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/gone'], maxRetries: 0 });
+    const asked = fetches;
+    fetches = 0;
+    const retried = await crawlSite(crawler(), target, { seeds: ['https://venue.example.com/gone'], maxRetries: 3, retryBackoffMs: 0 });
+    expect(once.failures).toHaveLength(1);
+    expect(retried.failures).toHaveLength(1);
+    expect(fetches).toBe(asked);
   });
 
   test('maxRetries: 0 means try once', async () => {

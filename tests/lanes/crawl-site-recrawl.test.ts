@@ -129,7 +129,8 @@ describe('crawlSite — hash comparability across rungs (CRAWL-HASH-1)', () => {
   // structural hash. A page fetched normally one run and via Jina the next
   // would report a false content change.
   test('same content via different rungs is NOT reported as changed', async () => {
-    const body = '<html><head><title>T</title></head><body><main>Identical event copy across rungs.</main></body></html>';
+    const copy = 'Identical event copy across rungs. '.repeat(8).trim();
+    const body = `<html><head><title>T</title></head><body><main>${copy}</main></body></html>`;
 
     // Run 1: normal fetch (HTML rung -> structural hash present).
     globalThis.fetch = (async () =>
@@ -145,8 +146,7 @@ describe('crawlSite — hash comparability across rungs (CRAWL-HASH-1)', () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       if (String(input).includes('r.jina.ai')) {
         return new Response(
-          `Title: T\nURL Source: https://venue.example.com/events\n\nMarkdown Content:\n${jinaText} ` +
-            'Padding so the fallback clears its own minimum-content guard for this test. '.repeat(4),
+          `Title: T\nURL Source: https://venue.example.com/events\n\nMarkdown Content:\n${jinaText}`,
           { status: 200 },
         );
       }
@@ -164,6 +164,8 @@ describe('crawlSite — hash comparability across rungs (CRAWL-HASH-1)', () => {
     expect(second.validators['https://venue.example.com/events']!.contentRegionSha256).toBe('');
     // And it must NOT have been compared against the structural hash.
     expect(second.pages[0]!.textSha256).toBeTruthy();
+    // The same text through another rung is unchanged.
+    expect(second.unchanged).toEqual(['https://venue.example.com/events']);
   });
 });
 

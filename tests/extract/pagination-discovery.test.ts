@@ -65,6 +65,17 @@ describe('discoverPaginatedUrls', () => {
     expect(urls).toEqual(['https://site.example.com/events?page=2', 'https://site.example.com/events?page=3']);
   });
 
+  test('a next link to another site is not followed', async () => {
+    const asked: string[] = [];
+    const fetchImpl = (async (url: string | URL) => {
+      asked.push(String(url));
+      return new Response('<a href="https://other.example.org/events?page=2" rel="next">Older</a>', { status: 200 });
+    }) as unknown as typeof fetch;
+    const urls = await discoverPaginatedUrls('https://site.example.com/events', { fetchImpl });
+    expect(urls).toEqual([]);
+    expect(asked).toEqual(['https://site.example.com/events']);
+  });
+
   test('stops at the cap even if pagination keeps going past page 3', async () => {
     let calls = 0;
     const fetchImpl = (async (_url: string | URL) => {

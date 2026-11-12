@@ -42,6 +42,19 @@ describe('CRAWL-HARDEN-1 — the body cap bounds BYTES, not characters', () => {
     expect(text.length).toBeLessThanOrEqual(cap / 2);
   });
 
+  test('an endless body is not read past the cap', async () => {
+    let pulled = 0;
+    const chunk = new Uint8Array(64 * 1024).fill(97);
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+    });
+    await readBodyCapped(new Response(endless), 100_000);
+    expect(pulled).toBeLessThanOrEqual(100_000 + 2 * chunk.byteLength);
+  });
+
   test('a body under the cap is returned whole', async () => {
     const text = await readBodyCapped(new Response('short body', { status: 200 }), 100_000);
     expect(text).toBe('short body');
