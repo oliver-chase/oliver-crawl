@@ -43,7 +43,7 @@ describe('the render rung follows redirects itself', () => {
   test('navigation hops are fetched by the pinned pool with redirects disabled', () => {
     // redirect: 'manual' is what stops the fetch following the chain where the guard cannot see it,
     // and the pinned pool is what stops Chromium resolving a host the check did not approve.
-    const helper = source.slice(source.indexOf('async function pinnedRequest('), source.indexOf('export async function renderViaLocalChromium('));
+    const helper = readFileSync(new URL('../../src/fetch/render-transport.ts', import.meta.url), 'utf8');
     expect(helper).toMatch(/redirect:\s*'manual'/);
     expect(source).toMatch(/const pinnedFetch = pooledFetchFor\(dnsLookup\)/);
     expect(navigationBranch).toMatch(/pinnedRequest\(pinnedFetch, request, current\)/);
